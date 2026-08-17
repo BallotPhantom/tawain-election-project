@@ -1,0 +1,32 @@
+# Ignore everything by default — this repo only tracks council.html and the
+# data/style files it actually loads via <script src>/<link>. Everything else
+# in this working directory (raw votedata/, backups, other prototype pages
+# like test.html, python build scripts) stays local and untracked.
+*
+
+# Allow the files council.html actually depends on
+!council.html
+!style.css
+!council_2014_tc_data.js
+!council_2014_vill_data.js
+!council_2018_tc_data.js
+!council_2018_vill_data.js
+!council_2022.js
+!council_2022_vill.js
+!council_dist_gj.js
+!council_ind_m_gj.js
+!council_ind_p_gj.js
+!data_approval_2026.js
+!data_edb.js
+!data_mayor2026_predict.js
+!data_mayor_hist_2014_2018.js
+!data_mc2026_snapshot_log.js
+!data_polls_2026.js
+!data_roads.js
+!data_tc_pvi_class.js
+!mayor_2014_actual.js
+!mayor_2014_tc_data.js
+!mayor_2018_actual.js
+!mayor_2018_tc_data.js
+!mayor_turnout_stats.js
+!.gitignore

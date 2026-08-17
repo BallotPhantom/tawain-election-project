@@ -1,0 +1,2564 @@
+/* PVI Map Project — main stylesheet, extracted from test.html */
+
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Orbitron:wght@400;700;900&display=swap');
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      font-family: 'Orbitron', 'Noto Sans TC', 'Helvetica Neue', Arial, 'Microsoft JhengHei', sans-serif;
+      background: #0b0d12;
+      color: #e8eaed;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin: 0
+    }
+    html {
+      height: 100%
+    }
+
+    /* ── Layout container ── */
+    /* 地圖鋪滿整個 #layout；左右面板改為浮動毛玻璃面板疊在地圖上，
+       不再各自佔用固定寬度的欄位，讓整頁看起來是同一個畫面而非切成三塊 */
+    #layout {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #left-rail, #ip, #ic, #legend, #ih, #flip-analysis-box, #swing-mask-row,
+    #pie-swing-row, #flip-result, .ind-leg-btn, .badge, .ind-lbl,
+    #third-sub-toolbar, .sr-num, .sr-colon, .pl-title, .pl-nums,
+    #sim-panel, #sim-panel *,
+    select option, .tk-num, .tk-lbl, #tk-seats,
+    #ic, #ic *, #legend, #legend *, #seat-summary-strip {
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+      letter-spacing: 0.04em
+    }
+    #left-rail {
+      position: absolute;
+      top: 0;
+      left: 0;
+      max-height: calc(100vh - 20px);
+      width: 250px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      gap: 0;
+      padding: 78px 0 0;
+      background: rgba(5, 5, 10, 0.55);
+      backdrop-filter: blur(16px) saturate(1.2);
+      -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 0 10px 10px 0;
+      box-shadow: 4px 4px 24px rgba(0, 0, 0, 0.4);
+      z-index: 10;
+      transition: width 0.25s ease;
+    }
+    .sidebar-collapsed #left-rail {
+      width: 0;
+      min-width: 0;
+      border-right: none;
+      box-shadow: none;
+      padding: 0
+    }
+    /* 常駐聲明按鈕（#disclaimer-wrap）本來是inline style寫死left:266px（配合展開時的側欄寬度250px+
+       留白），左側欄收合後（.sidebar-collapsed，側欄寬度變成0）這顆按鈕卻還留在原地，變成飄在空白處，
+       跟收合後應該貼齊左邊緣的其他元素不一致。inline style優先權比一般class規則高，這裡要加!important
+       才蓋得過去。第一版只改left沒改top，結果跟#sidebar-toggle（收合箭頭按鈕，top:44px;left:14px，
+       30x30圓）疊在一起——兩個圓幾乎完全重疊，變成同一個位置擠兩顆按鈕。改成往下移到#sidebar-toggle
+       下面（44+30+留白，離開它的範圍），兩顆按鈕分開，不會互相干擾點擊 */
+    .sidebar-collapsed #disclaimer-wrap {
+      left: 16px !important;
+      top: 88px !important;
+    }
+    .sidebar-collapsed #nav-wrap {
+      display: none;
+    }
+    #nav-wrap {
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+    /* 圓形浮動收合鈕，懸浮在地圖標題下方，不佔用側欄版面，收合/展開時都固定可見 */
+    #sidebar-toggle {
+      position: absolute;
+      top: 44px;
+      left: 14px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(18,24,40,0.85);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      outline: none;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+      z-index: 25;
+      transition: color 0.2s, background 0.2s
+    }
+    #sidebar-toggle:hover {
+      color: #fff;
+      background: rgba(28,36,56,0.85)
+    }
+    #sidebar-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 0;
+      transition: flex 0.3s ease, opacity 0.2s ease
+    }
+    .sidebar-collapsed #sidebar-content {
+      flex: 0;
+      opacity: 0;
+      pointer-events: none
+    }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+      padding: 8px;
+      background: transparent !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+      flex-shrink: 0;
+      flex-wrap: nowrap;
+      z-index: 20;
+      position: relative;
+      box-shadow: none !important;
+    }
+
+    h1 {
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 12px rgba(40, 200, 200, 0.15);
+    }
+
+    #map-title {
+      position: fixed;
+      top: 12px;
+      left: 14px;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0.55;
+      white-space: nowrap
+    }
+    #map-title span {
+      color: rgba(200, 220, 255, 0.9)
+    }
+
+    .btn {
+      font-size: 11px;
+      padding: 3px 8px;
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+      letter-spacing: 0.04em;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      background: rgba(255, 255, 255, 0.04) !important;
+      color: rgba(255, 255, 255, 0.65) !important;
+      cursor: pointer;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.2s ease-in-out;
+    }
+
+    .btn:hover {
+      border-color: #28C8C8 !important;
+      color: rgba(255, 255, 255, 0.95) !important;
+      box-shadow: 0 0 8px rgba(40, 200, 200, 0.4) !important;
+    }
+
+    .btn.active {
+      background: rgba(40, 200, 200, 0.2) !important;
+      border-color: #28C8C8 !important;
+      color: rgba(255, 255, 255, 0.95) !important;
+      box-shadow: 0 0 8px rgba(40, 200, 200, 0.5) !important;
+    }
+    .btn.active-key {
+      background: rgba(168, 85, 247, 0.2) !important;
+      border-color: #a855f7 !important;
+      color: rgba(255, 255, 255, 0.95) !important;
+      box-shadow: 0 0 8px rgba(168, 85, 247, 0.5) !important;
+    }
+
+    .btn.on {
+      background: rgba(224, 96, 16, 0.2) !important;
+      border-color: #e06010 !important;
+      color: rgba(255, 255, 255, 0.95) !important;
+      box-shadow: 0 0 8px rgba(224, 96, 16, 0.5) !important;
+    }
+
+    @keyframes byelectionPulse {
+      0%, 100% { box-shadow: 0 0 4px rgba(224, 96, 16, 0.3); }
+      50% { box-shadow: 0 0 14px rgba(224, 96, 16, 0.75); }
+    }
+
+    /* 全選區村里等綠色操作按鈕：不被 .btn !important 覆蓋 */
+    button.btn[style*="1b9e4b"] {
+      background: #1b9e4b !important;
+      color: #fff !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+    button.btn[style*="1b9e4b"]:hover {
+      background: #157a38 !important;
+      box-shadow: none !important;
+    }
+
+    #flip-analysis-box .btn {
+      color: rgba(255, 255, 255, 0.7) !important;
+      border-color: rgba(40, 200, 200, 0.25) !important;
+      background: rgba(255, 255, 255, 0.05) !important;
+      box-shadow: none !important;
+    }
+    #flip-analysis-box .btn:hover {
+      color: #fff !important;
+      border-color: rgba(40, 200, 200, 0.5) !important;
+      background: rgba(255, 255, 255, 0.1) !important;
+      box-shadow: none !important;
+    }
+    #flip-analysis-box .btn.on {
+      /* 原本border-color是實心滿版#e06010，跟這一輪其他地方（win-badge/長條圖外框）改的低透明度+發光
+         風格不一致，看起來比周圍粗一截，改成半透明邊框+文字發光，質感跟著統一 */
+      background: rgba(224, 96, 16, 0.12) !important;
+      border-color: rgba(224, 96, 16, 0.45) !important;
+      color: #e06010 !important;
+      text-shadow: 0 0 6px rgba(224, 96, 16, 0.6) !important;
+      box-shadow: 0 0 8px rgba(224, 96, 16, 0.2) !important;
+    }
+
+    #toolbar > * {
+      width: 100%;
+      box-sizing: border-box
+    }
+    #toolbar > div[style*="flex-direction:column"] > * {
+      width: 100%;
+      box-sizing: border-box
+    }
+    #toolbar select.btn {
+      background-color: rgba(20, 20, 22, 0.8) !important;
+      color: rgba(255, 255, 255, 0.7) !important;
+      width: 100%
+    }
+    
+    #toolbar select.btn option {
+      background: #141416 !important;
+      color: rgba(255, 255, 255, 0.95) !important;
+    }
+
+    /* Capsule formatting for connected button+select wrappers */
+    #toolbar div[style*="border-radius:6px"][style*="overflow:hidden"] .btn {
+      border: none !important;
+      background: transparent !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+    }
+
+    #toolbar div[style*="border-radius:6px"][style*="overflow:hidden"] .btn.active {
+      background: rgba(40, 200, 200, 0.2) !important;
+      color: rgba(255, 255, 255, 0.95) !important;
+      box-shadow: inset 0 0 4px rgba(40, 200, 200, 0.5) !important;
+    }
+
+    .sep {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1) !important;
+      margin: 2px 8px;
+      flex-shrink: 0
+    }
+
+    #crumb {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.45) !important;
+      white-space: nowrap
+    }
+    #nav-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 4px 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      flex-shrink: 0
+    }
+    #nav-wrap > * {
+      width: 100%;
+      box-sizing: border-box
+    }
+
+    /* ── Language toggle ── */
+    #top-right-controls {
+      position: fixed;
+      top: 10px;
+      right: 12px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #comp-info-btn {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid rgba(40,200,200,0.4);
+      background: rgba(40,200,200,0.14);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: rgba(255,255,255,0.85);
+      font-size: 11px;
+      font-weight: 800;
+      font-style: italic;
+      font-family: Georgia, serif;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .3)
+    }
+    #comp-info-btn:hover {
+      background: rgba(40,200,200,0.24);
+    }
+    /* 收合條陣營篩選鈕：預設「總」（灰），泛綠/泛藍時變色 */
+    #camp-toggle-btn {
+      flex-shrink: 0;
+      min-width: 30px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 11px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: rgba(255,255,255,0.75);
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+      transition: background 0.2s, border-color 0.2s, color 0.2s
+    }
+    #camp-toggle-btn:hover {
+      background: rgba(255,255,255,0.14);
+    }
+    #camp-toggle-btn.camp-green {
+      border-color: rgba(27,158,75,0.5);
+      background: rgba(27,158,75,0.22);
+      color: #4ade80;
+    }
+    #camp-toggle-btn.camp-blue {
+      border-color: rgba(21,85,180,0.5);
+      background: rgba(21,85,180,0.22);
+      color: #60a5fa;
+    }
+    #lang-toggle {
+      display: flex;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .3)
+    }
+    #lang-toggle .lang-opt {
+      text-align: center;
+      padding: 1px 30px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      color: rgba(255, 255, 255, 0.8);
+      background: transparent;
+      transition: all 0.2s;
+      user-select: none;
+      letter-spacing: 0.06em;
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif
+    }
+    #lang-toggle .lang-opt.active {
+      color: #fff;
+      background: rgba(40, 200, 200, 0.25);
+      text-shadow: 0 0 8px rgba(40, 200, 200, 0.4)
+    }
+    #lang-toggle .lang-opt:not(.active):hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08)
+    }
+    #lang-toggle .lang-opt + .lang-opt {
+      border-left: 1px solid rgba(255, 255, 255, 0.1)
+    }
+
+    .cl {
+      color: #60a5fa !important;
+      cursor: pointer;
+      font-weight: 500
+    }
+
+    .cl:hover {
+      text-decoration: underline
+    }
+
+    /* ── Ticker (floating at top-left of map, transparent tech style) ── */
+    #ticker {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.85);
+      letter-spacing: 0.06em;
+      flex-shrink: 0;
+      min-height: auto;
+      pointer-events: none
+    }
+
+    .tk-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 0;
+      pointer-events: auto
+    }
+    .tk-item .tk-lbl {
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+      letter-spacing: 0.08em
+    }
+    .tk-item .tk-num {
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      min-width: 2ch;
+      text-align: right
+    }
+
+    .tk-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 2px;
+      flex-shrink: 0
+    }
+
+    .tk-logo {
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      align-self: center;
+      border-radius: 2px
+    }
+    /* 強制所有政黨logo（img或svg）都精準填滿容器，不管各自原本內嵌的寬高是多少，
+       確保跑馬燈上每個政黨（含無黨籍）的logo實際顯示大小完全一致 */
+    .tk-logo img, .tk-logo svg {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain;
+    }
+
+    .tk-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain
+    }
+
+    .tk-man {
+      color: #facc15;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 6px rgba(250, 204, 21, 0.4)
+    }
+
+    .tk-unit {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.4);
+      font-weight: 400;
+      margin: 0 1px
+    }
+
+    .tk-rest {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.6)
+    }
+
+    #tk-seats {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.35);
+      font-weight: 400;
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 0.04em
+    }
+
+    /* ── Hemicycle (vertical cards in left rail) ── */
+    /* ── 席次卡浮動面板：右上角，語言切換下方、資訊面板上方，預設收合成一行數字 ── */
+    #seat-summary-float {
+      position: fixed;
+      top: 38px;
+      right: 12px;
+      z-index: 15;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    #seat-summary-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 12px;
+      border-radius: 8px;
+      background: rgba(18, 24, 40, 0.6);
+      backdrop-filter: blur(14px) saturate(1.2);
+      -webkit-backdrop-filter: blur(14px) saturate(1.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    #seat-summary-strip:hover {
+      background: rgba(28, 36, 56, 0.7);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+    .ss-item {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.5);
+      display: inline-flex;
+      align-items: baseline;
+      gap: 3px;
+    }
+    .ss-item b {
+      font-size: 12px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.92);
+    }
+    #seat-summary-arrow {
+      font-size: 9px;
+      color: rgba(40, 200, 200, 0.7);
+      transition: transform 0.2s ease;
+    }
+    .seat-summary-open #seat-summary-arrow {
+      transform: rotate(180deg);
+    }
+    #hemi-row {
+      display: none;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 10px;
+      background: rgba(14, 18, 30, 0.6);
+      backdrop-filter: blur(16px) saturate(1.2);
+      -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    }
+    .seat-summary-open #hemi-row {
+      display: flex;
+    }
+    /* 2026預測模式：原本4張橫排小卡改成2張直排長卡（總統/行政院支持度追蹤），
+       寬度不夠畫時間軸趨勢線，所以改直排、每張卡自己佔滿整行寬度 */
+    #hemi-row.predict26-hemi-row {
+      flex-direction: column;
+      width: 320px;
+    }
+
+    /* ── 不分區總得票面板 ── */
+    .pl-national-panel {
+      flex-shrink: 0;
+      min-width: 220px;
+      border-left: 1px solid rgba(255, 255, 255, 0.06);
+      padding-left: 10px
+    }
+
+    .pl-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 3px
+    }
+
+    .pl-bar-wrap {
+      display: flex;
+      height: 14px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+      margin-bottom: 3px
+    }
+
+    .pl-seg {
+      height: 100%;
+      transition: width .3s
+    }
+
+    .pl-g {
+      background: #1b9e4b
+    }
+
+    .pl-b {
+      background: #1555b4
+    }
+
+    .pl-w {
+      background: #26b5c4
+    }
+
+    .pl-o {
+      background: #888
+    }
+
+    .pl-nums {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px 4px;
+      font-size: 9px;
+      font-weight: 600
+    }
+
+    .seat-ratio-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 1px;
+      margin-top: 2px
+    }
+
+    .hemi-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center
+    }
+
+    #hemi-seat-ratio-display {
+      margin-top: 0;
+      margin-bottom: 2px
+    }
+
+    #hemi-seat-ratio-display .sr-num {
+      font-size: 16px
+    }
+
+    #hemi-seat-ratio-display .sr-colon {
+      font-size: 12px
+    }
+
+    .sr-num {
+      font-size: 14px;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: 0.02em
+    }
+
+    .sr-colon {
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.25);
+      margin: 0 1px
+    }
+
+    .sr-g {
+      color: #1b9e4b
+    }
+
+    .sr-b {
+      color: #3b82f6
+    }
+
+    .sr-w {
+      color: #26b5c4
+    }
+
+    .sr-o {
+      color: #888
+    }
+
+    .sr-ind {
+      color: #707070
+    }
+
+    .pl-ng {
+      color: #1b9e4b
+    }
+
+    .pl-nb {
+      color: #3b82f6
+    }
+
+    .pl-nw {
+      color: #26b5c4
+    }
+
+    .pl-no {
+      color: #888
+    }
+
+    #hemi-svg {
+      flex-shrink: 0
+    }
+
+    .hemi-meta {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.45);
+      line-height: 1.5
+    }
+
+    .hemi-meta b {
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.8)
+    }
+
+    /* ── Sim panel ──
+       原本是貼著螢幕頂端、橫跨left:0到right:0的滿版橫幅，展開時會整個蓋住地圖。改成跟
+       常駐聲明(#disclaimer-wrap)同一種「錨定在觸發按鈕旁邊的小尺寸毛玻璃浮動框」——
+       固定貼在左側欄「推演參數」按鈕右邊那塊空白，寬度收窄、不再跨整個畫面，
+       地圖主體(縣市色塊/圓餅/等)不會被蓋住 */
+    #sim-panel {
+      display: none;
+      position: fixed;
+      left: 266px;
+      top: 78px;
+      z-index: 20;
+      background: rgba(10, 14, 24, 0.88);
+      backdrop-filter: blur(20px) saturate(1.3);
+      -webkit-backdrop-filter: blur(20px) saturate(1.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+      padding: 10px 12px;
+      width: 300px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+    }
+
+    #sim-panel.open {
+      display: block;
+    }
+
+    /* 推演結果長條圖：從推演參數面板搬出來，變成常駐在地圖左下角的浮動面板——
+       不用把推演參數整片打開才看得到目前的模擬席次結果。位置卡在左側欄跟地圖左下角
+       +/-縮放鈕(.zbts, bottom:10px)中間那塊本來空白的區域，column-reverse讓內容框
+       往上長，圓形折疊鈕固定貼著底部，跟常駐聲明(#disclaimer-wrap/#disclaimer-toggle)
+       同一套「圓鈕+max-height展開框」互動邏輯 */
+    #pl-result-wrap {
+      display: none;
+      position: fixed;
+      left: 12px;
+      bottom: 90px;
+      z-index: 15;
+      flex-direction: column-reverse;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    #pl-result-wrap.gate-open {
+      display: flex;
+    }
+    #pl-result-toggle {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(147, 197, 253, 0.18);
+      border: 1.5px solid rgba(147, 197, 253, 0.55);
+      color: #93c5fd;
+      font-size: 14px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(147, 197, 253, 0.25);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      flex-shrink: 0;
+    }
+    #pl-result-float {
+      overflow: hidden;
+      max-height: 0;
+      width: 400px;
+      transition: max-height 0.3s ease;
+      box-sizing: border-box;
+    }
+    #pl-result-float.open {
+      max-height: 240px;
+    }
+    #pl-result-float-inner {
+      background: rgba(10, 14, 24, 0.88);
+      backdrop-filter: blur(20px) saturate(1.3);
+      -webkit-backdrop-filter: blur(20px) saturate(1.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .4);
+      padding: 6px 10px;
+      box-sizing: border-box;
+    }
+    #pl-result-float .sp-sec {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 0;
+    }
+    #pl-result-float-inner > div:last-child {
+      font-size: 7px !important;
+      line-height: 1.35 !important;
+      margin-top: 2px !important;
+    }
+
+    .sp-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+      flex-wrap: wrap
+    }
+
+    .sp-blk {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 8px;
+      padding: 4px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.06)
+    }
+
+    .sp-blk label {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.8);
+      min-width: 130px;
+      white-space: nowrap
+    }
+
+    .sp-blk input[type=range] {
+      width: 120px;
+      accent-color: #1d4ed8
+    }
+
+    .sp-val {
+      font-size: 11px;
+      color: #1d4ed8;
+      font-weight: 700;
+      min-width: 38px;
+      text-align: right;
+      font-variant-numeric: tabular-nums
+    }
+
+    #sp-reset {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.7);
+      cursor: pointer
+    }
+
+    .sim-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 4px
+    }
+
+    .stab {
+      flex: 1;
+      padding: 3px 6px;
+      font-size: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .stab.active {
+      background: #1b9e4b;
+      color: #fff;
+      border-color: #1b9e4b
+    }
+
+    .pl-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 3px
+    }
+
+    .pl-sl-lbl {
+      font-size: 9px;
+      font-weight: 700;
+      width: 52px;
+      flex-shrink: 0;
+      text-align: right
+    }
+
+    .pl-sl-logo {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    .pl-sl-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 50%
+    }
+
+    .pl-sl-logo svg {
+      width: 100%;
+      height: 100%
+    }
+
+    .pl-sl-val {
+      font-size: 9px;
+      width: 32px;
+      flex-shrink: 0;
+      text-align: right;
+      color: rgba(255, 255, 255, 0.5)
+    }
+
+    /* 推演參數面板裡「政黨得票調整／假設情形／第三勢力分票模擬器」三大塊，各自獨立收合——
+       跟政黨輪替分析(#flip-analysis-box)/投票率調整(#pl-turnout-box)同一套青綠邊框+▶▼箭頭樣式，
+       避免三塊內容一直全部攤開佔滿整個面板 */
+    .boxedCollapse-teal {
+      border: 1px solid rgba(40, 200, 200, 0.25);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: rgba(14, 26, 30, 0.5);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    .pl-scenario-tab.active {
+      background: rgba(38, 181, 196, 0.22) !important;
+      border-color: rgba(38, 181, 196, 0.6) !important;
+    }
+
+    .pl-result-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px 0;
+      border-bottom: 1px solid #f5f5f5;
+      font-size: 10px
+    }
+
+    .pr-name {
+      font-weight: 600;
+      width: 68px;
+      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .pr-pct {
+      color: #555;
+      width: 36px;
+      text-align: right;
+      flex-shrink: 0
+    }
+
+    .pr-seats {
+      font-weight: 700;
+      width: 24px;
+      text-align: right;
+      flex-shrink: 0
+    }
+
+    .pr-bar {
+      flex: 1;
+      height: 8px;
+      border-radius: 2px;
+      margin: 0 3px
+    }
+
+    .pr-votes {
+      font-size: 8px;
+      color: rgba(255, 255, 255, 0.3);
+      width: 60px;
+      text-align: right;
+      flex-shrink: 0
+    }
+
+    .sp-sec {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.6);
+      margin: 5px 0 2px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 5px
+    }
+
+    .sp-hint {
+      font-size: 10px;
+      color: #888;
+      line-height: 1.5;
+      margin-top: 3px
+    }
+
+    /* ── Main layout ── */
+    /* 地圖鋪滿整個 #layout（左右到邊緣），左右浮動面板疊在上面 */
+    #main {
+      display: flex;
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      align-items: stretch;
+      z-index: 1;
+    }
+
+    #mp {
+      flex: 1;
+      position: relative;
+      z-index: 2;
+      overflow: hidden;
+      background: radial-gradient(ellipse at 40% 50%, #141b2b 0%, #0a0d16 70%, #05070c 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      --mx: 40%; --my: 50%; --px: 0px; --py: 0px; --torch-scale: 1;
+    }
+
+    svg#map {
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: hidden
+    }
+
+    /* 貼著地圖實際輪廓（海岸線/選區外框）發光——filter:drop-shadow只沿著#g-base裡實際有畫到色塊的邊緣算陰影，
+       相鄰選區交界（兩邊都不透明）不會有光，只有最外圍跟背景交界的地方（也就是海岸線）才會亮，
+       跟著目前畫面顯示的形狀（全國/單一選區/單一鄉鎮）自動變化，不用手動對齊座標。 */
+    #g-base {
+      filter: drop-shadow(0 0 3px var(--edge-glow, #1c2740)) drop-shadow(0 0 10px var(--edge-glow, #1c2740));
+    }
+
+    .ft {
+      vector-effect: non-scaling-stroke;
+      cursor: pointer;
+      transition: fill 0.6s ease, opacity 0.6s ease;
+      animation: fadeIn 0.4s ease;
+    }
+    .ft-popglow, .glow-core {
+      transition: fill 0.6s ease, opacity 0.6s ease;
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .ft-ed {
+      stroke: rgba(255, 255, 255, .06);
+      stroke-width: .5
+    }
+
+    .ft-ed:hover {
+      stroke: #ffd900;
+      stroke-width: 1.8;
+      filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)) drop-shadow(0 0 4px rgba(255, 217, 0, .7))
+    }
+
+    /* 2016 邊界劃分與 2024 不同 (屏東3區/高雄9區/新竹縣一整塊),
+       只在切到 2016 時加上黃色框線,2020/2024 維持原本樣子 */
+    .ft-ed.year-2016 {
+      stroke: rgba(255, 217, 0, .55);
+      stroke-width: 1.1
+    }
+
+    .ft-tc {
+      stroke: rgba(0, 0, 0, .15);
+      stroke-width: .4
+    }
+
+    .ft-tc:hover {
+      stroke: rgba(0, 0, 0, .55);
+      stroke-width: .8
+    }
+
+    .ft-vill {
+      stroke: rgba(255, 255, 255, .35);
+      stroke-width: .22
+    }
+
+    .ft-vill:hover {
+      stroke: rgba(0, 0, 0, .5);
+      stroke-width: .6
+    }
+
+    .bg-fill {
+      fill: #121a28
+    }
+
+    .swing-ov {
+      fill: url(#swing-stripe);
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+      stroke: rgba(210, 90, 0, .6);
+      stroke-width: .5
+    }
+
+    /* ── Info panel ── */
+    #ip {
+      position: absolute;
+      top: 76px;
+      right: 0;
+      bottom: 10px;
+      width: 288px;
+      max-width: 288px;
+      border-radius: 12px 0 0 12px;
+      background: rgba(18, 24, 38, 0.55) !important;
+      backdrop-filter: blur(20px) saturate(1.3);
+      -webkit-backdrop-filter: blur(20px) saturate(1.3);
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      word-break: break-word;
+      z-index: 10;
+      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4), inset 1px 0 0 rgba(40, 200, 200, 0.08)
+    }
+    #ip > *:not(#ic) {
+      flex-shrink: 0
+    }
+    #ih {
+      padding: 8px 12px 5px;
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(40, 200, 200, 0.7);
+      border-bottom: 1px solid rgba(40, 200, 200, 0.15);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      text-shadow: 0 0 8px rgba(40, 200, 200, 0.2);
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+    }
+
+    #swing-mask-row {
+      padding: 8px 12px !important;
+      margin: 0 !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important
+    }
+
+    /* ── 毛玻璃拉桿（PVI 權重滑桿）── */
+    .glass-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      outline: none;
+      cursor: pointer;
+    }
+    .glass-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(40, 200, 200, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 0 8px rgba(40, 200, 200, 0.6);
+      cursor: pointer;
+      margin-top: -0.5px;
+    }
+    .glass-slider::-moz-range-track {
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .glass-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(40, 200, 200, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 0 8px rgba(40, 200, 200, 0.6);
+      cursor: pointer;
+    }
+    .switch-toggle {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 18px;
+      flex-shrink: 0
+    }
+
+    .switch-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0
+    }
+
+    .switch-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      transition: .18s
+    }
+
+    .switch-slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 2px;
+      bottom: 2px;
+      background: #fff;
+      border-radius: 50%;
+      transition: .18s;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .25)
+    }
+
+    .switch-toggle input:checked+.switch-slider {
+      background: #ff9800
+    }
+
+    .switch-toggle input:checked+.switch-slider:before {
+      transform: translateX(16px)
+    }
+
+    #party-heatmap-select:disabled {
+      opacity: 0.4;
+      cursor: not-allowed
+    }
+
+    #ic {
+      padding: 10px 12px;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      font-size: 12px;
+      background: rgba(18, 24, 38, 0.72)
+    }
+    #ic::-webkit-scrollbar {
+      width: 4px;
+    }
+    #ic::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #ic::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+    }
+    .pch-scrollwrap::-webkit-scrollbar {
+      height: 5px;
+    }
+    .pch-scrollwrap::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.04);
+      border-radius: 3px;
+    }
+    .pch-scrollwrap::-webkit-scrollbar-thumb {
+      background: rgba(196,181,253,0.35);
+      border-radius: 3px;
+    }
+    .pch-scrollwrap::-webkit-scrollbar-thumb:hover {
+      background: rgba(196,181,253,0.55);
+    }
+
+    .t1 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 2px;
+      color: rgba(255, 255, 255, 0.92)
+    }
+
+    .t2 {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.45);
+      margin-bottom: 3px
+    }
+
+    .sec-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.4);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin: 5px 0 3px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06)
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 2px
+    }
+
+    .blb {
+      width: 70px;
+      font-size: 11px;
+      text-align: right;
+      flex-shrink: 0;
+      color: rgba(255, 255, 255, 0.75);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border-right: 4px solid transparent;
+      padding-right: 4px
+    }
+
+    .camp-green {
+      border-color: #1b9e4b
+    }
+
+    .camp-blue {
+      border-color: #1555b4
+    }
+
+    .camp-white {
+      border-color: #26b5c4
+    }
+
+    .camp-dpp {
+      border-color: #1b9e4b
+    }
+
+    .camp-kmt {
+      border-color: #1555b4
+    }
+
+    .camp-tpp {
+      border-color: #26b5c4
+    }
+
+    .camp-ind {
+      border-color: #888
+    }
+
+    .camp-other {
+      border-color: #aaa
+    }
+
+    .bbg {
+      flex: 1;
+      height: 13px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+      overflow: hidden;
+      /* 跟.hist-bar-wrap同一套處理：色塊(.bfill)本身不加發光，只在外框加中性淡光當HUD邊框 */
+      box-shadow: 0 0 4px rgba(180, 210, 255, 0.15);
+      border: 1px solid rgba(180, 210, 255, 0.12)
+    }
+
+    .bfill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width .12s
+    }
+
+    /* ── 棒狀圖毛玻璃光澤紋路（v1.63加、v1.64拿掉）──────────────────────────
+       你說先刪掉、但如果之後要用要固定用這個設計，先原封不動存在這裡備用：
+    .bbg, .pl-bar-wrap, .hist-bar-wrap {
+      backdrop-filter: blur(6px) saturate(1.3);
+      -webkit-backdrop-filter: blur(6px) saturate(1.3);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+    .bfill, .pl-seg, .hist-seg { position: relative; }
+    .bfill::after, .pl-seg::after, .hist-seg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0) 62%);
+      pointer-events: none;
+    }
+    ──────────────────────────────────────────────────────────────────── */
+
+    .bpct {
+      width: 40px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.7);
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      font-weight: 700
+    }
+
+    .bvote {
+      width: 60px;
+      font-size: 10px;
+      text-align: right;
+      color: rgba(255, 255, 255, 0.4);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0
+    }
+
+    .bar-row-collapsible {
+      cursor: pointer
+    }
+
+    .bar-row-collapsible:hover .bbg {
+      filter: brightness(0.96)
+    }
+
+    .bar-collapse-arrow {
+      display: inline-block;
+      width: 10px;
+      flex-shrink: 0;
+      font-size: 9px;
+      color: #999;
+      transition: transform .15s;
+      text-align: center
+    }
+
+    .bar-collapse-arrow.open {
+      transform: rotate(180deg)
+    }
+
+    .bar-row-detail-wrap {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height .2s ease
+    }
+
+    .bar-row-detail-wrap.open {
+      max-height: 200px
+    }
+
+    .bar-row-detail {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 3px;
+      padding-left: 8px
+    }
+
+    .bar-green {
+      background: #1b9e4b
+    }
+
+    .bar-dpp {
+      background: #1b9e4b
+    }
+
+    .bar-blue {
+      background: #1555b4
+    }
+
+    .bar-kmt {
+      background: #1555b4
+    }
+
+    .bar-white {
+      background: #26b5c4
+    }
+
+    .bar-tpp {
+      background: #26b5c4
+    }
+
+    .bar-other {
+      background: #aaa
+    }
+
+    .bar-ind {
+      background: #888
+    }
+
+    .bar-other {
+      background: #aaa
+    }
+
+    /* news-ticker style for candidate rows */
+    .cand-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04)
+    }
+
+    .cand-name {
+      width: 90px;
+      font-size: 11px;
+      font-weight: 600;
+      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: rgba(255, 255, 255, 0.85)
+    }
+
+    .cand-votes {
+      font-size: 11px;
+      flex-shrink: 0;
+      width: 80px;
+      font-variant-numeric: tabular-nums;
+      color: rgba(255, 255, 255, 0.6)
+    }
+
+    .cand-votes .man {
+      color: #facc15;
+      background: #111;
+      padding: 0 2px;
+      border-radius: 2px;
+      font-size: 10px;
+      font-weight: 700
+    }
+
+    .cand-pct {
+      width: 38px;
+      font-size: 11px;
+      text-align: right;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums
+    }
+
+    .hist-pvi {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 3px
+    }
+
+    .pvi-sq {
+      flex: 1;
+      border-radius: 4px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff
+    }
+
+    /* ── 新版歷史客觀基底 ── */
+    .hist-legend {
+      display: flex;
+      gap: 10px;
+      font-size: 10px;
+      margin: 3px 0 5px;
+      font-weight: 600
+    }
+
+    .hl-g {
+      color: #1b9e4b
+    }
+
+    .hl-b {
+      color: #1555b4
+    }
+
+    .hl-w {
+      color: #26b5c4
+    }
+
+    .hl-npp {
+      color: #FBBE01
+    }
+
+    .hl-tsr {
+      color: #B33A1E
+    }
+
+    .hl-o {
+      color: #888
+    }
+
+    .hist-row {
+      margin-bottom: 5px
+    }
+
+    .hist-label {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: 600;
+      margin-bottom: 2px
+    }
+
+    .hist-sep-lbl {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: 700;
+      margin: 7px 0 3px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06)
+    }
+
+    .hist-bar-wrap {
+      display: flex;
+      height: 16px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+      margin-bottom: 2px;
+      /* 色塊本身（.hist-seg）維持實色不加發光，不然相鄰政黨的交界會糊在一起，比例會變得比現在難讀；
+         只在外框套一圈中性、跟任何政黨顏色都無關的淡光，當作HUD面板的邊框處理，呼應win-badge那批的neon質感
+         但不用挑一個政黨色代表整條混色的bar */
+      box-shadow: 0 0 5px rgba(180, 210, 255, 0.18), inset 0 1px 2px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(180, 210, 255, 0.14)
+    }
+
+    .hist-seg {
+      height: 100%;
+      transition: width .3s
+    }
+
+    .hc-g {
+      background: #1b9e4b
+    }
+
+    .hc-b {
+      background: #1555b4
+    }
+
+    .hc-w {
+      background: #26b5c4
+    }
+
+    .hc-o {
+      background: #888
+    }
+
+    .hc-orange {
+      background: #f06a0a
+    }
+
+    .hist-nums {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 2px;
+      font-size: 10px;
+      font-weight: 700
+    }
+
+    .hn-g {
+      color: #1b9e4b;
+      text-align: left;
+      text-shadow: 0 0 5px rgba(27,158,75,0.7)
+    }
+
+.hn-b {
+  color: #3b82f6;
+  text-align: center;
+  text-shadow: 0 0 5px rgba(59,130,246,0.7)
+}
+
+    .hn-w {
+      color: #26b5c4;
+      text-align: center;
+      text-shadow: 0 0 5px rgba(38,181,196,0.7)
+    }
+
+    .hn-npp {
+      color: #FBBE01;
+      text-align: center;
+      text-shadow: 0 0 5px rgba(251,190,1,0.7)
+    }
+
+    .hn-tsr {
+      color: #B33A1E;
+      text-align: center;
+      text-shadow: 0 0 5px rgba(179,58,30,0.7)
+    }
+
+    .hn-o {
+      color: #888;
+      text-align: right;
+      text-shadow: 0 0 4px rgba(136,136,136,0.5)
+    }
+
+    .hn-orange {
+      color: #f06a0a;
+      text-align: center;
+      text-shadow: 0 0 5px rgba(240,106,10,0.7)
+    }
+
+    .hint {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.35);
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.04)
+    }
+
+    .win-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 3px;
+      margin-right: 3px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.15)
+    }
+    /* win-badge毛玻璃版（v1.63加、v1.64拿掉，尺寸縮小維持）：光澤紋路備份見上面.bbg旁的註解區塊，
+       套用方式是額外補position:relative+overflow:hidden+border+backdrop-filter+box-shadow在.win-badge本體，
+       再加一條 .win-badge::after{...同一招沾板...} */
+
+    .bd-dpp,
+    .bd-green {
+      background: #1b9e4b
+    }
+
+    .bd-kmt,
+    .bd-blue {
+      background: #1555b4
+    }
+
+    .bd-tpp,
+    .bd-white {
+      background: #26b5c4
+    }
+
+    .bd-tsr {
+      background: #B33A1E
+    }
+
+    .bd-npu,
+    .bd-magenta {
+      background: #C20F51
+    }
+
+    .bd-ind,
+    .bd-other {
+      background: #888
+    }
+
+    .bd-npp {
+      background: #FBBE01
+    }
+
+    .bd-pfp {
+      background: #f06a0a
+    }
+
+    .bd-tsu {
+      background: #b38600
+    }
+
+    .bd-np {
+      background: #FFDA00
+    }
+    /* win-badge專屬的Ghost/Neon版——上面那組.bd-*是實心底色，給其他地方（例如.badge.bd-other等）共用，
+       不能直接改，所以另外用.win-badge.bd-*這種複合選擇器只蓋掉win-badge自己身上的樣式：拿掉實心底色，
+       改成該黨色的文字發光+極低透明度底色，視覺上不再像一塊磚頭壓在標題正下方 */
+    .win-badge.bd-dpp, .win-badge.bd-green {
+      color: #4ade80; background: rgba(74,222,128,0.12); border-color: rgba(74,222,128,0.4);
+      text-shadow: 0 0 6px rgba(74,222,128,0.85)
+    }
+    .win-badge.bd-kmt, .win-badge.bd-blue {
+      color: #60a5fa; background: rgba(96,165,250,0.12); border-color: rgba(96,165,250,0.4);
+      text-shadow: 0 0 6px rgba(96,165,250,0.85)
+    }
+    .win-badge.bd-tpp, .win-badge.bd-white {
+      color: #22d3ee; background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.4);
+      text-shadow: 0 0 6px rgba(34,211,238,0.85)
+    }
+    .win-badge.bd-tsr {
+      color: #fb923c; background: rgba(251,146,60,0.12); border-color: rgba(251,146,60,0.4);
+      text-shadow: 0 0 6px rgba(251,146,60,0.85)
+    }
+    .win-badge.bd-npu, .win-badge.bd-magenta {
+      color: #f472b6; background: rgba(244,114,182,0.12); border-color: rgba(244,114,182,0.4);
+      text-shadow: 0 0 6px rgba(244,114,182,0.85)
+    }
+    .win-badge.bd-ind, .win-badge.bd-other {
+      color: #cbd5e1; background: rgba(203,213,225,0.1); border-color: rgba(203,213,225,0.35);
+      text-shadow: 0 0 5px rgba(203,213,225,0.6)
+    }
+    .win-badge.bd-npp {
+      color: #FBBE01; background: rgba(251,190,1,0.12); border-color: rgba(251,190,1,0.4);
+      text-shadow: 0 0 6px rgba(251,190,1,0.85)
+    }
+    .win-badge.bd-pfp {
+      color: #f06a0a; background: rgba(240,106,10,0.12); border-color: rgba(240,106,10,0.4);
+      text-shadow: 0 0 6px rgba(240,106,10,0.85)
+    }
+    .win-badge.bd-tsu {
+      color: #d4a017; background: rgba(212,160,23,0.12); border-color: rgba(212,160,23,0.4);
+      text-shadow: 0 0 6px rgba(212,160,23,0.75)
+    }
+    .win-badge.bd-np {
+      color: #FFDA00; background: rgba(255,218,0,0.12); border-color: rgba(255,218,0,0.4);
+      text-shadow: 0 0 6px rgba(255,218,0,0.85)
+    }
+
+    .cmp-box {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 4px 8px;
+      margin: 3px 0;
+      font-size: 11px;
+      line-height: 1.5
+    }
+
+    .cmp-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      color: rgba(255, 255, 255, 0.75)
+    }
+
+    /* 數字（例如+6.2%）本身沒有nowrap，跟後面的.swing-tag（現在已經nowrap了）中間如果版面不夠寬，
+       還是會被拆成兩行——一行留數字、一行留⚡Swing。這個span是「數字+swing-tag」共用的容器，一起設
+       nowrap讓兩者維持同一行，不要讓badge自己不斷字但跟數字之間斷開 */
+    .cmp-pvi {
+      white-space: nowrap
+    }
+    /* 英文版「⚡Battleground」比中文「⚡搖擺」長很多，原本沒有white-space:nowrap，遇到父層版面較窄
+       （例如英文標籤"Weighted PVI (vs. Avg.)"本身就比中文長、擠壓到同一列剩下的空間）時，這個badge內部的
+       文字會被硬擠到換行、字中間斷開變成"Battlegro"/"und"兩截。補上nowrap，badge寧可稍微超出也不斷字；
+       同時跟這批其他badge一樣改成neon風格（拿掉實心橘底），跟win-badge/#flip-analysis-box用同一組橘色 */
+    .swing-tag {
+      background: rgba(224, 96, 16, 0.15);
+      border: 1px solid rgba(224, 96, 16, 0.45);
+      color: #ff9142;
+      text-shadow: 0 0 5px rgba(224, 96, 16, 0.7);
+      border-radius: 8px;
+      padding: 1px 5px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-left: 3px;
+      white-space: nowrap;
+      display: inline-block
+    }
+
+    /* ── Legend & zbtns ── */
+    .leg {
+      padding: 7px 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.5);
+      flex-shrink: 0
+    }
+
+    .leg-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 2px
+    }
+
+    .leg-sq {
+      width: 11px;
+      height: 11px;
+      border-radius: 2px;
+      flex-shrink: 0
+    }
+
+    .swing-sq {
+      width: 11px;
+      height: 11px;
+      border-radius: 2px;
+      background: rgba(230, 110, 20, .45);
+      border: 1px solid rgba(210, 90, 0, .5);
+      flex-shrink: 0
+    }
+
+    .zbts {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    #map-legend {
+      position: absolute;
+      bottom: 10px;
+      right: 298px;
+      max-width: 200px;
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.5);
+      line-height: 1.6;
+      pointer-events: none;
+      text-align: right;
+      /* 原本是純文字直接疊在地圖上，地圖底色深淺不一時文字對比忽強忽弱，看起來像飄在畫面上的雜訊——
+         包一個跟其他面板同一套語言的淡底+細邊框+backdrop-blur小框，右下角固定錨住，不再有這個問題。
+         內容是空的時候(innerHTML='')不該露出一個空框，用:empty隱藏掉 */
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 6px 8px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px)
+    }
+    #map-legend:empty {
+      display: none
+    }
+
+    #map-legend .ml-grad {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 2px
+    }
+
+    #map-legend .ml-bar {
+      width: 120px;
+      height: 10px;
+      border-radius: 3px
+    }
+
+    #map-legend .ml-row {
+      display: flex;
+      justify-content: space-between;
+      width: 120px;
+      margin-bottom: 2px;
+      margin-left: auto;
+      font-size: 9px
+    }
+
+    #map-legend .ml-swing {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      justify-content: flex-end
+    }
+
+    #map-legend .ml-sw-ic {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      background-image: repeating-linear-gradient(45deg, #FFB74D 0, #FFB74D 2px, rgba(255, 183, 77, .25) 2px, rgba(255, 183, 77, .25) 4px);
+      border: 1px solid #d2700a;
+      vertical-align: middle
+    }
+
+    .zb {
+      width: 28px;
+      height: 28px;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: rgba(255,255,255,0.8);
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+      transition: all 0.2s;
+    }
+
+    .zb:hover {
+      background: rgba(255,255,255,0.14);
+      border-color: rgba(40, 200, 200, 0.4);
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(40, 200, 200, 0.2);
+    }
+
+    .pie-g {
+      pointer-events: none
+    }
+
+    #tk-seats {
+      display: none !important
+    }
+
+
+
+    .cand-mini-logo img {
+      width: 12px !important;
+      height: 12px !important;
+      vertical-align: middle !important;
+    }
+
+    @-webkit-keyframes pviShiftFade {
+      0% {
+        opacity: 0;
+        -webkit-transform: scale(0.6) translateX(8px);
+        transform: scale(0.6) translateX(8px);
+      }
+      100% {
+        opacity: 1;
+        -webkit-transform: scale(1.0) translateX(0);
+        transform: scale(1.0) translateX(0);
+      }
+    }
+
+    @keyframes pviNewPulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.65; transform:scale(1.08); }
+    }
+    /* 常駐聲明按鈕（⚠）加警示燈呼吸動畫——box-shadow的擴散半徑跟透明度來回變化，模擬警示燈明滅，
+       跟旁邊按鈕（sidebar-toggle等）區隔出「這個要留意」的視覺提示，比純靜態的紅色圓圈更醒目 */
+    @keyframes disclaimerBeacon {
+      0%, 100% { box-shadow: 0 0 8px rgba(255,82,82,0.25); }
+      50%      { box-shadow: 0 0 18px rgba(255,82,82,0.75), 0 0 5px rgba(255,82,82,0.6); }
+    }
+    #disclaimer-toggle {
+      animation: disclaimerBeacon 2s ease-in-out infinite;
+    }
+    .pvi-new-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 6px;
+      color: #ff6b35;
+      background: rgba(255,107,53,0.12);
+      border: 1px solid #ff6b35;
+      animation: pviNewPulse 1.6s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes pviShiftFade {
+      0% {
+        opacity: 0;
+        transform: scale(0.6) translateX(8px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1.0) translateX(0);
+      }
+    }
+
+    .pvi-shift-badge {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 6px;
+      -webkit-animation: pviShiftFade 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+      animation: pviShiftFade 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+      pointer-events: none;
+    }
+
+    .stats-card {
+      /* flex-basis 明寫 0：4 張卡的寬度完全由 flex-grow 比例決定，不受各自內容（清單/svg/badge）
+         實際大小影響，避免某張卡內容比較「寬」時把自己撐大、擠壓其他張卡 */
+      flex: 1 1 0;
+      background: rgba(18, 24, 40, 0.55);
+      backdrop-filter: blur(12px) saturate(1.15);
+      -webkit-backdrop-filter: blur(12px) saturate(1.15);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 4px 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      min-width: 120px;
+      /* 固定最小高度：不管哪個模式（歷史勝選/綜合PVI/第三勢力PVI/政黨熱力圖）內容差多少，
+         4 張卡跟整排的高度都要一致，不要因為換模式忽大忽小 */
+      min-height: 168px;
+      position: relative;
+    }
+
+    .stats-card .sr-badge-dimmable,
+    .stats-card .hemi-dot-dimmable {
+      transition: opacity 0.25s ease-in-out;
+    }
+    .region-dot, .pl-dot, .total-dot {
+      transition: fill 0.8s ease-out, opacity 0.8s ease-out;
+    }
+    .region-dot.no-transition, .pl-dot.no-transition, .total-dot.no-transition {
+      transition: none !important;
+    }
+    .stats-card:hover .sr-badge-dimmable,
+    .stats-card:hover .hemi-dot-dimmable {
+      opacity: 0.25 !important;
+    }
+
+    .stats-card.ind-card {
+      flex: 1;
+      min-width: 120px;
+      padding: 8px 10px;
+    }
+    .ind-leg-btn {
+      font-size: 9px;
+      padding: 2px 7px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      line-height: 1.5;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .ind-leg-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .ind-leg-btn.active {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: #38bdf8;
+      color: #7dd3fc;
+      font-weight: 600;
+    }
+
+    .stats-card.total-card {
+      flex: 1;
+      min-width: 120px;
+      background: linear-gradient(145deg, rgba(22, 30, 50, 0.6), rgba(14, 19, 34, 0.55));
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    /* 清單型內容（.pvi-body / .mismatch-body）自己已經有 max-height + overflow-y:auto 會捲動，
+       這裡不用再讓外層 .stats-card 裁切一次——之前這樣寫反而會把非清單卡片（如半圓形席次圖）
+       裁掉一截，所以拿掉，改成信任內層清單自己的捲動範圍 */
+    .card-title {
+      font-size: 9px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 2px;
+      text-align: center;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+    }
+
+    .stats-card {
+      transition: height 0.2s ease-in-out, min-height 0.2s ease-in-out, flex 0.2s ease-in-out;
+    }
+    .stats-card.collapsed {
+      height: 30px !important;
+      min-height: 30px !important;
+      flex: 0.15 !important;
+      min-width: 130px !important;
+      justify-content: center !important;
+    }
+    .stats-card.collapsed > *:not(.card-title) {
+      display: none !important;
+    }
+    .stats-card.collapsed .collapse-arrow {
+      transform: rotate(-90deg);
+    }
+    .collapse-arrow {
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+
+
+    .svg-container {
+      /* v1.13 的 flex:1 會讓容器吃滿剩餘空間、比實際圖案大一圈，
+         反而讓數字（貼容器底部）跟圖案（置中）對不齊——改回貼齊內容本身的大小，
+         靠 .stats-card 的 justify-content:space-between 統一分配上下留白 */
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    .stats-card .svg-container svg {
+      display: block;
+      max-width: 100%;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .hemi-center-lbl {
+      /* 用 left:0;right:0 + flex 置中，而不是 left:50%+transform：
+         不需要知道文字本身的寬度，也不受任何父層 transform/filter 影響，比較不會跑位 */
+      position: absolute;
+      bottom: 4px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.7);
+      pointer-events: none;
+    }
+
+    .ind-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      height: 100%;
+    }
+
+    .ind-visual-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      flex: 0 0 22%;
+      min-width: 60px;
+      max-width: 90px;
+    }
+
+    .ind-table-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      justify-content: center;
+      min-width: 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch
+    }
+
+    .ind-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .ind-lbl {
+      min-width: 48px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.4);
+      white-space: nowrap;
+      font-size: 7px;
+      flex-shrink: 0;
+    }
+
+    .ind-badges {
+      display: flex;
+      gap: 4px;
+      flex-wrap: nowrap;
+      min-width: 0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 3px;
+      border-radius: 3px;
+      font-weight: 700;
+      color: #fff;
+      font-size: 7px;
+      white-space: nowrap;
+      text-align: center;
+      min-width: 28px;
+      max-width: 72px;
+      width: auto;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .badge.bd-blue {
+      background: #1555b4;
+    }
+
+    .badge.bd-green {
+      background: #1b9e4b;
+    }
+
+    .badge.bd-other {
+      background: #888;
+    }
+
+    #sim-columns-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .sim-col {
+      background: rgba(18, 24, 40, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    #stab-region-panel {
+      flex: 1.5;
+    }
+
+    #stab-pl-panel {
+      flex: 1;
+    }
+
+    .sim-col-header {
+      color: #fff;
+      background: #1b9e4b;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      text-align: center;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    /* input[type=range]預設沒有明確寬度/flex-basis，flexbox子項目min-width預設是auto——
+       對表單控制項這種「替換元素」來說，auto常常等於它自己的原生寬度(~170-240px不等)，
+       導致就算容器變窄了，滑桿還是撐著原生寬度不肯縮，把數值文字(.pl-sl-val)擠出折疊框外側。
+       這裡強制flex:1(可以縮)+min-width:0(取消auto最小寬度限制)，滑桿才會真的跟著容器縮 */
+    .pl-slider-row input[type=range] {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    .pl-slider-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .sr-purple {
+      color: #7c3aed;
+    }
+
+    .sr-orange {
+      color: #f06a0a;
+    }
+
+    .sr-np-yellow {
+      color: #FFDA00;
+    }
+
+    .sr-tsu-gold {
+      color: #C69E6A;
+    }
+
+    .sr-npp-gold {
+      color: #FBBE01;
+    }
+
+    .sr-tsr-red {
+      color: #B33A1E;
+    }
+
+    .sr-magenta {
+      color: #C20F51;
+    }
+
+    /* ── PL Bar Chart Styles ── */
+    #pl-result-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      height: 138px;
+      padding: 20px 4px 0;
+      margin-top: 10px;
+      border-bottom: 1.5px solid #e5e7eb;
+      margin-bottom: 6px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 6px;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .pl-threshold-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 1.5px dashed #e54d4d;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .pl-threshold-label {
+      position: absolute;
+      right: 4px;
+      color: #e54d4d;
+      font-size: 8px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 0 2px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .pl-bar-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      position: relative;
+      height: 100%;
+      justify-content: flex-end;
+    }
+
+    .pl-bar-top-lbl {
+      position: absolute;
+      bottom: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 8px;
+      color: #4b5563;
+      line-height: 1.1;
+      white-space: nowrap;
+      margin-bottom: 2px;
+    }
+
+    .pl-bar-top-lbl .seats-num {
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .pl-bar-fill {
+      width: 13px;
+      border-radius: 3px 3px 0 0;
+      transition: height 0.3s ease;
+      min-height: 2px;
+    }
+
+    .pl-bar-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 8px;
+      font-weight: 700;
+      margin-top: 4px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    .pl-bar-name {
+      font-size: 8px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 3px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+    }
+
+    #pl-result-panel {
+      background: rgba(255, 255, 255, 0.02) !important;
+      border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+    }
+    .pl-bar-top-lbl {
+      color: rgba(255, 255, 255, 0.5) !important;
+    }
+    .pr-name {
+      color: rgba(255, 255, 255, 0.75) !important;
+    }
+    .pr-pct {
+      color: rgba(255, 255, 255, 0.5) !important;
+    }
+    .sp-hint {
+      color: rgba(255, 255, 255, 0.4) !important;
+    }
+    .pr-bar {
+      opacity: 0.85;
+    }
+    .pl-result-row {
+      border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+    }
+
+/* pvi3-panel (third-force detail panel) styles */
+      #pvi3-panel { display:none; position:fixed; inset:0; z-index:2000; background:radial-gradient(ellipse 900px 500px at 15% -10%, rgba(27,158,75,0.10), transparent 60%), radial-gradient(ellipse 900px 500px at 100% 0%, rgba(21,85,180,0.12), transparent 60%), #0a0e17; overflow-y:auto; color:#e7eaf0; font-family:-apple-system,"SF Pro Text","Segoe UI","PingFang TC","Noto Sans TC",sans-serif; }
+      #pvi3-panel .pvi3-wrap { max-width:1180px; margin:0 auto; padding:26px 24px 60px; }
+      .pvi3-head { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:20px; flex-wrap:wrap; }
+      .pvi3-head h2 { font-size:20px; font-weight:700; margin:0 0 4px; }
+      .pvi3-head .sub { font-size:12px; color:#8b93a7; }
+      #pvi3-close { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:#e7eaf0; border-radius:8px; padding:7px 14px; font-size:12px; cursor:pointer; }
+      #pvi3-close:hover { background:rgba(255,255,255,0.1); }
+      .pvi3-legend { display:flex; gap:14px; font-size:11px; color:#8b93a7; align-items:center; flex-wrap:wrap; }
+      .pvi3-legend .dot { width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:4px; }
+      #pvi3-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:22px; }
+      .pvi3-stat { background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:12px 14px; }
+      .pvi3-stat .k { font-size:10px; color:#8b93a7; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; display:block; }
+      .pvi3-stat .ed { font-size:14px; font-weight:700; margin-bottom:2px; }
+      .pvi3-stat .v { font-size:11px; color:#8b93a7; font-variant-numeric:tabular-nums; }
+      .pvi3-stat .v b { color:#e7eaf0; font-weight:700; }
+      .pvi3-stat.dpp { border-left:3px solid #4ade80; }
+      .pvi3-stat.kmt { border-left:3px solid #60a5fa; }
+      .pvi3-stat.swing { border-left:3px solid #fb923c; }
+      .pvi3-stat.stable { border-left:3px solid #8b93a7; }
+      #pvi3-list { background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.09); border-radius:12px; overflow:hidden; }
+      .pvi3-listhead { display:grid; grid-template-columns:30px 1.1fr 108px 92px 108px 92px; gap:10px; padding:10px 16px; font-size:10px; color:#8b93a7; text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid rgba(255,255,255,0.07); }
+      .pvi3-row { display:grid; grid-template-columns:30px 1.1fr 108px 92px 108px 92px; gap:10px; align-items:center; padding:8px 16px; border-bottom:1px solid rgba(255,255,255,0.07); font-size:12.5px; }
+      .pvi3-row:hover { background:rgba(255,255,255,0.02); }
+      .pvi3-row .rank { color:#5b6376; font-variant-numeric:tabular-nums; font-size:11px; }
+      .pvi3-row .ed-name { font-weight:600; }
+      .pvi3-secdiv { padding:7px 16px; font-size:10px; color:#5b6376; background:rgba(255,255,255,0.02); border-bottom:1px solid rgba(255,255,255,0.07); text-transform:uppercase; letter-spacing:0.06em; }
+      .pvi3-pill { display:inline-flex; align-items:center; gap:5px; font-weight:700; font-variant-numeric:tabular-nums; padding:3px 8px; border-radius:6px; font-size:11.5px; width:fit-content; }
+      .pvi3-pill.g { color:#4ade80; background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.35); }
+      .pvi3-pill.b { color:#60a5fa; background:rgba(96,165,250,0.12); border:1px solid rgba(96,165,250,0.35); }
+      .pvi3-shift { font-size:11px; font-variant-numeric:tabular-nums; }
+      .pvi3-shift.up { color:#4ade80; }
+      .pvi3-shift.down { color:#60a5fa; }
+      .pvi3-badge-new { font-size:9.5px; font-weight:700; color:#fb923c; background:rgba(251,146,60,0.14); border:1px solid rgba(251,146,60,0.4); padding:2px 6px; border-radius:5px; }
+      #pvi3-filters { display:flex; gap:7px; margin-bottom:14px; flex-wrap:wrap; }
+      .pvi3-chip { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#5b6376; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.09); border-radius:20px; padding:5px 11px 5px 9px; cursor:pointer; font-family:inherit; transition:opacity 0.15s; }
+      .pvi3-chip .dot { width:8px; height:8px; border-radius:50%; opacity:0.35; }
+      .pvi3-chip .n { font-variant-numeric:tabular-nums; color:inherit; opacity:0.75; }
+      .pvi3-chip.on { color:#e7eaf0; background:color-mix(in srgb, var(--tc) 14%, transparent); border-color:color-mix(in srgb, var(--tc) 45%, transparent); }
+      .pvi3-chip.on .dot { opacity:1; box-shadow:0 0 5px var(--tc); }
+      .pvi3-chip:not(.on) { opacity:0.55; }
+      .pvi3-chip:hover { opacity:0.85; }
+      .pvi3-chip.on:hover { opacity:1; }
+      .pvi3-empty { padding:26px 16px; text-align:center; font-size:12px; color:#5b6376; }
+      .pvi3-chip-flip-first { margin-left:4px; border-left:1px solid rgba(255,255,255,0.15); padding-left:13px; }
+      .pvi3-chip-eff { margin-left:4px; border-left:1px solid rgba(255,255,255,0.15); padding-left:13px; }
+      .pvi3-chip-eff.on { color:#e7eaf0; background:rgba(196,181,160,0.16); border-color:rgba(196,181,160,0.5); }
+      .pvi3-chip-flip.on { color:#e7eaf0; background:rgba(251,146,60,0.14); border-color:rgba(251,146,60,0.45); }
+      .pvi3-flip-badge { display:inline-block; margin-left:5px; color:#fb923c; font-size:11px; font-weight:700; cursor:default; }
+
+/* Simplified road reference layer (data_roads.js) + toggle button */
+#g-roads { pointer-events: none; }
+/* No vector-effect:non-scaling-stroke here — it silently breaks clip-path in this browser
+   (confirmed: removing it is what makes the district/township clip actually take effect).
+   Constant on-screen width is instead achieved with --rk (1/zoom-k, updated in the zoom
+   handler on #map): stroke-width = base-px * --rk, recomputed cheaply by the browser via
+   inheritance rather than touching every road path's own attribute on each zoom tick. */
+#map { --rk: 1; }
+.road-line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.road-line.road-motorway    { stroke: rgba(255,214,0,0.95);  stroke-width: calc(1.6px * var(--rk)); }
+.road-line.road-trunk       { stroke: rgba(255,214,0,0.75);  stroke-width: calc(1.15px * var(--rk)); }
+.road-line.road-primary     { stroke: rgba(255,255,255,0.5); stroke-width: calc(0.8px * var(--rk)); }
+.road-line.road-secondary   { stroke: rgba(255,214,0,0.4);   stroke-width: calc(0.55px * var(--rk)); }
+.road-line.road-tertiary    { stroke: rgba(255,255,255,0.35);stroke-width: calc(0.42px * var(--rk)); }
+.road-line.road-unclassified{ stroke: rgba(255,255,255,0.26);stroke-width: calc(0.3px * var(--rk)); }
+.road-line.road-residential { stroke: rgba(255,255,255,0.22);stroke-width: calc(0.24px * var(--rk)); }
+#roads-toggle-btn.on { background: rgba(255,214,102,0.22); border-color: rgba(255,214,102,0.6); color: #ffd666; }

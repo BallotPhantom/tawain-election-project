@@ -1,0 +1,284 @@
+// 2026 縣市長選舉民調彙整 —— sourced 2026-08-14 (research date), see inline source_url per entry.
+// Raw poll data only — NOT yet blended into a prediction. Keyed by county/city NAME (not county code),
+// because raw poll tables don't map cleanly onto the COUNCIL_MAYOR_2022 code scheme used by
+// data_mayor2026_predict.js. County-code mapping + house-effect weighting happens in a later step.
+//
+// candidate.party values: "blue" (KMT/泛藍), "green" (DPP/泛綠), "white" (TPP/民眾黨), "other" (independent/PFP/etc)
+// sponsor: the disclosed commissioning org (media outlet, party, campaign office, legislator's office),
+//          or null if the poll appears independently commissioned/self-funded by the pollster,
+//          or the string "unknown" if commissioning status is genuinely unclear from sourcing.
+// undecided_pct: reported 未表態/未表態 percentage where disclosed, else null. NOT always present because
+//          many multi-candidate primary-era tables did not cleanly report a single undecided figure.
+// note: used to flag known data-quality issues (garbled source table, ambiguous candidate/number pairing,
+//          non-scientific poll methodology, primary-vs-general-election framing, etc).
+//
+// DATA QUALITY CAVEATS (see final report for full discussion):
+// - The Wikipedia poll-tracking page's tables for 高雄市, 新竹縣, 花蓮縣, 屏東縣, 宜蘭縣, 彰化縣ˎ嘉義縣
+//   render as a wide grid with many blank/dash cells for "candidate not yet in this matchup's row";
+//   WebFetch's summarization pass sometimes mis-paired numbers to candidates. Rows with genuine
+//   ambiguity are marked with a "note" field rather than silently guessed.
+// - 屏東縣: one fetch of the Wikipedia table returned a 鉅聞天下 2/23-28 entry (周春米45.96% / 蘇清泉40.57%)
+//   that is numerically IDENTICAL to Tainan's 鉅聞天下 2/23-28 entry (陳亭妃45.96% / 謝龍介40.57%) — almost
+//   certainly a cross-contamination/extraction error by the fetch tool, not a real duplicate poll. That
+//   entry was DISCARDED. A re-fetch of the same Wikipedia row returned blank percentages instead. The only
+//   Pingtung number used here (菱傳媒 online poll, 周春米37.28% / 蘇清泉34.89%) comes from a WebSearch summary
+//   of a 青菱專欄 article (rwnews.tw), not from Wikipedia; the source article itself 403'd on direct fetch,
+//   so this entry could not be independently re-verified against the primary text — treat with caution.
+// - 苗栗縣, 連江縣: Wikipedia's poll-tracking page has NO section at all for these two counties (confirmed via
+//   repeated targeted re-fetch). No scientific poll was found via WebSearch either. The only numbers found for
+//   either county come from a single informal, non-scientific YouTube livestream "street poll" (街頭有派對,
+//   host 蔡宇傑) covering all 22 counties at once — included below but clearly flagged; do not treat as a
+//   real poll for weighting purposes.
+// - 南投縣: Wikipedia's table section exists (許淑華－溫世政) but is structurally empty — no rows populated.
+//   No numeric poll found via WebSearch either. Left as an empty array.
+// - 高雄市: the DPP primary-era portion of Wikipedia's table (~54 rows, Feb 2025–Jan 2026, testing
+//   林岱樺/賴瑞隆/邱議瑩/許智傑 against 柯志恩 across NewTalk/鏡報/TVBS/民進黨內參/上報/精湛/NOWNEWS/台視新聞網/民進黨初選)
+//   extracted too fragmented/garbled (numbers not reliably paired to candidate labels) to be trustworthy
+//   row-by-row and was NOT included. Only the clean post-primary 賴瑞隆－柯志恩 general-election matchup
+//   (13 polls) is included below. If primary-era Kaohsiung data is needed later, re-pull that table manually.
+// - Several individual TVBS/匯流民調/美麗島電子報 waves published multiple sub-samples in the same
+//   announcement (e.g. testing the race with vs. without a third candidate); these are listed as separate
+//   entries with the same pollster+date since they are numerically distinct results, not duplicates.
+// - sample_size is null throughout: none of the sources fetched (Wikipedia table or news summaries)
+//   consistently disclosed sample sizes; this should be filled in later from primary-source poll releases
+//   (pollster PDFs / press releases) if precision is needed.
+
+const WIKI_POLL_URL = "https://zh.wikipedia.org/zh-tw/2026%E5%B9%B4%E4%B8%AD%E8%8F%AF%E6%B0%91%E5%9C%8B%E7%9B%B4%E8%BD%84%E5%B8%82%E9%95%B7%E5%8F%8A%E7%B8%A3%E5%B8%82%E9%95%B7%E9%81%B8%E8%88%89%E6%B0%91%E6%84%8F%E8%AA%BF%E6%9F%A5";
+
+const POLL_HOUSE_LEAN = {
+  "TVBS": { "lean": "neutral", "note": "電子媒體民調中心（1996年成立，台灣電子媒體第一家）；曾遭民進黨籍議員候選人質疑高雄民調報導初稿含「由藍營委託」字樣後遭刪除，TVBS否認立場操作；未見一致證據支持特定政黨傾向，暫列中立/未知。" },
+  "美麗島電子報": { "lean": "green", "note": "2009年由民進黨美麗島系大老許信良創辦，現任董事長吳子嘉、副董事長郭正亮；長期被視為親綠陣營民調/評論媒體。" },
+  "山水民調": { "lean": "green", "note": "山水民意研究1997年成立，創辦人張郁仁曾任民進黨秘書處主任，早期首席顧問為前民進黨民調中心主任游盈隆；外界常貼綠色標籤，惟藍綠陣營皆曾委託其調查。" },
+  "匯流民調": { "lean": "green", "note": "CNEWS匯流新聞網之民調中心；多篇報導與輿論將其列為親綠營媒體。" },
+  "菱傳媒": { "lean": "blue", "note": "代表人施威全曾任馬英九政府陸委會主委辦公室主任、朱立倫新北市府經發局長；董事長徐中雄為前國民黨中常委/立委；2023年由台鋼集團收購，社長陳申青與國民黨籍前國安會秘書長金溥聰為舊識，被認定具馬系/藍營背景。" },
+  "ETtoday": { "lean": "blue", "note": "東森新媒體控股（東森集團）旗下網路媒體；與東森電視分家多年，一般被歸類為傳統偏藍媒體立場。" },
+  "風傳媒": { "lean": "neutral", "note": "2014年由前高盛台北總經理張果軍個人獨資創辦，自稱不代表任何政黨、監督執政者；歷來被不同陣營貼過親藍、親綠甚至「紅媒」標籤，立場定性具爭議，暫列中立。2017年併購台灣指標民調。" },
+  "趨勢民調": { "lean": "neutral", "note": "趨勢民意調查股份有限公司，2010年成立之商業民調公司；未查得明確政黨背景或立場資訊。" },
+  "台灣民意基金會": { "lean": "green", "note": "創會董事長游盈隆曾任陳水扁政府海基會副董事長等職，2019年宣布退出民進黨；基金會自我定位為超黨派智庫，但游盈隆本人常被評論者視為「綠營出身」。" },
+  "民進黨內參": { "lean": "green", "note": "民進黨內部委託之非公開內參民調，屬政黨自身民調，非獨立第三方發布。" },
+  "民進黨初選": { "lean": "green", "note": "民進黨初選作業用之黨內民調，屬政黨初選機制的一部分，非對外公開發布之獨立民調。" },
+  "民進黨": { "lean": "green", "note": "民進黨（中央黨部或地方黨部）直接委託/發布之民調，屬政黨自身民調。" },
+  "國民黨初選": { "lean": "blue", "note": "國民黨初選作業用之黨內民調，屬政黨初選機制的一部分，非對外公開發布之獨立民調。" },
+  "國民黨內參": { "lean": "blue", "note": "國民黨內部委託之非公開內參民調，屬政黨自身民調。" },
+  "藍白整合初選": { "lean": "blue", "note": "國民黨與民眾黨（藍白）協商整合提名機制所採用之聯合民調，屬兩黨協商用途，非獨立第三方公開民調。" },
+  "NewTalk": { "lean": "green", "note": "新頭殼newtalk，長期被視為具親綠色彩之網路新聞媒體。" },
+  "上報": { "lean": "green", "note": "UP Media上報，由資深媒體人王健壯創辦；路線普遍被認為傾向批判國民黨、立場偏綠自由派。" },
+  "世新大學": { "lean": "neutral", "note": "學術機構（世新大學）執行之民調，屬學界調查，未見政黨背景資料，列為中立。" },
+  "艾普羅": { "lean": "neutral", "note": "艾普羅民意調查公司，商業民調機構；未查得明確政黨背景資訊。" },
+  "鉅聞天下": { "lean": "neutral", "note": "未查得該機構明確政黨背景或母公司資訊，暫列中立/未知。" },
+  "全國公信力": { "lean": "neutral", "note": "全國公信力民意調查股份有限公司，商業民調機構；未查得明確政黨背景資訊。" },
+  "民意調查協會": { "lean": "neutral", "note": "（澎湖民調使用之）民意調查協會，性質近似專業公會／商業調查機構；未查得明確政黨背景資訊。" },
+  "新台灣國策智庫": { "lean": "green", "note": "新台灣國策智庫基金會，多由前民進黨政府官員組成之政策智庫，一般被視為親綠智庫。" },
+  "年代民調": { "lean": "neutral", "note": "年代電視／年代民調中心，商業電視台民調部門；未見一致證據支持特定政黨傾向，暫列中立/未知。" },
+  "鏡報": { "lean": "neutral", "note": "鏡週刊/鏡報系列媒體（裴偉創辦），商業媒體；未見明確政黨背景資訊。" },
+  "NOWNEWS": { "lean": "neutral", "note": "NOWnews今日新聞，商業網路媒體；未見明確政黨背景資訊。" },
+  "TPOC台灣議題研究中心": { "lean": "neutral", "note": "未查得該機構明確政黨背景或母體資訊，暫列中立/未知。" },
+  "震傳媒": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "循證民調": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "求真": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "鋒燦傳媒": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "全方位": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "台灣研究學會": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "皮爾森數據": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "大地民意": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "新台灣民調研究中心": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊；名稱與「新台灣國策智庫」相似但非同一機構，暫列中立/未知。" },
+  "關鍵調查": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "台視新聞網": { "lean": "neutral", "note": "台灣電視公司（台視）新聞部門，商業電視台；未見明確政黨背景資訊。" },
+  "精湛": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
+  "街頭有派對(YouTube街頭民調)": { "lean": "unknown/informal", "note": "YouTube頻道主持人蔡宇傑主持之直播街頭民調，非隨機抽樣、非科學方法之非正式調查，僅供參考，不應視為正式民調。" }
+};
+
+const POLLS_2026 = {
+  "台北市": [
+    { "pollster": "循證民調", "sponsor": "unknown", "date": "2025-11-17~2025-11-19", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 49.1 }, { "name": "王世堅", "party": "green", "pct": 29.9 } ], "undecided_pct": 24.5 },
+    { "pollster": "山水民調", "sponsor": "unknown", "date": "2025-11-20~2025-11-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "王世堅", "party": "green", "pct": 33.0 }, { "name": "吳怡農", "party": "green", "pct": 11.3 }, { "name": "鄭麗君", "party": "green", "pct": 5.9 }, { "name": "沈伯洋", "party": "green", "pct": 8.6 }, { "name": "林右昌", "party": "green", "pct": 2.8 } ], "undecided_pct": null, "note": "民進黨台北市長初選型民調，僅列各潛在人選個別支持度，未見對比藍營候選人的完整配對數字。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-11-27~2025-12-04", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 55 }, { "name": "王世堅", "party": "green", "pct": 34 } ], "undecided_pct": 14 },
+    { "pollster": "震傳媒", "sponsor": "unknown", "date": "2026-01-25~2026-01-26", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 52.0 }, { "name": "王世堅", "party": "green", "pct": 32.7 } ], "undecided_pct": 15.3 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-01-23~2026-01-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 60.0 }, { "name": "王世堅", "party": "green", "pct": 27 } ], "undecided_pct": 13 },
+    { "pollster": "新台灣國策智庫", "sponsor": "unknown", "date": "2026-05-04~2026-05-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 52.9 }, { "name": "沈伯洋", "party": "green", "pct": 29.7 } ], "undecided_pct": 17.4 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-05-21~2026-05-26", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 58 }, { "name": "沈伯洋", "party": "green", "pct": 30 } ], "undecided_pct": 13 },
+    { "pollster": "山水民調", "sponsor": "unknown", "date": "2026-06-21~2026-06-22", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 55.2 }, { "name": "沈伯洋", "party": "green", "pct": 27.5 } ], "undecided_pct": 17.4 },
+    { "pollster": "TPOC台灣議題研究中心", "sponsor": "unknown", "date": "2026-08-05~2026-08-07", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔣萬安", "party": "blue", "pct": 48.4 }, { "name": "沈伯洋", "party": "green", "pct": 33.0 } ], "undecided_pct": 18.6 }
+  ],
+  "新北市": [
+    { "pollster": "年代民調", "sponsor": "unknown", "date": "2025-08-12~2025-08-16", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 37.7 }, { "name": "蘇巧慧", "party": "green", "pct": 29.2 }, { "name": "黃國昌", "party": "white", "pct": 31.1 } ], "undecided_pct": null },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2025-11-09~2025-11-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 47.1 }, { "name": "蘇巧慧", "party": "green", "pct": 37.1 } ], "undecided_pct": 15.8, "note": "同波民調同時測試多組對比（含/不含黃國昌），此為其中一組；另兩組見下方兩筆。" },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2025-11-09~2025-11-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 47.3 }, { "name": "蘇巧慧", "party": "green", "pct": 33.4 } ], "undecided_pct": 19.3 },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2025-11-09~2025-11-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 39.1 }, { "name": "蘇巧慧", "party": "green", "pct": 35.7 } ], "undecided_pct": null, "note": "來源數字為「9.1%+16.1%」，可能為三方對比（含黃國昌）拆分未表態，原始配對不完全清楚。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-01-06~2026-01-16", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 47 }, { "name": "蘇巧慧", "party": "green", "pct": 32 } ], "undecided_pct": 21 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-01-06~2026-01-16", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 39 }, { "name": "蘇巧慧", "party": "green", "pct": 33 } ], "undecided_pct": 28 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-01-06~2026-01-16", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 36 }, { "name": "蘇巧慧", "party": "green", "pct": 34 } ], "undecided_pct": 30 },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-01-19~2026-01-21", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 45.8 }, { "name": "蘇巧慧", "party": "green", "pct": 36.0 } ], "undecided_pct": 18.2 },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-01-19~2026-01-21", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 41.8 }, { "name": "蘇巧慧", "party": "green", "pct": 36.7 } ], "undecided_pct": 21.5 },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-01-19~2026-01-21", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 34.2 }, { "name": "蘇巧慧", "party": "green", "pct": 32.7 } ], "undecided_pct": null, "note": "來源數字為「16.7%+16.7%」，可能為含黃國昌三方對比拆分未表態，原始配對不完全清楚。" },
+    { "pollster": "東森民調", "sponsor": "unknown", "date": "2026-01-26~2026-01-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 41.6 }, { "name": "蘇巧慧", "party": "green", "pct": 33.5 } ], "undecided_pct": 24.9 },
+    { "pollster": "東森民調", "sponsor": "unknown", "date": "2026-01-26~2026-01-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 41.8 }, { "name": "蘇巧慧", "party": "green", "pct": 28.3 } ], "undecided_pct": 29.9 },
+    { "pollster": "東森民調", "sponsor": "unknown", "date": "2026-01-26~2026-01-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 32.3 }, { "name": "蘇巧慧", "party": "green", "pct": 30.5 } ], "undecided_pct": 26.0 },
+    { "pollster": "民進黨內參", "sponsor": "民進黨", "date": "2026-02-23~2026-02-24", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 30.2 }, { "name": "蘇巧慧", "party": "green", "pct": 38.1 }, { "name": "黃國昌", "party": "white", "pct": 13.1 } ], "undecided_pct": 18.6 },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-03-09~2026-03-11", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 32.1 }, { "name": "蘇巧慧", "party": "green", "pct": 35.7 }, { "name": "黃國昌", "party": "white", "pct": 9.8 } ], "undecided_pct": 22.5 },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-03-21~2026-03-22", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 43.3 }, { "name": "蘇巧慧", "party": "green", "pct": 41.8 } ], "undecided_pct": 11.0 },
+    { "pollster": "民進黨內參", "sponsor": "民進黨", "date": "2026-03-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 34 }, { "name": "蘇巧慧", "party": "green", "pct": 35 } ], "undecided_pct": null },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-04-08~2026-04-10", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 35.5 }, { "name": "蘇巧慧", "party": "green", "pct": 34.5 } ], "undecided_pct": 30.0 },
+    { "pollster": "民進黨內參", "sponsor": "民進黨", "date": "2026-04-21", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 37.6 }, { "name": "蘇巧慧", "party": "green", "pct": 41.8 } ], "undecided_pct": null },
+    { "pollster": "藍白整合初選", "sponsor": "國民黨/民眾黨", "date": "2026-04-23~2026-04-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [], "undecided_pct": null, "note": "藍白整合初選測試多組候選人配對，原始頁面未提供可靠的逐組數字，故未錄入個別百分比；僅記錄此波初選民調存在。" },
+    { "pollster": "山水民調", "sponsor": "unknown", "date": "2026-04-29~2026-05-01", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 39.6 }, { "name": "蘇巧慧", "party": "green", "pct": 34.8 } ], "undecided_pct": 25.6 },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-05-01~2026-05-04", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 42.5 }, { "name": "蘇巧慧", "party": "green", "pct": 41.7 } ], "undecided_pct": 9.6 },
+    { "pollster": "民進黨", "sponsor": "民進黨", "date": "2026-06-02~2026-06-03", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 29.0 }, { "name": "蘇巧慧", "party": "green", "pct": 31.5 } ], "undecided_pct": 39.5 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-06-02~2026-06-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 39.2 }, { "name": "蘇巧慧", "party": "green", "pct": 33.0 } ], "undecided_pct": 21.4 },
+    { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-07-06~2026-07-11", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 50.85 }, { "name": "蘇巧慧", "party": "green", "pct": 44.06 } ], "undecided_pct": 3.4 },
+    { "pollster": "新台灣國策智庫", "sponsor": "unknown", "date": "2026-07-12~2026-07-14", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 40.0 }, { "name": "蘇巧慧", "party": "green", "pct": 40.2 } ], "undecided_pct": 19.8 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-07-20~2026-07-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 43.7 }, { "name": "蘇巧慧", "party": "green", "pct": 36.8 } ], "undecided_pct": null }
+  ],
+  "桃園市": [
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-12-05~2025-12-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "張善政", "party": "blue", "pct": 59 }, { "name": "王義川", "party": "green", "pct": 20 } ], "undecided_pct": 21, "note": "同波TVBS民調另測試「張善政 vs 何志偉」「張善政 vs 黃世杰」，見下方兩筆；候選人與數字對應依WebSearch二次確認（張善政約59~61%穩定領先各綠營假想敵約39~42個百分點）。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-12-05~2025-12-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "張善政", "party": "blue", "pct": 59 }, { "name": "何志偉", "party": "green", "pct": 20 } ], "undecided_pct": 21 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-12-05~2025-12-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "張善政", "party": "blue", "pct": 61 }, { "name": "黃世杰", "party": "green", "pct": 19 } ], "undecided_pct": 21, "note": "黃世杰對比組的原始表格欄位標示不完全清楚，百分比依比例與WebSearch摘要交叉核對而定。" },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-03-02~2026-03-03", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "張善政", "party": "blue", "pct": 41.8 }, { "name": "王義川", "party": "green", "pct": 34.4 } ], "undecided_pct": 23.8 },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-03-02~2026-03-03", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "張善政", "party": "blue", "pct": 40.8 }, { "name": "何志偉", "party": "green", "pct": 35.7 } ], "undecided_pct": 23.5 }
+  ],
+  "台中市": [
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2025-11-25~2025-11-26", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 43.9 }, { "name": "何欣純", "party": "green", "pct": 25.0 } ], "undecided_pct": 31.1 },
+    { "pollster": "國民黨內參", "sponsor": "國民黨", "date": "unknown", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 39.9 }, { "name": "何欣純", "party": "green", "pct": 28.2 } ], "undecided_pct": 34.3, "note": "來源未列出確切調查日期。" },
+    { "pollster": "艾普羅", "sponsor": "unknown", "date": "2026-01-05~2026-01-06", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 39.4 }, { "name": "何欣純", "party": "green", "pct": 25.8 } ], "undecided_pct": 34.8 },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-01-08~2026-01-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 48 }, { "name": "何欣純", "party": "green", "pct": 35.7 } ], "undecided_pct": 16.3 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-01-19~2026-01-22", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 54 }, { "name": "何欣純", "party": "green", "pct": 26 } ], "undecided_pct": 20 },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-01-21~2026-01-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 52.0 }, { "name": "何欣純", "party": "green", "pct": 30.6 } ], "undecided_pct": 17.4 },
+    { "pollster": "艾普羅", "sponsor": "unknown", "date": "2026-03-02~2026-03-03", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 46.6 }, { "name": "何欣純", "party": "green", "pct": 22.9 } ], "undecided_pct": 24.6 },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-05-11~2026-05-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 40.6 }, { "name": "何欣純", "party": "green", "pct": 24.4 } ], "undecided_pct": 35.0 },
+    { "pollster": "艾普羅", "sponsor": "unknown", "date": "2026-08-03~2026-08-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 38.2 }, { "name": "何欣純", "party": "green", "pct": 24.1 } ], "undecided_pct": null }
+  ],
+  "台南市": [
+    { "pollster": "東森民調", "sponsor": "unknown", "date": "2025-09-05~2025-09-07", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 36.6 }, { "name": "陳亭妃", "party": "green", "pct": 43.2 }, { "name": "謝龍介", "party": "blue", "pct": 31.8 } ], "undecided_pct": 31.6, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介，非三方同場對比；未表態數字為近似值。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-09-08~2025-09-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 32 }, { "name": "陳亭妃", "party": "green", "pct": 41 }, { "name": "謝龍介", "party": "blue", "pct": 44 } ], "undecided_pct": 24, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介，非三方同場對比。" },
+    { "pollster": "趨勢民調", "sponsor": "unknown", "date": "2025-10-21~2025-10-22", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 46.6 }, { "name": "謝龍介", "party": "blue", "pct": 31.4 }, { "name": "陳亭妃", "party": "green", "pct": 52.1 } ], "undecided_pct": 22.0, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "鋒燦傳媒", "sponsor": "unknown", "date": "2025-10-27~2025-10-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 42.3 }, { "name": "謝龍介", "party": "blue", "pct": 37.2 }, { "name": "陳亭妃", "party": "green", "pct": 52.6 } ], "undecided_pct": 22.5, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-11-17~2025-11-20", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 38 }, { "name": "謝龍介", "party": "blue", "pct": 41 }, { "name": "陳亭妃", "party": "green", "pct": 47 } ], "undecided_pct": 19, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "鋒燦傳媒", "sponsor": "unknown", "date": "2025-12-08~2025-12-09", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 44.9 }, { "name": "謝龍介", "party": "blue", "pct": 30.9 }, { "name": "陳亭妃", "party": "green", "pct": 53.2 } ], "undecided_pct": 21.8, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "民進黨內參", "sponsor": "民進黨", "date": "2025-12-22~2025-12-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 51.5 }, { "name": "謝龍介", "party": "blue", "pct": 28.8 }, { "name": "陳亭妃", "party": "green", "pct": 54.1 } ], "undecided_pct": 17.6, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "關鍵調查", "sponsor": "unknown", "date": "2025-12-24~2025-12-29", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 52.7 }, { "name": "謝龍介", "party": "blue", "pct": 27.8 }, { "name": "陳亭妃", "party": "green", "pct": 50.1 } ], "undecided_pct": 27.5, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "鋒燦傳媒", "sponsor": "unknown", "date": "2025-12-29~2025-12-30", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 50.6 }, { "name": "謝龍介", "party": "blue", "pct": 31.4 }, { "name": "陳亭妃", "party": "green", "pct": 56.2 } ], "undecided_pct": 20.1, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-01-02~2026-01-07", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 44.8 }, { "name": "謝龍介", "party": "blue", "pct": 38.5 }, { "name": "陳亭妃", "party": "green", "pct": 48.1 } ], "undecided_pct": 14.2, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "雨晴指標", "sponsor": "unknown", "date": "2026-01-06~2026-01-07", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 33.7 }, { "name": "謝龍介", "party": "blue", "pct": 41.4 }, { "name": "陳亭妃", "party": "green", "pct": 45.8 } ], "undecided_pct": null, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介。" },
+    { "pollster": "民進黨初選", "sponsor": "民進黨", "date": "2026-01-15", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 58.1630 }, { "name": "謝龍介", "party": "blue", "pct": 21.6493 }, { "name": "陳亭妃", "party": "green", "pct": 60.8557 } ], "undecided_pct": 13.8631, "note": "民進黨台南市長初選正式民調結果，陳亭妃出線代表民進黨參選。" },
+    { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-02-23~2026-02-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳亭妃", "party": "green", "pct": 45.96 }, { "name": "謝龍介", "party": "blue", "pct": 40.57 } ], "undecided_pct": null, "note": "初選結束後正式對決民調第一筆。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-03-09~2026-03-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳亭妃", "party": "green", "pct": 53 }, { "name": "謝龍介", "party": "blue", "pct": 30 } ], "undecided_pct": 17 }
+  ],
+  "高雄市": [
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-01-14~2026-01-16", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 44.0 }, { "name": "賴瑞隆", "party": "green", "pct": 37.7 } ], "undecided_pct": 11.9 },
+    { "pollster": "山水民調", "sponsor": "unknown", "date": "2026-01-29~2026-01-30", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 32.3 }, { "name": "賴瑞隆", "party": "green", "pct": 43.9 } ], "undecided_pct": 33.3, "note": "百分比加總超過100，原始表格未表態欄位可能與其他欄位重疊，數字取自來源原樣，使用時請留意。" },
+    { "pollster": "雨晴指標", "sponsor": "unknown", "date": "2026-02-03~2026-02-09", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 26.2 }, { "name": "賴瑞隆", "party": "green", "pct": 45.5 } ], "undecided_pct": 28.3 },
+    { "pollster": "山水民調", "sponsor": "unknown", "date": "2026-04-27~2026-04-29", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 30.7 }, { "name": "賴瑞隆", "party": "green", "pct": 47 } ], "undecided_pct": 22.3 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-05-27~2026-06-02", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 39.7 }, { "name": "賴瑞隆", "party": "green", "pct": 40.3 } ], "undecided_pct": 19.9 },
+    { "pollster": "大地民意", "sponsor": "unknown", "date": "2026-06-08~2026-06-09", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 24.8 }, { "name": "賴瑞隆", "party": "green", "pct": 45.1 } ], "undecided_pct": 29.3 },
+    { "pollster": "新台灣國策智庫", "sponsor": "unknown", "date": "2026-06-09~2026-06-10", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 28.4 }, { "name": "賴瑞隆", "party": "green", "pct": 46.2 } ], "undecided_pct": 25.4 },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-06-16~2026-06-19", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 46.8 }, { "name": "賴瑞隆", "party": "green", "pct": 42.0 } ], "undecided_pct": 11.2 },
+    { "pollster": "新台灣民調研究中心", "sponsor": "unknown", "date": "2026-06-26~2026-06-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 32 }, { "name": "賴瑞隆", "party": "green", "pct": 41 } ], "undecided_pct": 20 },
+    { "pollster": "年代民調", "sponsor": "unknown", "date": "2026-07-16~2026-07-18", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 23.6 }, { "name": "賴瑞隆", "party": "green", "pct": 36.2 } ], "undecided_pct": 32.8 },
+    { "pollster": "山水民調", "sponsor": "unknown", "date": "2026-07-18~2026-07-20", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 31.6 }, { "name": "賴瑞隆", "party": "green", "pct": 39.6 } ], "undecided_pct": 28.8 },
+    { "pollster": "皮爾森數據", "sponsor": "unknown", "date": "2026-07-13~2026-07-19", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 46.67 }, { "name": "賴瑞隆", "party": "green", "pct": 46.01 } ], "undecided_pct": 5.03 },
+    { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-07-27~2026-08-01", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯志恩", "party": "blue", "pct": 46.14 }, { "name": "賴瑞隆", "party": "green", "pct": 47.78 } ], "undecided_pct": 4.24 }
+  ],
+  "基隆市": [
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-12-15~2025-12-22", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝國樑", "party": "blue", "pct": 48 }, { "name": "童子瑋", "party": "green", "pct": 33 } ], "undecided_pct": 19 },
+    { "pollster": "民進黨內參", "sponsor": "民進黨", "date": "2026-02-26~2026-02-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝國樑", "party": "blue", "pct": 39.3 }, { "name": "童子瑋", "party": "green", "pct": 33.1 } ], "undecided_pct": null },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-03-19~2026-03-26", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝國樑", "party": "blue", "pct": 45 }, { "name": "童子瑋", "party": "green", "pct": 30 } ], "undecided_pct": 25 },
+    { "pollster": "民進黨內參", "sponsor": "民進黨", "date": "2026-05 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝國樑", "party": "blue", "pct": 42.2 }, { "name": "童子瑋", "party": "green", "pct": 37.7 } ], "undecided_pct": 20.1 },
+    { "pollster": "民進黨內參", "sponsor": "民進黨", "date": "2026-07-24~2026-07-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝國樑", "party": "blue", "pct": 38.5 }, { "name": "童子瑋", "party": "green", "pct": 36.0 } ], "undecided_pct": 25.5 }
+  ],
+  "新竹市": [
+    { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-01-06~2026-01-11", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "高虹安", "party": "white", "pct": 41.98 }, { "name": "林志潔", "party": "green", "pct": 24.38 }, { "name": "王婉諭", "party": "white", "pct": 5.74 }, { "name": "高嘉瑜", "party": "green", "pct": 5.74 }, { "name": "何志勇", "party": "blue", "pct": 3.89 }, { "name": "施乃如", "party": "green", "pct": 3.18 }, { "name": "楊玲宜", "party": "green", "pct": 2.39 } ], "undecided_pct": 24.03, "note": "民進黨初選前多方假想敵調查，非最終定案候選人配對。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-01-29~2026-02-04", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "高虹安", "party": "white", "pct": 48 }, { "name": "林志潔", "party": "green", "pct": 25 } ], "undecided_pct": 20 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-01-29~2026-02-04", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "高虹安", "party": "white", "pct": 50 }, { "name": "林志潔", "party": "green", "pct": 28 } ], "undecided_pct": 22 },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-05-19~2026-05-20", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "高虹安", "party": "white", "pct": 54.5 }, { "name": "莊競程", "party": "green", "pct": 21.3 } ], "undecided_pct": 20.2, "note": "莊競程為民進黨正式提名新竹市長候選人，此後對比取代林志潔假想敵民調。" }
+  ],
+  "新竹縣": [
+    { "pollster": "艾普羅", "sponsor": "unknown", "date": "2025-11-20~2025-11-22", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 33.9 }, { "name": "鄭朝方", "party": "green", "pct": 36.8 } ], "undecided_pct": 19.5, "note": "國民黨初選期間對比民調，徐欣瑩為當時多位藍營角逐者之一。" },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2025-12-30~2026-01-02", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 37.2 }, { "name": "鄭朝方", "party": "green", "pct": 35.1 } ], "undecided_pct": 19, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "全國公信力", "sponsor": "unknown", "date": "2026-01-24~2026-01-26", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 39.3 }, { "name": "鄭朝方", "party": "green", "pct": 33.8 } ], "undecided_pct": 26.9, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "鋒燦傳媒", "sponsor": "unknown", "date": "2026-02-02~2026-02-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 43.8 }, { "name": "鄭朝方", "party": "green", "pct": 35.9 } ], "undecided_pct": 20.3, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-02-04~2026-02-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 32.3 }, { "name": "陳見賢", "party": "blue", "pct": 16.5 }, { "name": "鄭朝方", "party": "green", "pct": 27.3 } ], "undecided_pct": 24.0, "note": "國民黨初選期間多人對比民調，陳見賢為藍營初選對手；原始表格另有一欄數字（24.0%）配對不完全清楚，暫略。" },
+    { "pollster": "趨勢民調", "sponsor": "unknown", "date": "2026-02-07~2026-02-08", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 44.7 }, { "name": "鄭朝方", "party": "green", "pct": 30.7 } ], "undecided_pct": 24.6, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "鋒燦傳媒", "sponsor": "unknown", "date": "2026-02-23~2026-02-24", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 35.9 }, { "name": "鄭朝方", "party": "green", "pct": 42.7 } ], "undecided_pct": null, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-02-25~2026-02-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 43.1 }, { "name": "鄭朝方", "party": "green", "pct": 31.8 } ], "undecided_pct": null, "note": "國民黨初選期間對比民調；原始表格未表態欄位數值(43.8%)明顯有誤，故不採用。" },
+    { "pollster": "雨晴指標", "sponsor": "unknown", "date": "2026-03-02~2026-03-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 46.7 }, { "name": "鄭朝方", "party": "green", "pct": 27.1 } ], "undecided_pct": 32, "note": "國民黨初選期間對比民調；數字加總不完全一致，取自來源原樣。" },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-03-04~2026-03-06", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳見賢", "party": "blue", "pct": 37.6 }, { "name": "鄭朝方", "party": "green", "pct": 38.2 }, { "name": "林思銘", "party": "blue", "pct": 13.9 } ], "undecided_pct": null, "note": "國民黨初選期間對比民調，陳見賢/林思銘為藍營初選對手。" },
+    { "pollster": "全方位", "sponsor": "unknown", "date": "2026-03-12~2026-03-13", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 36.7 }, { "name": "鄭朝方", "party": "green", "pct": 27.1 }, { "name": "林思銘", "party": "blue", "pct": 22.6 } ], "undecided_pct": null, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "台灣研究學會", "sponsor": "unknown", "date": "2026-03-16~2026-03-17", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 45.9 }, { "name": "鄭朝方", "party": "green", "pct": 32.4 }, { "name": "林思銘", "party": "blue", "pct": 21.7 } ], "undecided_pct": null, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "鋒燦傳媒", "sponsor": "unknown", "date": "2026-03-18~2026-03-19", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 46.6 }, { "name": "鄭朝方", "party": "green", "pct": 30.9 } ], "undecided_pct": 22.3, "note": "國民黨初選期間對比民調。" },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-03-23~2026-03-25", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 44.7 }, { "name": "鄭朝方", "party": "green", "pct": 27.0 } ], "undecided_pct": 12.1, "note": "國民黨初選期間對比民調；未表態數字偏低疑不完整。" },
+    { "pollster": "國民黨初選", "sponsor": "國民黨", "date": "2026-03-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 50.634 }, { "name": "陳見賢", "party": "blue", "pct": 49.366 } ], "undecided_pct": null, "note": "國民黨新竹縣長初選正式民調結果（僅藍營內部兩人對比），徐欣瑩出線。" },
+    { "pollster": "年代民調", "sponsor": "unknown", "date": "2026-04-06~2026-04-07", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 36.6 }, { "name": "鄭朝方", "party": "green", "pct": 30.8 } ], "undecided_pct": 28.3, "note": "初選結束後正式對決民調。" },
+    { "pollster": "全國公信力", "sponsor": "unknown", "date": "2026-04-16~2026-04-18", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 38.7 }, { "name": "鄭朝方", "party": "green", "pct": 27.3 } ], "undecided_pct": 21.7 },
+    { "pollster": "年代民調", "sponsor": "unknown", "date": "2026-06-14~2026-06-16", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 32.3 }, { "name": "鄭朝方", "party": "green", "pct": 30.5 } ], "undecided_pct": 33.6 },
+    { "pollster": "民進黨", "sponsor": "民進黨", "date": "2026-07-27~2026-08-01", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 35.50 }, { "name": "鄭朝方", "party": "green", "pct": 44.88 } ], "undecided_pct": 12.87 }
+  ],
+  "苗栗縣": [
+    { "pollster": "街頭有派對(YouTube街頭民調)", "sponsor": null, "date": "2026 (確切日期未列，非正式直播節目)", "sample_size": null, "source_url": "https://tw.news.yahoo.com/2026%E7%B8%A3%E5%B8%82%E9%95%B7%E6%9C%80%E6%96%B0%E9%A0%90%E6%B8%AC%E5%87%BA%E7%88%90-%E8%A1%97%E9%A0%AD%E6%B0%91%E8%AA%BF-3%E7%B8%A3%E5%B8%82%E8%97%8D%E5%A4%A9%E8%AE%8A%E7%B6%A0%E5%9C%B0-032703050.html", "candidates": [ { "name": "鍾東錦", "party": "other", "pct": 58 }, { "name": "陳品安", "party": "green", "pct": 42 } ], "undecided_pct": null, "note": "唯一找到的苗栗縣數字：YouTube主持人蔡宇傑的非正式直播街頭民調（非科學抽樣），不應視為正式民調。Wikipedia民調彙整頁面確認無苗栗縣專屬表格，WebSearch亦未查得任何正式民調。鍾東錦現任縣長為無黨籍、獲國民黨支持。" }
+  ],
+  "彰化縣": [
+    { "pollster": "國民黨", "sponsor": "國民黨", "date": "2026-01 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝衣鳳", "party": "blue", "pct": 30.0 }, { "name": "陳素月", "party": "green", "pct": 37.4 } ], "undecided_pct": 32.6, "note": "國民黨初選期間對比民調，謝衣鳳為當時角逐者之一。" },
+    { "pollster": "國民黨", "sponsor": "國民黨", "date": "2026-01 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "柯呈枋", "party": "blue", "pct": 23.6 }, { "name": "陳素月", "party": "green", "pct": 39.7 } ], "undecided_pct": 36.7 },
+    { "pollster": "國民黨", "sponsor": "國民黨", "date": "2026-01 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝典林", "party": "blue", "pct": 39.2 }, { "name": "陳素月", "party": "green", "pct": 38.6 } ], "undecided_pct": 22.2 },
+    { "pollster": "國民黨", "sponsor": "國民黨", "date": "2026-01 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "洪榮章", "party": "blue", "pct": 41.1 }, { "name": "陳素月", "party": "green", "pct": 40.4 } ], "undecided_pct": 18.5 },
+    { "pollster": "趨勢民調", "sponsor": "unknown", "date": "2026-03-06~2026-03-08", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝衣鳳", "party": "blue", "pct": 22.1 }, { "name": "柯呈枋", "party": "blue", "pct": 15.2 }, { "name": "陳素月", "party": "green", "pct": 53 } ], "undecided_pct": 31.9, "note": "國民黨初選期間多人對比民調。" },
+    { "pollster": "趨勢民調", "sponsor": "unknown", "date": "2026-03-06~2026-03-08", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝典林", "party": "blue", "pct": 28.3 }, { "name": "陳素月", "party": "green", "pct": 39.6 } ], "undecided_pct": 23.8 },
+    { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-04-27~2026-05-02", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 14.4 }, { "name": "陳素月", "party": "green", "pct": 39.2 }, { "name": "蔡壁如", "party": "white", "pct": 20.67 } ], "undecided_pct": 39.63, "note": "魏平政為國民黨正式提名彰化縣長候選人；來源另有「19.17%/15.54%」等尾數欄位配對不完全清楚，暫略。" },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-05-20~2026-05-21", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 14.0 }, { "name": "陳素月", "party": "green", "pct": 30.5 }, { "name": "蔡壁如", "party": "white", "pct": 8.5 } ], "undecided_pct": 47.0, "note": "同波民調另有兩組數字（27.8/27.3/44.9 及 23.2/42.6/34.2/29.7）配對不完全清楚，暫略，僅取第一組。" },
+    { "pollster": "民進黨", "sponsor": "民進黨", "date": "2026-06 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 11 }, { "name": "陳素月", "party": "green", "pct": 28 }, { "name": "邱建富", "party": "other", "pct": 12 } ], "undecided_pct": 49 }
+  ],
+  "南投縣": [],
+  "雲林縣": [
+    { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-03-23~2026-03-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "張嘉郡", "party": "blue", "pct": 49.52 }, { "name": "劉建國", "party": "green", "pct": 38.91 } ], "undecided_pct": 11.57 }
+  ],
+  "嘉義市": [
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-04-24~2026-04-30", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "王美惠", "party": "green", "pct": 43 }, { "name": "張啓楷", "party": "white", "pct": 37 } ], "undecided_pct": 20 },
+    { "pollster": "關鍵調查", "sponsor": "unknown", "date": "2026-07-10~2026-07-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "王美惠", "party": "green", "pct": 41.5 }, { "name": "張啓楷", "party": "white", "pct": 38 } ], "undecided_pct": 20.5 }
+  ],
+  "嘉義縣": [
+    { "pollster": "民進黨初選", "sponsor": "民進黨", "date": "2026-01-13", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "蔡易餘", "party": "green", "pct": 64.8135 }, { "name": "王育敏", "party": "blue", "pct": 14.2338 } ], "undecided_pct": null, "note": "民進黨嘉義縣長初選正式民調結果，蔡易餘出線；王育敏為當時假想中的國民黨對手，國民黨實際上並未正式徵召/提名王育敏參選。" },
+    { "pollster": "民進黨初選", "sponsor": "民進黨", "date": "2026-01-13", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "黃榮利", "party": "green", "pct": 38.1949 }, { "name": "王育敏", "party": "blue", "pct": 16.3175 } ], "undecided_pct": null, "note": "同場初選中黃榮利（落敗者）對比王育敏之數字。" }
+  ],
+  "屏東縣": [
+    // 原本這裡有一筆「菱傳媒」民調（周春米37.28%／蘇清泉34.89%），經data_polls_2022_backtest.js
+    // 交叉比對，數字跟一筆2022-10-01的菱傳媒民調完全相同——確認是2022年舊資料被誤標成2026，
+    // 已移除。屏東縣目前查無可信2026民調，data_mayor2026_predict.js改用2014/2018/2022
+    // 三屆縣長選舉實績加權估計。
+  ],
+  "宜蘭縣": [
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-03-16~2026-03-18", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "吳宗憲", "party": "blue", "pct": 33.0 }, { "name": "林國漳", "party": "green", "pct": 35.8 } ], "undecided_pct": 23.5 },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-03-16~2026-03-18", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林國漳", "party": "green", "pct": 35.8 }, { "name": "陳琬惠", "party": "white", "pct": 26.7 } ], "undecided_pct": 25.9, "note": "含陳琬惠的三方測試子組，吳宗憲欄位原始數字缺失。" },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-03-16~2026-03-18", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "吳宗憲", "party": "blue", "pct": 26.6 }, { "name": "林國漳", "party": "green", "pct": 33.0 }, { "name": "陳琬惠", "party": "white", "pct": 7.9 } ], "undecided_pct": 25.0, "note": "三方對比子組。" },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-03-13~2026-03-19", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "吳宗憲", "party": "blue", "pct": 35.0 }, { "name": "林國漳", "party": "green", "pct": 38.0 } ], "undecided_pct": 27.0 },
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-03-13~2026-03-19", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林國漳", "party": "green", "pct": 33.0 }, { "name": "陳琬惠", "party": "white", "pct": 8.0 } ], "undecided_pct": 31.0, "note": "含陳琬惠的三方測試子組，吳宗憲欄位原始數字缺失/配對不清。" },
+    { "pollster": "藍白整合初選", "sponsor": "國民黨/民眾黨", "date": "2026-05 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "吳宗憲", "party": "blue", "pct": 27.6 }, { "name": "林國漳", "party": "green", "pct": 28.9 } ], "undecided_pct": 36.7 },
+    { "pollster": "藍白整合初選", "sponsor": "國民黨/民眾黨", "date": "2026-05 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳琬惠", "party": "white", "pct": 27.5 } ], "undecided_pct": 40.4, "note": "藍白整合初選子組，其餘候選人數字配對不清，僅保留陳琬惠欄位。陳琬惠此後未列入正式配對（推測退出或未獲徵召）。" }
+  ],
+  "花蓮縣": [
+    { "pollster": "國民黨內參", "sponsor": "國民黨", "date": "2026-01 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "游淑貞", "party": "blue", "pct": 51.9 }, { "name": "葉耀輝", "party": "blue", "pct": 11.8 } ], "undecided_pct": null, "note": "國民黨初選期間對比民調，葉耀輝為藍營初選對手。" },
+    { "pollster": "趨勢民調", "sponsor": "unknown", "date": "2026-06-06~2026-06-08", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "游淑貞", "party": "blue", "pct": 36.5 }, { "name": "葉耀輝", "party": "blue", "pct": 28.2 } ], "undecided_pct": 35.1, "note": "來源標示雙方皆為「國民」，可能為國民黨初選後續對比或藍營分裂參選情境，具體提名狀態未明。" },
+    { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-03-18~2026-03-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "游淑貞", "party": "blue", "pct": 28.7 }, { "name": "魏嘉賢", "party": "other", "pct": 20.2 }, { "name": "張峻", "party": "other", "pct": 19.8 } ], "undecided_pct": 31.3 },
+    { "pollster": "風傳媒", "sponsor": "unknown", "date": "2026-03 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "游淑貞", "party": "blue", "pct": 26.6 }, { "name": "魏嘉賢", "party": "other", "pct": 17.9 }, { "name": "張峻", "party": "other", "pct": 13.0 } ], "undecided_pct": 32.7 },
+    { "pollster": "求真", "sponsor": "unknown", "date": "2026-04-07~2026-04-10", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "游淑貞", "party": "blue", "pct": 32.5 }, { "name": "魏嘉賢", "party": "other", "pct": 28.6 }, { "name": "張峻", "party": "other", "pct": 21.8 } ], "undecided_pct": 9.4 },
+    { "pollster": "風傳媒", "sponsor": "unknown", "date": "2026-07-21~2026-07-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "游淑貞", "party": "blue", "pct": 30.1 }, { "name": "魏嘉賢", "party": "other", "pct": 22.1 }, { "name": "張峻", "party": "other", "pct": 12.5 } ], "undecided_pct": 29.2 }
+  ],
+  "台東縣": [
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-05-27~2026-05-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "吳秀華", "party": "blue", "pct": 44.2 }, { "name": "陳瑩", "party": "green", "pct": 15.0 }, { "name": "劉櫂豪", "party": "other", "pct": 13.4 } ], "undecided_pct": 27.4 },
+    { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-05-27~2026-05-28", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "吳秀華", "party": "blue", "pct": 51.4 }, { "name": "陳瑩", "party": "green", "pct": 22.4 } ], "undecided_pct": 26.3, "note": "同波民調的兩人對比子組（不含劉櫂豪）。" }
+  ],
+  "澎湖縣": [
+    { "pollster": "民意調查協會", "sponsor": "unknown", "date": "2025-11-24~2025-11-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳光復", "party": "green", "pct": 34.79 }, { "name": "陳雙全", "party": "blue", "pct": 16.24 }, { "name": "葉竹林", "party": "other", "pct": 19.79 } ], "undecided_pct": 22.04, "note": "國民黨初選前多人對比民調，陳雙全/鄭清發為藍營角逐者。" },
+    { "pollster": "民意調查協會", "sponsor": "unknown", "date": "2025-11-24~2025-11-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳光復", "party": "green", "pct": 38.01 }, { "name": "陳雙全", "party": "blue", "pct": 23.07 }, { "name": "葉竹林", "party": "other", "pct": 7.78 } ], "undecided_pct": 22.27 },
+    { "pollster": "民意調查協會", "sponsor": "unknown", "date": "2025-11-24~2025-11-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳光復", "party": "green", "pct": 35.31 }, { "name": "葉竹林", "party": "other", "pct": 25.62 } ], "undecided_pct": 25.94 },
+    { "pollster": "民意調查協會", "sponsor": "unknown", "date": "2025-11-24~2025-11-27", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳光復", "party": "green", "pct": 46.06 } ], "undecided_pct": 27.77, "note": "兩人對比子組，對手欄位數字缺失（推測為鄭清發或陳雙全）。" },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-07-14~2026-08-03", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳振中", "party": "blue", "pct": 30.3 }, { "name": "吳淑瑾", "party": "green", "pct": 21.0 }, { "name": "葉竹林", "party": "other", "pct": 17.8 }, { "name": "周倪安", "party": "white", "pct": 3.2 }, { "name": "徐志夫", "party": "other", "pct": 4.0 }, { "name": "陳盡川", "party": "other", "pct": 3.1 } ], "undecided_pct": 10.1, "note": "初選結束後正式多人參選格局民調，陳振中/吳淑瑾為藍綠正式提名人。" }
+  ],
+  "金門縣": [
+    { "pollster": "國民黨內參", "sponsor": "國民黨", "date": "2025-10-27~2025-10-31", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳玉珍", "party": "blue", "pct": 41 }, { "name": "楊鎮浯", "party": "blue", "pct": 14 }, { "name": "李文良", "party": "other", "pct": 9 } ], "undecided_pct": null, "note": "國民黨初選期間對比民調，楊鎮浯為藍營初選對手（前金門縣長）。" },
+    { "pollster": "世新大學", "sponsor": "unknown", "date": "2026-04-13~2026-04-17", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳玉珍", "party": "blue", "pct": 52.0 }, { "name": "李文良", "party": "other", "pct": 10.4 } ], "undecided_pct": null },
+    { "pollster": "世新大學", "sponsor": "unknown", "date": "2026-04-13~2026-04-17", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳玉珍", "party": "blue", "pct": 47.7 }, { "name": "楊鎮浯", "party": "blue", "pct": 21.2 } ], "undecided_pct": null, "note": "同波民調子組。" },
+    { "pollster": "世新大學", "sponsor": "unknown", "date": "2026-04-13~2026-04-17", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "陳玉珍", "party": "blue", "pct": 46.1 }, { "name": "楊鎮浯", "party": "blue", "pct": 18.9 }, { "name": "李文良", "party": "other", "pct": 6.2 } ], "undecided_pct": null, "note": "同波民調三方對比子組。" }
+  ],
+  "連江縣": [
+    { "pollster": "街頭有派對(YouTube街頭民調)", "sponsor": null, "date": "2026 (確切日期未列，非正式直播節目)", "sample_size": null, "source_url": "https://tw.news.yahoo.com/2026%E7%B8%A3%E5%B8%82%E9%95%B7%E6%9C%80%E6%96%B0%E9%A0%90%E6%B8%AC%E5%87%BA%E7%88%90-%E8%A1%97%E9%A0%AD%E6%B0%91%E8%AA%BF-3%E7%B8%A3%E5%B8%82%E8%97%8D%E5%A4%A9%E8%AE%8A%E7%B6%A0%E5%9C%B0-032703050.html", "candidates": [ { "name": "王忠銘", "party": "blue", "pct": 55 }, { "name": "曹爾元", "party": "blue", "pct": 45 } ], "undecided_pct": null, "note": "唯一找到的連江縣數字：YouTube主持人蔡宇傑的非正式直播街頭民調（非科學抽樣），不應視為正式民調。Wikipedia民調彙整頁面確認無連江縣專屬表格，WebSearch亦未查得任何正式民調。連江縣（馬祖）政治光譜以藍營/無黨籍為主，本次雙方皆為國民黨系人物（王忠銘為現任縣長）。" }
+  ]
+};
