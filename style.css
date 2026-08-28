@@ -409,6 +409,40 @@
     #lang-toggle .lang-opt + .lang-opt {
       border-left: 1px solid rgba(255, 255, 255, 0.1)
     }
+    #cb-toggle {
+      display: flex;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+      cursor: pointer;
+    }
+    #cb-toggle .lang-opt {
+      text-align: center;
+      padding: 1px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      color: rgba(255, 255, 255, 0.8);
+      background: transparent;
+      transition: all 0.2s;
+      user-select: none;
+      letter-spacing: 0.06em;
+      font-family: 'Orbitron', 'Noto Sans TC', sans-serif
+    }
+    #cb-toggle.active .lang-opt {
+      color: #fff;
+      background: rgba(230, 159, 0, 0.28);
+      text-shadow: 0 0 8px rgba(230, 159, 0, 0.4)
+    }
+    #cb-toggle:not(.active):hover .lang-opt {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08)
+    }
 
     .cl {
       color: #60a5fa !important;
@@ -567,6 +601,20 @@
     .seat-summary-open #seat-summary-arrow {
       transform: rotate(180deg);
     }
+    /* 政黨基本盤面板裡<details>折疊區塊的展開/收合三角形——summary本身設display:flex放黨徽圖示
+       時，瀏覽器原生的list-item三角形標記會消失(沒有display:list-item就沒有原生marker這件事)，
+       改成自己畫一個、用details原生的[open]屬性(不需要額外JS切換class)控制旋轉方向 */
+    .b5-fold-arrow {
+      display: inline-block;
+      font-size: 8px;
+      flex-shrink: 0;
+      margin-right: 4px;
+      color: rgba(255, 255, 255, 0.45);
+      transition: transform 0.15s ease;
+    }
+    details[open] > summary .b5-fold-arrow {
+      transform: rotate(90deg);
+    }
     #hemi-row {
       display: none;
       flex-direction: row;
@@ -588,6 +636,21 @@
     #hemi-row.predict26-hemi-row {
       flex-direction: column;
       width: 320px;
+    }
+    /* 政黨基本盤(5屆)模式：右上角這個收合面板改放全台總覽(逐分類票數+4張政黨Sankey)取代
+       立委席次半圓餅卡——內容比其他模式長很多(4黨*3段+其他+4張Sankey)，改直排單欄+限制
+       最大高度、超出用內部捲軸，不然面板會撐到超出畫面底部 */
+    #hemi-row.baselean-hemi-row {
+      flex-direction: column;
+      align-items: stretch;
+      width: 340px;
+      max-height: calc(100vh - 110px);
+      overflow-y: auto;
+      /* Sankey浮動tooltip(.b5-tip-box)內容隨滑鼠移到的節點動態改變大小，如果沒關掉scroll
+         anchoring，瀏覽器會在tooltip撐大版面時自動調整scrollTop想「保持畫面內容不動」，
+         結果變成滑到欄位最下面的節點(比如宋楚瑜)時被強制往上捲、看不到浮動框——這裡連同
+         test.html裡.b5-tip-box自己的overflow-anchor:none雙重防護 */
+      overflow-anchor: none;
     }
 
     /* ── 不分區總得票面板 ── */
@@ -1101,23 +1164,25 @@
     }
 
     .ft-tc {
-      stroke: rgba(0, 0, 0, .15);
-      stroke-width: .4
+      stroke: rgba(0, 0, 0, .35);
+      stroke-width: .6
     }
 
     .ft-tc:hover {
-      stroke: rgba(0, 0, 0, .55);
-      stroke-width: .8
+      stroke: #ffd900;
+      stroke-width: 1.6;
+      filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)) drop-shadow(0 0 4px rgba(255, 217, 0, .7))
     }
 
     .ft-vill {
-      stroke: rgba(255, 255, 255, .35);
-      stroke-width: .22
+      stroke: rgba(0, 0, 0, .35);
+      stroke-width: .4
     }
 
     .ft-vill:hover {
-      stroke: rgba(0, 0, 0, .5);
-      stroke-width: .6
+      stroke: #ffd900;
+      stroke-width: 1.2;
+      filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)) drop-shadow(0 0 4px rgba(255, 217, 0, .7))
     }
 
     .bg-fill {

@@ -46,46 +46,47 @@
 const WIKI_POLL_URL = "https://zh.wikipedia.org/zh-tw/2026%E5%B9%B4%E4%B8%AD%E8%8F%AF%E6%B0%91%E5%9C%8B%E7%9B%B4%E8%BD%84%E5%B8%82%E9%95%B7%E5%8F%8A%E7%B8%A3%E5%B8%82%E9%95%B7%E9%81%B8%E8%88%89%E6%B0%91%E6%84%8F%E8%AA%BF%E6%9F%A5";
 
 const POLL_HOUSE_LEAN = {
-  "TVBS": { "lean": "neutral", "note": "電子媒體民調中心（1996年成立，台灣電子媒體第一家）；曾遭民進黨籍議員候選人質疑高雄民調報導初稿含「由藍營委託」字樣後遭刪除，TVBS否認立場操作；未見一致證據支持特定政黨傾向，暫列中立/未知。" },
-  "美麗島電子報": { "lean": "green", "note": "2009年由民進黨美麗島系大老許信良創辦，現任董事長吳子嘉、副董事長郭正亮；長期被視為親綠陣營民調/評論媒體。" },
-  "山水民調": { "lean": "green", "note": "山水民意研究1997年成立，創辦人張郁仁曾任民進黨秘書處主任，早期首席顧問為前民進黨民調中心主任游盈隆；外界常貼綠色標籤，惟藍綠陣營皆曾委託其調查。" },
-  "匯流民調": { "lean": "green", "note": "CNEWS匯流新聞網之民調中心；多篇報導與輿論將其列為親綠營媒體。" },
-  "菱傳媒": { "lean": "blue", "note": "代表人施威全曾任馬英九政府陸委會主委辦公室主任、朱立倫新北市府經發局長；董事長徐中雄為前國民黨中常委/立委；2023年由台鋼集團收購，社長陳申青與國民黨籍前國安會秘書長金溥聰為舊識，被認定具馬系/藍營背景。" },
-  "ETtoday": { "lean": "blue", "note": "東森新媒體控股（東森集團）旗下網路媒體；與東森電視分家多年，一般被歸類為傳統偏藍媒體立場。" },
-  "風傳媒": { "lean": "neutral", "note": "2014年由前高盛台北總經理張果軍個人獨資創辦，自稱不代表任何政黨、監督執政者；歷來被不同陣營貼過親藍、親綠甚至「紅媒」標籤，立場定性具爭議，暫列中立。2017年併購台灣指標民調。" },
-  "趨勢民調": { "lean": "neutral", "note": "趨勢民意調查股份有限公司，2010年成立之商業民調公司；未查得明確政黨背景或立場資訊。" },
-  "台灣民意基金會": { "lean": "green", "note": "創會董事長游盈隆曾任陳水扁政府海基會副董事長等職，2019年宣布退出民進黨；基金會自我定位為超黨派智庫，但游盈隆本人常被評論者視為「綠營出身」。" },
-  "民進黨內參": { "lean": "green", "note": "民進黨內部委託之非公開內參民調，屬政黨自身民調，非獨立第三方發布。" },
-  "民進黨初選": { "lean": "green", "note": "民進黨初選作業用之黨內民調，屬政黨初選機制的一部分，非對外公開發布之獨立民調。" },
-  "民進黨": { "lean": "green", "note": "民進黨（中央黨部或地方黨部）直接委託/發布之民調，屬政黨自身民調。" },
-  "國民黨初選": { "lean": "blue", "note": "國民黨初選作業用之黨內民調，屬政黨初選機制的一部分，非對外公開發布之獨立民調。" },
-  "國民黨內參": { "lean": "blue", "note": "國民黨內部委託之非公開內參民調，屬政黨自身民調。" },
-  "藍白整合初選": { "lean": "blue", "note": "國民黨與民眾黨（藍白）協商整合提名機制所採用之聯合民調，屬兩黨協商用途，非獨立第三方公開民調。" },
-  "NewTalk": { "lean": "green", "note": "新頭殼newtalk，長期被視為具親綠色彩之網路新聞媒體。" },
-  "上報": { "lean": "green", "note": "UP Media上報，由資深媒體人王健壯創辦；路線普遍被認為傾向批判國民黨、立場偏綠自由派。" },
-  "世新大學": { "lean": "neutral", "note": "學術機構（世新大學）執行之民調，屬學界調查，未見政黨背景資料，列為中立。" },
-  "艾普羅": { "lean": "neutral", "note": "艾普羅民意調查公司，商業民調機構；未查得明確政黨背景資訊。" },
-  "鉅聞天下": { "lean": "neutral", "note": "未查得該機構明確政黨背景或母公司資訊，暫列中立/未知。" },
-  "全國公信力": { "lean": "neutral", "note": "全國公信力民意調查股份有限公司，商業民調機構；未查得明確政黨背景資訊。" },
-  "民意調查協會": { "lean": "neutral", "note": "（澎湖民調使用之）民意調查協會，性質近似專業公會／商業調查機構；未查得明確政黨背景資訊。" },
-  "新台灣國策智庫": { "lean": "green", "note": "新台灣國策智庫基金會，多由前民進黨政府官員組成之政策智庫，一般被視為親綠智庫。" },
-  "年代民調": { "lean": "neutral", "note": "年代電視／年代民調中心，商業電視台民調部門；未見一致證據支持特定政黨傾向，暫列中立/未知。" },
-  "鏡報": { "lean": "neutral", "note": "鏡週刊/鏡報系列媒體（裴偉創辦），商業媒體；未見明確政黨背景資訊。" },
-  "NOWNEWS": { "lean": "neutral", "note": "NOWnews今日新聞，商業網路媒體；未見明確政黨背景資訊。" },
-  "TPOC台灣議題研究中心": { "lean": "neutral", "note": "未查得該機構明確政黨背景或母體資訊，暫列中立/未知。" },
-  "震傳媒": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "循證民調": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "求真": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "鋒燦傳媒": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "全方位": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "台灣研究學會": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "皮爾森數據": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "大地民意": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "新台灣民調研究中心": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊；名稱與「新台灣國策智庫」相似但非同一機構，暫列中立/未知。" },
-  "關鍵調查": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "台視新聞網": { "lean": "neutral", "note": "台灣電視公司（台視）新聞部門，商業電視台；未見明確政黨背景資訊。" },
-  "精湛": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。" },
-  "街頭有派對(YouTube街頭民調)": { "lean": "unknown/informal", "note": "YouTube頻道主持人蔡宇傑主持之直播街頭民調，非隨機抽樣、非科學方法之非正式調查，僅供參考，不應視為正式民調。" }
+  "TVBS": { "lean": "neutral", "note": "電子媒體民調中心（1996年成立，台灣電子媒體第一家）；曾遭民進黨籍議員候選人質疑高雄民調報導初稿含「由藍營委託」字樣後遭刪除，TVBS否認立場操作；未見一致證據支持特定政黨傾向，暫列中立/未知。", "note_en": "Electronic media polling center (est. 1996, Taiwan's first electronic-media pollster). A DPP city-councilor candidate once alleged an early draft of a Kaohsiung poll report included the phrase \"commissioned by the Blue camp\" before it was removed; TVBS denies any bias. No consistent evidence of partisan lean found — provisionally listed neutral/unknown." },
+  "美麗島電子報": { "lean": "green", "note": "2009年由民進黨美麗島系大老許信良創辦，現任董事長吳子嘉、副董事長郭正亮；長期被視為親綠陣營民調/評論媒體。", "note_en": "Founded 2009 by DPP Formosa-faction elder Hsu Hsin-liang; current chairman Wu Tzu-chia, vice chairman Kuo Cheng-liang. Long regarded as a pro-Green-leaning polling/commentary outlet." },
+  "山水民調": { "lean": "green", "note": "山水民意研究1997年成立，創辦人張郁仁曾任民進黨秘書處主任，早期首席顧問為前民進黨民調中心主任游盈隆；外界常貼綠色標籤，惟藍綠陣營皆曾委託其調查。", "note_en": "Formosa Survey Research, founded 1997; founder Chang Yu-jen previously headed the DPP Secretariat, and its early chief advisor was former DPP polling-center director You Ying-lung. Often labeled Green by outside observers, though both Blue and Green camps have commissioned its surveys." },
+  "匯流民調": { "lean": "green", "note": "CNEWS匯流新聞網之民調中心；多篇報導與輿論將其列為親綠營媒體。", "note_en": "Polling center of CNEWS (匯流新聞網); widely characterized in reporting/commentary as a pro-Green-leaning outlet." },
+  "菱傳媒": { "lean": "blue", "note": "代表人施威全曾任馬英九政府陸委會主委辦公室主任、朱立倫新北市府經發局長；董事長徐中雄為前國民黨中常委/立委；2023年由台鋼集團收購，社長陳申青與國民黨籍前國安會秘書長金溥聰為舊識，被認定具馬系/藍營背景。", "note_en": "Representative Shih Wei-chuan previously headed the MAC chairman's office under the Ma Ying-jeou administration and served as New Taipei City's Economic Development director under Eric Chu; chairman Hsu Chung-hsiung is a former KMT Central Standing Committee member/legislator. Acquired by Sheng Yu Steel Group in 2023; president Chen Shen-ching is a longtime associate of former KMT-era National Security Council Secretary-General King Pu-tsung — regarded as having a Ma-faction/Blue-leaning background." },
+  "ETtoday": { "lean": "blue", "note": "東森新媒體控股（東森集團）旗下網路媒體；與東森電視分家多年，一般被歸類為傳統偏藍媒體立場。", "note_en": "Online media under EHS New Media Holdings (part of the ETTV/EBC Group); long separated from ETTV television but generally categorized as traditionally Blue-leaning in stance." },
+  "風傳媒": { "lean": "neutral", "note": "2014年由前高盛台北總經理張果軍個人獨資創辦，自稱不代表任何政黨、監督執政者；歷來被不同陣營貼過親藍、親綠甚至「紅媒」標籤，立場定性具爭議，暫列中立。2017年併購台灣指標民調。", "note_en": "Founded 2014 by former Goldman Sachs Taipei general manager Chang Kuo-chun as a sole proprietorship; describes itself as representing no party and monitoring the ruling government. Has been labeled pro-Blue, pro-Green, and even \"red media\" by different camps over the years — its lean is genuinely contested, provisionally listed neutral. Acquired Taiwan Indicators Survey Research in 2017." },
+  "趨勢民調": { "lean": "neutral", "note": "趨勢民意調查股份有限公司，2010年成立之商業民調公司；未查得明確政黨背景或立場資訊。", "note_en": "Trend Survey Co., Ltd., a commercial polling firm established 2010; no clear partisan background or affiliation found." },
+  "台灣民意基金會": { "lean": "green", "note": "創會董事長游盈隆曾任陳水扁政府海基會副董事長等職，2019年宣布退出民進黨；基金會自我定位為超黨派智庫，但游盈隆本人常被評論者視為「綠營出身」。", "note_en": "Founding chairman You Ying-lung previously served as SEF deputy chairman under the Chen Shui-bian administration and announced leaving the DPP in 2019. The foundation positions itself as a nonpartisan think tank, though You himself is often characterized by commentators as having a \"Green camp background.\"" },
+  "民進黨內參": { "lean": "green", "note": "民進黨內部委託之非公開內參民調，屬政黨自身民調，非獨立第三方發布。", "note_en": "Internal, non-public reference poll commissioned by the DPP — a party's own poll, not an independent third-party release." },
+  "民進黨初選": { "lean": "green", "note": "民進黨初選作業用之黨內民調，屬政黨初選機制的一部分，非對外公開發布之獨立民調。", "note_en": "Internal poll used in DPP primary proceedings — part of the party's primary mechanism, not an independently published poll." },
+  "民進黨": { "lean": "green", "note": "民進黨（中央黨部或地方黨部）直接委託/發布之民調，屬政黨自身民調。", "note_en": "Poll directly commissioned/released by the DPP (central or local party headquarters) — a party's own poll." },
+  "國民黨初選": { "lean": "blue", "note": "國民黨初選作業用之黨內民調，屬政黨初選機制的一部分，非對外公開發布之獨立民調。", "note_en": "Internal poll used in KMT primary proceedings — part of the party's primary mechanism, not an independently published poll." },
+  "國民黨內參": { "lean": "blue", "note": "國民黨內部委託之非公開內參民調，屬政黨自身民調。", "note_en": "Internal, non-public reference poll commissioned by the KMT — a party's own poll." },
+  "藍白整合初選": { "lean": "blue", "note": "國民黨與民眾黨（藍白）協商整合提名機制所採用之聯合民調，屬兩黨協商用途，非獨立第三方公開民調。", "note_en": "Joint poll used in the KMT–TPP (Blue–White) coordinated nomination negotiation mechanism — for inter-party negotiation purposes, not an independent public poll." },
+  "NewTalk": { "lean": "green", "note": "新頭殼newtalk，長期被視為具親綠色彩之網路新聞媒體。", "note_en": "Newtalk (新頭殼), long regarded as a pro-Green-leaning online news outlet." },
+  "上報": { "lean": "green", "note": "UP Media上報，由資深媒體人王健壯創辦；路線普遍被認為傾向批判國民黨、立場偏綠自由派。", "note_en": "UP Media, founded by veteran journalist Wang Chien-chuang; generally regarded as critical of the KMT and leaning Green/liberal." },
+  "世新大學": { "lean": "neutral", "note": "學術機構（世新大學）執行之民調，屬學界調查，未見政黨背景資料，列為中立。", "note_en": "Poll conducted by an academic institution (Shih Hsin University) — an academic survey; no partisan background found, listed neutral." },
+  "艾普羅": { "lean": "neutral", "note": "艾普羅民意調查公司，商業民調機構；未查得明確政黨背景資訊。", "note_en": "APRO Survey Co., a commercial polling firm; no clear partisan background found." },
+  "鉅聞天下": { "lean": "neutral", "note": "未查得該機構明確政黨背景或母公司資訊，暫列中立/未知。", "note_en": "No clear partisan background or parent-company information found for this outlet; provisionally listed neutral/unknown." },
+  "全國公信力": { "lean": "neutral", "note": "全國公信力民意調查股份有限公司，商業民調機構；未查得明確政黨背景資訊。", "note_en": "National Credibility Survey Co., Ltd., a commercial polling firm; no clear partisan background found." },
+  "民意調查協會": { "lean": "neutral", "note": "（澎湖民調使用之）民意調查協會，性質近似專業公會／商業調查機構；未查得明確政黨背景資訊。", "note_en": "Polling Association (used for Penghu polling), similar in nature to a professional guild/commercial survey body; no clear partisan background found." },
+  "新台灣國策智庫": { "lean": "green", "note": "新台灣國策智庫基金會，多由前民進黨政府官員組成之政策智庫，一般被視為親綠智庫。", "note_en": "New Taiwan National Policy Think Tank Foundation, largely staffed by former DPP-government officials; generally regarded as a pro-Green-leaning think tank." },
+  "年代民調": { "lean": "neutral", "note": "年代電視／年代民調中心，商業電視台民調部門；未見一致證據支持特定政黨傾向，暫列中立/未知。", "note_en": "ERA Television / ERA polling center, a commercial TV station's polling division; no consistent evidence of partisan lean found, provisionally listed neutral/unknown." },
+  "鏡報": { "lean": "neutral", "note": "鏡週刊/鏡報系列媒體（裴偉創辦），商業媒體；未見明確政黨背景資訊。", "note_en": "Mirror Media / Mirror Weekly outlets (founded by Pei Wei), commercial media; no clear partisan background found." },
+  "NOWNEWS": { "lean": "neutral", "note": "NOWnews今日新聞，商業網路媒體；未見明確政黨背景資訊。", "note_en": "NOWnews, a commercial online news outlet; no clear partisan background found." },
+  "TPOC台灣議題研究中心": { "lean": "neutral", "note": "未查得該機構明確政黨背景或母體資訊，暫列中立/未知。", "note_en": "No clear partisan background or parent-body information found for this institute; provisionally listed neutral/unknown." },
+  "震傳媒": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "循證民調": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "求真": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "鋒燦傳媒": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "全方位": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "台灣研究學會": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "皮爾森數據": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "大地民意": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "新台灣民調研究中心": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊；名稱與「新台灣國策智庫」相似但非同一機構，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; name is similar to but not the same institution as \"新台灣國策智庫\" (New Taiwan National Policy Think Tank), provisionally listed neutral/unknown." },
+  "關鍵調查": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "台視新聞網": { "lean": "neutral", "note": "台灣電視公司（台視）新聞部門，商業電視台；未見明確政黨背景資訊。", "note_en": "Taiwan Television (TTV) news division, a commercial television station; no clear partisan background found." },
+  "精湛": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." },
+  "街頭有派對(YouTube街頭民調)": { "lean": "unknown/informal", "note": "YouTube頻道主持人蔡宇傑主持之直播街頭民調，非隨機抽樣、非科學方法之非正式調查，僅供參考，不應視為正式民調。", "note_en": "An informal livestreamed street poll hosted by YouTube channel host Tsai Yu-chieh; not a random sample, not scientifically conducted — for reference only, should not be treated as a formal poll." },
+  "精確民調": { "lean": "neutral", "note": "未查得該機構明確政黨背景資訊，暫列中立/未知。", "note_en": "No clear partisan background found for this outlet; provisionally listed neutral/unknown." }
 };
 
 const POLLS_2026 = {
@@ -127,7 +128,8 @@ const POLLS_2026 = {
     { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-06-02~2026-06-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 39.2 }, { "name": "蘇巧慧", "party": "green", "pct": 33.0 } ], "undecided_pct": 21.4 },
     { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-07-06~2026-07-11", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 50.85 }, { "name": "蘇巧慧", "party": "green", "pct": 44.06 } ], "undecided_pct": 3.4 },
     { "pollster": "新台灣國策智庫", "sponsor": "unknown", "date": "2026-07-12~2026-07-14", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 40.0 }, { "name": "蘇巧慧", "party": "green", "pct": 40.2 } ], "undecided_pct": 19.8 },
-    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-07-20~2026-07-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 43.7 }, { "name": "蘇巧慧", "party": "green", "pct": 36.8 } ], "undecided_pct": null }
+    { "pollster": "TVBS", "sponsor": "unknown", "date": "2026-07-20~2026-07-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 43.7 }, { "name": "蘇巧慧", "party": "green", "pct": 36.8 } ], "undecided_pct": null },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-08-05~2026-08-13", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "李四川", "party": "blue", "pct": 39.3 }, { "name": "蘇巧慧", "party": "green", "pct": 37.3 } ], "undecided_pct": 23.4 }
   ],
   "桃園市": [
     { "pollster": "TVBS", "sponsor": "unknown", "date": "2025-12-05~2025-12-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "張善政", "party": "blue", "pct": 59 }, { "name": "王義川", "party": "green", "pct": 20 } ], "undecided_pct": 21, "note": "同波TVBS民調另測試「張善政 vs 何志偉」「張善政 vs 黃世杰」，見下方兩筆；候選人與數字對應依WebSearch二次確認（張善政約59~61%穩定領先各綠營假想敵約39~42個百分點）。" },
@@ -145,7 +147,8 @@ const POLLS_2026 = {
     { "pollster": "美麗島電子報", "sponsor": "unknown", "date": "2026-01-21~2026-01-23", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 52.0 }, { "name": "何欣純", "party": "green", "pct": 30.6 } ], "undecided_pct": 17.4 },
     { "pollster": "艾普羅", "sponsor": "unknown", "date": "2026-03-02~2026-03-03", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 46.6 }, { "name": "何欣純", "party": "green", "pct": 22.9 } ], "undecided_pct": 24.6 },
     { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-05-11~2026-05-12", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 40.6 }, { "name": "何欣純", "party": "green", "pct": 24.4 } ], "undecided_pct": 35.0 },
-    { "pollster": "艾普羅", "sponsor": "unknown", "date": "2026-08-03~2026-08-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 38.2 }, { "name": "何欣純", "party": "green", "pct": 24.1 } ], "undecided_pct": null }
+    { "pollster": "艾普羅", "sponsor": "unknown", "date": "2026-08-03~2026-08-05", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 38.2 }, { "name": "何欣純", "party": "green", "pct": 24.1 } ], "undecided_pct": null },
+    { "pollster": "新台灣國策智庫", "sponsor": "財團法人凱達格蘭基金會", "date": "2026-08-11~2026-08-13", "sample_size": 1159, "source_url": "https://braintrust.tw/wp-content/uploads/2026/08/2605098-4新台灣國策智庫調查簡報.pdf", "candidates": [ { "name": "江啟臣", "party": "blue", "pct": 42.8 }, { "name": "何欣純", "party": "green", "pct": 36.1 } ], "undecided_pct": 21.1, "note": "市話民調，戶籍台中市滿20歲民眾，樣本1,159份，95%信心水準抽樣誤差±2.88個百分點；題目為「兩位中希望誰做市長」的頭對頭支持度題（非「看好誰當選」題，該題結果不同：48.2% vs 23.6%，未採用）。" }
   ],
   "台南市": [
     { "pollster": "東森民調", "sponsor": "unknown", "date": "2025-09-05~2025-09-07", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "林俊憲", "party": "green", "pct": 36.6 }, { "name": "陳亭妃", "party": "green", "pct": 43.2 }, { "name": "謝龍介", "party": "blue", "pct": 31.8 } ], "undecided_pct": 31.6, "note": "民進黨初選期間對比民調：林俊憲/陳亭妃分別對比謝龍介，非三方同場對比；未表態數字為近似值。" },
@@ -210,7 +213,8 @@ const POLLS_2026 = {
     { "pollster": "年代民調", "sponsor": "unknown", "date": "2026-04-06~2026-04-07", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 36.6 }, { "name": "鄭朝方", "party": "green", "pct": 30.8 } ], "undecided_pct": 28.3, "note": "初選結束後正式對決民調。" },
     { "pollster": "全國公信力", "sponsor": "unknown", "date": "2026-04-16~2026-04-18", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 38.7 }, { "name": "鄭朝方", "party": "green", "pct": 27.3 } ], "undecided_pct": 21.7 },
     { "pollster": "年代民調", "sponsor": "unknown", "date": "2026-06-14~2026-06-16", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 32.3 }, { "name": "鄭朝方", "party": "green", "pct": 30.5 } ], "undecided_pct": 33.6 },
-    { "pollster": "民進黨", "sponsor": "民進黨", "date": "2026-07-27~2026-08-01", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 35.50 }, { "name": "鄭朝方", "party": "green", "pct": 44.88 } ], "undecided_pct": 12.87 }
+    { "pollster": "民進黨", "sponsor": "民進黨", "date": "2026-07-27~2026-08-01", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 35.50 }, { "name": "鄭朝方", "party": "green", "pct": 44.88 } ], "undecided_pct": 12.87 },
+    { "pollster": "精確民調", "sponsor": "unknown", "date": "2026-08-18~2026-08-20", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "徐欣瑩", "party": "blue", "pct": 41.4 }, { "name": "鄭朝方", "party": "green", "pct": 38.1 } ], "undecided_pct": 20.5 }
   ],
   "苗栗縣": [
     { "pollster": "街頭有派對(YouTube街頭民調)", "sponsor": null, "date": "2026 (確切日期未列，非正式直播節目)", "sample_size": null, "source_url": "https://tw.news.yahoo.com/2026%E7%B8%A3%E5%B8%82%E9%95%B7%E6%9C%80%E6%96%B0%E9%A0%90%E6%B8%AC%E5%87%BA%E7%88%90-%E8%A1%97%E9%A0%AD%E6%B0%91%E8%AA%BF-3%E7%B8%A3%E5%B8%82%E8%97%8D%E5%A4%A9%E8%AE%8A%E7%B6%A0%E5%9C%B0-032703050.html", "candidates": [ { "name": "鍾東錦", "party": "other", "pct": 58 }, { "name": "陳品安", "party": "green", "pct": 42 } ], "undecided_pct": null, "note": "唯一找到的苗栗縣數字：YouTube主持人蔡宇傑的非正式直播街頭民調（非科學抽樣），不應視為正式民調。Wikipedia民調彙整頁面確認無苗栗縣專屬表格，WebSearch亦未查得任何正式民調。鍾東錦現任縣長為無黨籍、獲國民黨支持。" }
@@ -224,7 +228,8 @@ const POLLS_2026 = {
     { "pollster": "趨勢民調", "sponsor": "unknown", "date": "2026-03-06~2026-03-08", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "謝典林", "party": "blue", "pct": 28.3 }, { "name": "陳素月", "party": "green", "pct": 39.6 } ], "undecided_pct": 23.8 },
     { "pollster": "鉅聞天下", "sponsor": "unknown", "date": "2026-04-27~2026-05-02", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 14.4 }, { "name": "陳素月", "party": "green", "pct": 39.2 }, { "name": "蔡壁如", "party": "white", "pct": 20.67 } ], "undecided_pct": 39.63, "note": "魏平政為國民黨正式提名彰化縣長候選人；來源另有「19.17%/15.54%」等尾數欄位配對不完全清楚，暫略。" },
     { "pollster": "匯流民調", "sponsor": "unknown", "date": "2026-05-20~2026-05-21", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 14.0 }, { "name": "陳素月", "party": "green", "pct": 30.5 }, { "name": "蔡壁如", "party": "white", "pct": 8.5 } ], "undecided_pct": 47.0, "note": "同波民調另有兩組數字（27.8/27.3/44.9 及 23.2/42.6/34.2/29.7）配對不完全清楚，暫略，僅取第一組。" },
-    { "pollster": "民進黨", "sponsor": "民進黨", "date": "2026-06 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 11 }, { "name": "陳素月", "party": "green", "pct": 28 }, { "name": "邱建富", "party": "other", "pct": 12 } ], "undecided_pct": 49 }
+    { "pollster": "民進黨", "sponsor": "民進黨", "date": "2026-06 (確切日期未列)", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 11 }, { "name": "陳素月", "party": "green", "pct": 28 }, { "name": "邱建富", "party": "other", "pct": 12 } ], "undecided_pct": 49 },
+    { "pollster": "ETtoday", "sponsor": "unknown", "date": "2026-08-10~2026-08-17", "sample_size": null, "source_url": WIKI_POLL_URL, "candidates": [ { "name": "魏平政", "party": "blue", "pct": 19.4 }, { "name": "陳素月", "party": "green", "pct": 36.4 }, { "name": "邱建富", "party": "other", "pct": 12.7 } ], "undecided_pct": 31.5 }
   ],
   "南投縣": [],
   "雲林縣": [
