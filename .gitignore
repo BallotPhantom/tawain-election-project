@@ -4,9 +4,14 @@
 # scripts) stays local and untracked.
 *
 
-# Allow the files council.html/test.html actually depend on
+# Allow the files council.html/test.html/live2026.html actually depend on
+!index.html
+!LICENSE
+!robots.txt
 !council.html
 !test.html
+!party_list.html
+!live2026.html
 !style.css
 !council_2014_tc_data.js
 !council_2014_vill_data.js
@@ -17,11 +22,15 @@
 !council_dist_gj.js
 !council_ind_m_gj.js
 !council_ind_p_gj.js
+!data_age_bracket.js
 !data_approval_2026.js
+!data_council_turnout_2022.js
 !data_edb.js
 !data_legis_elig.js
+!data_live2026.js
 !data_mayor2026_predict.js
 !data_mayor_hist_2014_2018.js
+!data_mayor_turnout_2022.js
 !data_mc2026_snapshot_log.js
 !data_polls_2026.js
 !data_roads.js

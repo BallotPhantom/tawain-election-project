@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>台灣選舉互動地圖 · Taiwan Election Dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at 40% 20%, #141b2b 0%, #0a0d16 60%, #05070c 100%);
+    color: #e7eaf0;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 760px; width: 100%; }
+  h1 {
+    font-family: 'Orbitron', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(22px, 4vw, 32px);
+    letter-spacing: 0.5px;
+    margin: 0 0 6px;
+    background: linear-gradient(90deg, #7dd3fc, #86efac);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .subtitle {
+    color: rgba(231,234,240,0.65);
+    font-size: 14px;
+    line-height: 1.7;
+    margin: 0 0 32px;
+    max-width: 620px;
+  }
+  .subtitle b { color: rgba(231,234,240,0.9); font-weight: 600; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  a.card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    padding: 18px 20px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  }
+  a.card:hover {
+    border-color: rgba(125,211,252,0.5);
+    background: rgba(255,255,255,0.07);
+    transform: translateY(-1px);
+  }
+  .card .tit {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card .desc {
+    font-size: 12.5px;
+    color: rgba(231,234,240,0.6);
+    line-height: 1.5;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  footer {
+    margin-top: 28px;
+    font-size: 11.5px;
+    color: rgba(231,234,240,0.4);
+    line-height: 1.6;
+  }
+  footer a { color: rgba(125,211,252,0.75); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>台灣選舉互動地圖<br>Taiwan Election Dashboard</h1>
+    <p class="subtitle">
+      涵蓋 2008–2024 立委、2014–2022 縣市長／議員選舉的互動式地理視覺化，內建自建的
+      2026 民調聚合預測模型（蒙地卡羅模擬、backtest 校準）與選舉夜即時開票追蹤系統。
+      <br>
+      <b>Interactive election maps covering 2008–2024 legislative and 2014–2022 local races</b>,
+      plus a self-built 2026 poll-aggregation forecast (Monte Carlo simulation, backtested
+      calibration) and a live election-night tracking mode.
+    </p>
+    <div class="grid">
+      <a class="card" href="test.html">
+        <div class="tit"><span class="dot" style="background:#60a5fa"></span>區域立委地圖</div>
+        <div class="desc">2008–2024 立委選區地圖 · 綜合PVI · 情境推演<br>District-level legislative map, composite PVI, scenario simulation</div>
+      </a>
+      <a class="card" href="party_list.html">
+        <div class="tit"><span class="dot" style="background:#a78bfa"></span>不分區立委</div>
+        <div class="desc">政黨票分析與席次模擬<br>Party-list vote analysis and seat simulation</div>
+      </a>
+      <a class="card" href="council.html">
+        <div class="tit"><span class="dot" style="background:#4ade80"></span>地方選舉 / 2026 縣市長預測</div>
+        <div class="desc">2014–2022 縣市長／議員選舉 + 2026 民調預測模型<br>2014–2022 mayoral/council results + 2026 predictive model</div>
+      </a>
+      <a class="card" href="live2026.html">
+        <div class="tit"><span class="dot" style="background:#f87171"></span>2026 即時開票</div>
+        <div class="desc">選舉夜多來源即時開票追蹤（示範模式）<br>Multi-source election-night live tracking (demo mode)</div>
+      </a>
+    </div>
+    <footer>
+      個人技術作品集專案，非商業用途，資料來源：中央選舉委員會、政府資料開放平台。<br>
+      Personal technical portfolio project, non-commercial. Data sources: Taiwan Central Election
+      Commission, data.gov.tw.
+    </footer>
+  </div>
+</body>
+</html>

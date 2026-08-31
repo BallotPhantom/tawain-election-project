@@ -4,7 +4,11 @@
 
 A Taiwan legislative election interactive map with historical year switching (2024/2020/2016), a PVI (黨派投票指數 / composite partisan-voting-index) mode, scenario simulation (動態模擬), and a party-list-only county/township/village map with its own "推演" simulated year (§13 below). It is a single ~35MB, ~361,000-line HTML file (`test.html`) with inline CSS and JavaScript, rendered with D3.js v7 for the map/SVG layer. There is no build system, no package manager, and no server requirement — geographic/election data is loaded from external JS modules (`data_map_v64.js`, `data_vd_v64.js`, `data_region_v64.js`) plus a large block of data embedded directly in `test.html` itself.
 
+**`party_list.html`** (added 2026-08-29) is a full byte-for-byte copy of `test.html`'s code/data, differentiated purely via `[data-section="district"|"partylist"]` CSS hide rules and a few relabeled/rewired toolbar buttons — see `CHANGELOG.md` v2.90 for the full split rationale. It is NOT documented separately in this file; everything below applies to both files identically except: `#btn-plcounty`/`#plcounty-year-select` (repurposed from the 歷年分析/`#btn-winner` slot, triggers `setPLCountyMode()` directly), `togglePRJump()` (party_list.html's third-force entry, locks `thirdSubMode='pr'`) vs. `toggleKeyMinorityJump()` (test.html's equivalent, locks `thirdSubMode='key'`) — both replace the shared `toggleThirdJump()` as each page's actual button handler, though `toggleThirdJump()` itself is left defined/unused in both files.
+
 For the data-layer variable reference, navigation-mode diagrams, and the full PVI/simulation formulas, see **`CLAUDE.md`** — this file focuses on the function-level reference, global state, and current DOM layout. Version history is in **`CHANGELOG.md`**.
+
+This file covers only `test.html`/`party_list.html`. The two other pages in this project — `council.html` (縣市長/縣市議員 historical + 2026 predict mode) and `live2026.html` (2026 election-night live tracking) — are documented in **`CLAUDE.md`**'s own sections for each, with version history in **`CHANGELOG_council.md`** (shared by both, entries marked `(live2026.html)` where relevant).
 
 ## Running / Development
 
