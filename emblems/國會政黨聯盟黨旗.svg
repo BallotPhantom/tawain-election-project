@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="flag" width="600" height="400" preserveAspectRatio="xMidYMid" version="1.0" viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+ <g fill-rule="evenodd">
+  <rect id="rect707" width="600" height="115" fill="#e70012"/>
+  <rect id="rect707-3" y="115" width="600" height="170" fill="#fff100"/>
+  <rect id="rect707-0" y="285" width="600" height="115" fill="#009a44" stroke-width="3.28127"/>
+ </g>
+ <g id="g1543" fill-rule="evenodd">
+  <circle id="path1323" cx="300" cy="200" r="80" fill="#e70012"/>
+  <circle id="path1323-3" cx="300" cy="200" r="53.75" fill="#fff100"/>
+  <circle id="path1323-3-7" cx="300" cy="200" r="26.25" fill="#009a44"/>
+ </g>
+</svg>
