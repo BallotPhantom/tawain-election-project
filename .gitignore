@@ -28,6 +28,7 @@
 !data_edb.js
 !data_legis_elig.js
 !data_live2026.js
+!data_map_v64.js
 !data_mayor2026_predict.js
 !data_mayor_hist_2014_2018.js
 !data_mayor_turnout_2022.js
@@ -35,12 +36,21 @@
 !data_polls_2026.js
 !data_roads.js
 !data_tc_pvi_class.js
+!data_vc_ed_council.js
+!data_vc_ed_legis.js
+!data_vd_v64.js
+!data_region_v64.js
 !mayor_2014_actual.js
 !mayor_2014_tc_data.js
 !mayor_2018_actual.js
 !mayor_2018_tc_data.js
 !mayor_turnout_stats.js
 !.gitignore
+
+# 政黨logo圖片(58個黨徽圖檔，之前忘記加進白名單，導致上線網站政黨icon全部404)
+!emblems/
+!emblems/**
+emblems/.DS_Store
 
 # Documentation for council.html and test.html
 !README_council.md
