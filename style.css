@@ -2,6 +2,26 @@
 
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Orbitron:wght@400;700;900&display=swap');
 
+    /* 導覽列(區域立委/不分區立委/地方選舉/2026預測/政黨基本盤)橫向捲動列——macOS預設的overlay捲軸太細、
+       平常又是隱藏的，使用者很難抓到來拖曳。這裡固定顯示一條夠粗的捲軸，配合JS的滾輪轉橫向捲動一起用 */
+    #nav-mode-row {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.3) transparent;
+    }
+    #nav-mode-row::-webkit-scrollbar {
+      height: 6px;
+    }
+    #nav-mode-row::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #nav-mode-row::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.3);
+      border-radius: 3px;
+    }
+    #nav-mode-row::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.5);
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
@@ -211,16 +231,96 @@
       50% { box-shadow: 0 0 14px rgba(224, 96, 16, 0.75); }
     }
 
-    /* 全選區村里等綠色操作按鈕：不被 .btn !important 覆蓋 */
-    button.btn[style*="1b9e4b"] {
-      background: #1b9e4b !important;
-      color: #fff !important;
-      border: none !important;
-      box-shadow: none !important;
+    /* 全選區村里等綠色操作按鈕：不被 .btn !important 覆蓋，改成毛玻璃霧綠光風格（跟縣市議員模式的
+       全選區村里按鈕同款：淡綠底+霧面模糊+綠色外光，不是實心滿版綠色）
+       兩種寫法都要比對到——hex(#1b9e4b)是舊寫法，rgba(27,158,75,...)是目前goVillAll/_addPLVillageLayer等
+       按鈕實際在用的寫法，只比對hex字串的話這條規則永遠不會命中，按鈕會掉回灰色的.btn預設值 */
+    button.btn[style*="1b9e4b"], button.btn[style*="27,158,75"] {
+      background: rgba(27,158,75,0.18) !important;
+      color: #4ade80 !important;
+      border: 1px solid rgba(27,158,75,0.45) !important;
+      box-shadow: 0 0 6px rgba(74,222,128,0.4) !important;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
     }
-    button.btn[style*="1b9e4b"]:hover {
-      background: #157a38 !important;
-      box-shadow: none !important;
+    button.btn[style*="1b9e4b"]:hover, button.btn[style*="27,158,75"]:hover {
+      background: rgba(27,158,75,0.3) !important;
+      border-color: rgba(27,158,75,0.65) !important;
+      box-shadow: 0 0 10px rgba(74,222,128,0.6) !important;
+    }
+
+    /* 2026縣市長預測按鈕：同樣的.btn !important覆蓋問題——原本inline color:#c4b5fd(淡紫)會被蓋成
+       .btn預設的灰白色，外層包住的紫色邊框容器變成裡面裝一顆灰按鈕，看起來像壞掉。這裡讓文字/發光
+       維持紫色；.active(setMayor2026PredictMode()選到時JS加的class)則是實心紫底。
+       用#toolbar #btn-mayor-2026（雙ID）而不是單純#btn-mayor-2026，是因為下面「按鈕+年份選單」共用
+       膠囊容器那條規則(#toolbar div[style*=...] .btn.active)靠著#toolbar加兩個屬性選擇器，優先權
+       比單一ID高，會把這裡的紫色蓋回一般的青色active樣式 */
+    #btn-mayor-2026, #toolbar #btn-mayor-2026 {
+      color: #c4b5fd !important;
+      background: transparent !important;
+      border: none !important;
+    }
+    #btn-mayor-2026:hover, #toolbar #btn-mayor-2026:hover {
+      color: #fff !important;
+      text-shadow: 0 0 6px rgba(196,181,253,0.7) !important;
+    }
+    #btn-mayor-2026.active, #toolbar #btn-mayor-2026.active {
+      background: #7c3aed !important;
+      color: #fff !important;
+      box-shadow: 0 0 8px rgba(124,58,237,0.5) !important;
+    }
+
+    /* 即時開票側欄「按鈕+子模式下拉選單」膠囊——下拉選單本身也是.btn class，同樣需要跳出!important */
+    #live2026-sub-select, #toolbar #live2026-sub-select {
+      color: #fca5a5 !important;
+      background: transparent !important;
+      border: none !important;
+    }
+
+    /* 側欄的「即時開票」按鈕，跟btn-mayor-2026同一個.btn !important覆蓋問題、同一套雙ID解法 */
+    #btn-live2026, #toolbar #btn-live2026 {
+      color: #fca5a5 !important;
+      background: transparent !important;
+      border: none !important;
+    }
+    #btn-live2026:hover, #toolbar #btn-live2026:hover {
+      color: #fff !important;
+      text-shadow: 0 0 6px rgba(252,165,165,0.7) !important;
+    }
+    #btn-live2026.active, #toolbar #btn-live2026.active {
+      background: #dc2626 !important;
+      color: #fff !important;
+      box-shadow: 0 0 8px rgba(220,38,38,0.5) !important;
+    }
+
+    /* 導覽列的「2026縣市長預測」跟其他4顆導覽按鈕不同——它是預測功能的捷徑，用側欄同款的紫色跟其他
+       灰階導覽按鈕做出區隔，一眼就能看出這是不一樣性質的功能 */
+    #nav-2026predict {
+      color: #c4b5fd !important;
+    }
+    #nav-2026predict:hover {
+      color: #fff !important;
+      background: rgba(124,58,237,0.15) !important;
+      text-shadow: 0 0 6px rgba(196,181,253,0.7) !important;
+    }
+    #nav-2026predict.active {
+      background: rgba(124,58,237,0.25) !important;
+      color: #fff !important;
+    }
+
+    /* 「2026即時開票」導覽按鈕：跟2026縣市長預測一樣是捷徑性質、需要跳出灰階導覽列，這裡用開票直播
+       慣用的紅色（而非預測用的紫色）做出「這是選舉夜當下的東西，不是預測」的區隔 */
+    #nav-live2026 {
+      color: #fca5a5 !important;
+    }
+    #nav-live2026:hover {
+      color: #fff !important;
+      background: rgba(220,38,38,0.15) !important;
+      text-shadow: 0 0 6px rgba(252,165,165,0.7) !important;
+    }
+    #nav-live2026.active {
+      background: rgba(220,38,38,0.25) !important;
+      color: #fff !important;
     }
 
     #flip-analysis-box .btn {
