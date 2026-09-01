@@ -343649,6 +343649,43 @@ const TC_2016 = {"南投縣第1選舉區__10008030":{"wp":"dpp","wn":"張國鑫"
 </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+  <script>
+  // topojson.merge()執行期溶解村里邊界時，就算來源VD資料本身完全乾淨，兩段各自獨立、方向
+  // 沒問題的arc在merge()縫合的接點上仍可能形成銳角折返（跟靜態資料裡的離群點是兩回事，
+  // 是merge()這個動作本身、把多段arc串接成一條新ring時才會浮現的產物，逐一測試單一arc測不出
+  // 來）。做法跟data_map_v64.js等靜態檔案那次修法完全一樣（連續兩段線夾角餘弦值<-0.80視為
+  // 離群點、反覆移除到測不到為止），只是這裡要在瀏覽器執行期、每次topojson.merge()呼叫後
+  // 立刻套用一次，因為選區/鄉鎮的組合是動態的，沒辦法像靜態資料一樣預先修好存檔。
+  function _cleanMergedGeom(geom, thresh) {
+    thresh = (thresh === undefined) ? -0.80 : thresh;
+    function cleanRing(ring) {
+      let guard = 0;
+      while (guard++ < 40) {
+        const n = ring.length;
+        let idx = -1;
+        for (let i = 1; i < n - 1; i++) {
+          const p0 = ring[i-1], p1 = ring[i], p2 = ring[i+1];
+          const v1x = p1[0]-p0[0], v1y = p1[1]-p0[1];
+          const v2x = p2[0]-p1[0], v2y = p2[1]-p1[1];
+          const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+          if (l1 === 0 || l2 === 0) continue;
+          const cos = (v1x*v2x + v1y*v2y) / (l1*l2);
+          if (cos < thresh) { idx = i; break; }
+        }
+        if (idx < 0) break;
+        ring = ring.slice(0, idx).concat(ring.slice(idx+1));
+      }
+      return ring;
+    }
+    if (!geom) return geom;
+    if (geom.type === 'Polygon') {
+      geom.coordinates = geom.coordinates.map(cleanRing);
+    } else if (geom.type === 'MultiPolygon') {
+      geom.coordinates = geom.coordinates.map(poly => poly.map(cleanRing));
+    }
+    return geom;
+  }
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/pinyin-pro/dist/index.min.js"></script>
   <link rel="stylesheet" href="style.css">
   <style>[data-section="partylist"] { display: none !important; } #third-sub-toolbar { display: none !important; }</style>
@@ -347577,7 +347614,7 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
       if (typeof VD === 'undefined' || !VD.objects || !VD.objects.villages) return null;
       const geoms = VD.objects.villages.geometries.filter(g => g.properties && g.properties.vc && g.properties.vc.substring(0, 8) === tc);
       if (!geoms.length) return null;
-      const feat = { type: 'Feature', properties: { tc }, geometry: topojson.merge(VD, geoms) };
+      const feat = { type: 'Feature', properties: { tc }, geometry: _cleanMergedGeom(topojson.merge(VD, geoms)) };
       _mergedTcGeomCache[tc] = feat;
       return feat;
     }
@@ -349340,7 +349377,7 @@ const PRES_TURNOUT_NATIONAL = {"2008": {"elig": 17321622, "turnout": 13221609, "
         return ed && edToCounty(ed) === county;
       });
       if (!geoms.length) { _baseLeanCountyFeatCache[county] = null; return null; }
-      const merged = topojson.merge(VD, geoms);
+      const merged = _cleanMergedGeom(topojson.merge(VD, geoms));
       const feat = { type: 'Feature', properties: { county }, geometry: merged };
       _baseLeanCountyFeatCache[county] = feat;
       return feat;
@@ -349766,7 +349803,7 @@ const PRES_TURNOUT_NATIONAL = {"2008": {"elig": 17321622, "turnout": 13221609, "
         return vc && vc.slice(0, 8) === tc;
       });
       if (!geoms.length) { _baseLeanTownFeatCache[tc] = null; return null; }
-      const merged = topojson.merge(VD, geoms);
+      const merged = _cleanMergedGeom(topojson.merge(VD, geoms));
       const feat = { type: 'Feature', properties: { tc }, geometry: merged };
       _baseLeanTownFeatCache[tc] = feat;
       return feat;
