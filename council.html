@@ -346120,6 +346120,17 @@ function invalidClass(pct) { return pct <= 2 ? 'green' : (pct <= 5 ? 'yellow' : 
       // 一定要強制重畫目前畫面上這一層才會反映新配色——跟year切換、campFilter切換同一套做法。
       if (typeof redrawCurrentLevel === 'function') redrawCurrentLevel();
     }
+    // 選舉人數校正按鈕的顯示/隱藏——這顆按鈕控制的baseLean5PartySegments()在縣市議員/縣市長
+    // 歷屆模式(政黨基本盤天花板比對)都有意義，但2026預測模式是另一套民調model，跟這個校正
+    // 無關，顯示出來會讓人誤以為兩者有關聯，故只在這個模式隱藏。setCouncilElectionMode()/
+    // setMayorMode()呼叫這裡把它顯示回來，處理使用者從預測模式切回歷屆模式的情況。
+    function _updateEligToggleVisibility() {
+      const el = document.getElementById('elig-correct-toggle');
+      if (!el) return;
+      const hide = (typeof is2026Predict !== 'undefined' && is2026Predict) ||
+                   (typeof isLiveTrack26 !== 'undefined' && isLiveTrack26);
+      el.style.display = hide ? 'none' : '';
+    }
     // 選舉人數校正開關——只影響baseLean5PartySegments這一個dispatcher內部選哪條計算路徑
     // (見347018行後那段)，不影響地圖顏色/其他任何功能，所以不用像色盲模式那樣強制redrawCurrentLevel()
     // 重畫整層SVG，只要讓目前已經開著的政黨基本盤面板重新產生HTML就夠——面板本身是hover/click
@@ -374627,6 +374638,7 @@ function setCouncilElectionMode(yr) {
 
   const mt = document.getElementById('map-title'); if (mt) { mt.textContent = yr + ' 縣市議員地圖'; mt.style.fontSize = '14px'; }
   document.title = yr + ' 縣市議員地圖';
+  if (typeof _updateEligToggleVisibility === 'function') _updateEligToggleVisibility();
 }
 
 function setMayorMode(yr) {
@@ -374703,6 +374715,7 @@ function setMayorMode(yr) {
 
   const mt = document.getElementById('map-title'); if (mt) mt.textContent = yr + ' 縣市長地圖';
   document.title = yr + ' 縣市長地圖';
+  if (typeof _updateEligToggleVisibility === 'function') _updateEligToggleVisibility();
 }
 
 // 2026 縣市長預測：沿用setMayorMode()整套市長模式渲染管線，只把COUNCIL_MAYOR_2022
@@ -374753,6 +374766,7 @@ function setMayor2026PredictMode() {
 
   const mt = document.getElementById('map-title'); if (mt) { mt.textContent = T('2026 縣市長預測','2026 Mayor Prediction'); mt.style.fontSize = '14px'; }
   document.title = T('2026 縣市長預測','2026 Mayor Prediction');
+  if (typeof _updateEligToggleVisibility === 'function') _updateEligToggleVisibility();
 
   const ic = document.getElementById('ic');
   if (ic) {

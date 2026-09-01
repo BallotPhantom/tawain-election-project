@@ -346145,6 +346145,17 @@ function invalidClass(pct) { return pct <= 2 ? 'green' : (pct <= 5 ? 'yellow' : 
         el.style.color = _base5EligCorrected ? '#e0fffb' : 'rgba(255,255,255,0.7)';
       }
     }
+    // 選舉人數校正按鈕只在有意義的「歷史資料」模式(縣市長選舉/縣市議員選舉)顯示，開票跟預測
+    // 隱藏——即時開票的隱藏另有hardcode在setLiveTrack2026Mode()裡(那邊isLiveTrack26旗標設定
+    // 時機比較晚，這個helper在setMayor2026PredictMode()結尾呼叫時isLiveTrack26還沒被設成true，
+    // 兩處不衝突、互補)。
+    function _updateEligToggleVisibility() {
+      const el = document.getElementById('elig-correct-toggle');
+      if (!el) return;
+      const hide = (typeof is2026Predict !== 'undefined' && is2026Predict) ||
+                   (typeof isLiveTrack26 !== 'undefined' && isLiveTrack26);
+      el.style.display = hide ? 'none' : '';
+    }
     // 頁面載入當下就套用從localStorage還原的colorblindMode到按鈕外觀——setColorblindMode()裡
     // 那段class切換只在「使用者點擊」時跑，剛從localStorage讀回true時不會自動觸發，按鈕會跟
     // 實際狀態不同步（地圖顏色是對的，但按鈕看起來像沒開）。這裡補一次初始同步；地圖本身在
@@ -375026,6 +375037,7 @@ function setCouncilElectionMode(yr) {
 
   const mt = document.getElementById('map-title'); if (mt) { mt.textContent = yr + ' 縣市議員地圖'; mt.style.fontSize = '14px'; }
   document.title = yr + ' 縣市議員地圖';
+  if (typeof _updateEligToggleVisibility === 'function') _updateEligToggleVisibility();
 }
 
 function setMayorMode(yr) {
@@ -375107,6 +375119,7 @@ function setMayorMode(yr) {
 
   const mt = document.getElementById('map-title'); if (mt) mt.textContent = yr + ' 縣市長地圖';
   document.title = yr + ' 縣市長地圖';
+  if (typeof _updateEligToggleVisibility === 'function') _updateEligToggleVisibility();
 }
 
 // 2026 縣市長預測：沿用setMayorMode()整套市長模式渲染管線，只把COUNCIL_MAYOR_2022
@@ -375158,6 +375171,7 @@ function setMayor2026PredictMode() {
 
   const mt = document.getElementById('map-title'); if (mt) { mt.textContent = T('2026 縣市長預測','2026 Mayor Prediction'); mt.style.fontSize = '14px'; }
   document.title = T('2026 縣市長預測','2026 Mayor Prediction');
+  if (typeof _updateEligToggleVisibility === 'function') _updateEligToggleVisibility();
 
   const ic = document.getElementById('ic');
   if (ic) {

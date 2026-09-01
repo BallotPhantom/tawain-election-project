@@ -566,3 +566,12 @@ On the UI side, indigenous districts use a structurally different nav path (`cou
 **即時開票模式（live2026.html）語言切換重繪，這個檔案本身受益最大**：即時開票整頁原本語言切換完全沒反應——標題被legislative模式的mode==='winner'判斷誤判蓋成中文、全台總覽的介紹文字（還沒hover任何縣市時）也沒有對應的重繪呼叫。修法：標題獨立判斷`isLiveTrack26`優先於legislative的mode判斷；全台總覽介紹文字抽成獨立函式`_liveTrack26NationalIntroHtml()`，`setLiveTrack2026Mode()`初次進入模式時呼叫一次，`applyLang()`語言切換時（`level==='ed' && !curED`）也能重新呼叫同一份。另外發現並修正一個純UI排版bug：左側「🔴即時開票」按鈕英文版文字（"Live Election Night"）比中文版長很多，把旁邊「Mayor/Councilor」下拉選單擠到視覺重疊——縮短英文文字並加上`text-overflow:ellipsis`保險。
 
 **縣市議員/縣市長選舉的鄉鎮市區/縣市名稱翻譯**：受益於CHANGELOG.md v2.99記錄的`townshipTranslationMap`全站根因修復（pinyin-pro自動備援）——這兩個檔案本來就有載入pinyin-pro（候選人姓名翻譯在用），這次`translateTownship()`補上備援邏輯後，2026縣市長預測模式的鄉鎮市區面板、即時開票模式的縣市/鄉鎮名稱，全部不用額外改動就自動修好。
+
+## 2026-09-01 (council.html + live2026.html) — 「選舉人數校正」按鈕在公開版看不到：真正原因是CSS overflow，不是缺開關邏輯
+
+使用者回報公開版看不到「選舉人數校正」按鈕。調查發現兩個各自獨立、都要修的問題，單純重新部署解決不了：
+
+1. **`#elig-correct-toggle`原本完全沒有依模式顯示/隱藏的邏輯**——一律顯示，包括2026預測模式（不該顯示，因為選舉人數校正只對「歷史資料」概念有意義）。新增`_updateEligToggleVisibility()`helper（council.html/live2026.html各自一份，因為兩個檔案是各自獨立的完整拷貝，不是共用same-name函式跨檔案共用），依`is2026Predict`/`isLiveTrack26`兩個旗標決定顯示與否；在`setCouncilElectionMode()`、`setMayorMode()`、`setMayor2026PredictMode()`結尾各加一次呼叫。live2026.html的`setLiveTrack2026Mode()`本來就有一行hardcode隱藏該按鈕（旗標設定時機比helper呼叫時機晚，兩處不衝突、互補，保留不動）。
+2. **`#top-right-controls`（語言切換/色盲模式/選舉人數校正等按鈕所在的固定列）完全沒有`flex-wrap`/`max-width`**——桌機夠寬看不出來，但這排按鈕在某些子模式下（例如第三勢力PVI模式的`third-sub-toolbar`）會疊加更多按鈕，寬度可能超過視窗；因為是`position:fixed; right:12px`且未設寬度，超出的部分會被推到螢幕左側外，使用者完全看不到也點不到。這才是使用者「看不到」按鈕的更可能根因（純CSS排版問題，跟按鈕本身的顯示邏輯無關，也解釋了為什麼即使邏輯對了、窄螢幕使用者可能還是看不到別的按鈕）。修法：`style.css`既有的`@media (max-width:768px)`區塊內加一條`#top-right-controls { flex-wrap:wrap; justify-content:flex-end; max-width:calc(100vw - 24px); }`，讓按鈕列在窄螢幕自動折成多行、維持右對齊，不會被推出視窗外。
+
+兩個修正都用真實UI點擊（不是直接呼叫函式）在council.html/live2026.html的縣市議員選舉／縣市長選舉／2026預測／即時開票四種狀態間來回切換驗證，`elig-correct-toggle`的`style.display`與`is2026Predict`/`isLiveTrack26`旗標在每個狀態都正確對應，過程中主控台無JS錯誤。

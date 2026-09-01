@@ -2740,4 +2740,14 @@
     width: min(288px, 82vw) !important;
     max-width: min(288px, 82vw) !important;
   }
+  /* #top-right-controls本身沒有flex-wrap，桌機夠寬看不出來，但視窗一窄、裡面的按鈕(尤其
+     third-sub-toolbar/council-ticker-toolbar這種子模式才出現的按鈕組)疊起來很容易超過838px，
+     加上它是position:fixed+right:12px、沒有設寬度，超出的部分會被推出螢幕左側，使用者完全
+     看不到也點不到——這正是選舉人數校正按鈕在窄螢幕「消失」的實際成因，不是單純資料/邏輯問題。
+     用flex-wrap讓它折成多行，並限制max-width不超過視窗，維持右對齊。 */
+  #top-right-controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: calc(100vw - 24px);
+  }
 }
