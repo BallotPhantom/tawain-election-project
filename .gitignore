@@ -1,7 +1,10 @@
-# Ignore everything by default — this repo tracks council.html + test.html and
-# the data/style files they actually load via <script src>/<link>. Everything
-# else in this working directory (raw votedata/, backups, python build
-# scripts) stays local and untracked.
+# Ignore everything by default — this repo tracks council.html + test.html,
+# the data/style files they actually load via <script src>/<link>, and (as of
+# 2026-09-01) the documented Python build/analysis tooling behind the data
+# pipeline (regen3.py etc., see the allowlist section below), so the repo's
+# language stats actually reflect that work instead of showing ~100% HTML.
+# Everything else (raw votedata/, one-off backup/scratch files, undocumented
+# parsing/repair scripts) stays local and untracked.
 *
 
 # Allow the files council.html/test.html/live2026.html actually depend on
@@ -57,3 +60,24 @@ emblems/.DS_Store
 !CHANGELOG_council.md
 !README.md
 !CHANGELOG.md
+
+# Python build/analysis tooling — the data pipeline behind the site (poll
+# aggregation model, CEC raw-data parsers, live-tracking scraper). Not loaded
+# by the site itself, but documented in CLAUDE.md as real, current parts of
+# the project, unlike the many undocumented one-off/scratch scripts sitting
+# alongside them in this directory (deliberately left untracked).
+!regen3.py
+!loadjs.py
+!build_mayor_tc.py
+!build_mayor_turnout.py
+!build_council_turnout.py
+!build_age_bracket.py
+!build_legis_elig.py
+!build_pres_turnout.py
+!rebuild_ed_gj_2016.py
+!poll_live2026.py
+!us_gov_backtest.py
+!pollster_method.json
+!county_age_demo.json
+!full_roster.json
+!base_model_camp_pct.json
