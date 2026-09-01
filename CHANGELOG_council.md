@@ -575,3 +575,7 @@ On the UI side, indigenous districts use a structurally different nav path (`cou
 2. **`#top-right-controls`（語言切換/色盲模式/選舉人數校正等按鈕所在的固定列）完全沒有`flex-wrap`/`max-width`**——桌機夠寬看不出來，但這排按鈕在某些子模式下（例如第三勢力PVI模式的`third-sub-toolbar`）會疊加更多按鈕，寬度可能超過視窗；因為是`position:fixed; right:12px`且未設寬度，超出的部分會被推到螢幕左側外，使用者完全看不到也點不到。這才是使用者「看不到」按鈕的更可能根因（純CSS排版問題，跟按鈕本身的顯示邏輯無關，也解釋了為什麼即使邏輯對了、窄螢幕使用者可能還是看不到別的按鈕）。修法：`style.css`既有的`@media (max-width:768px)`區塊內加一條`#top-right-controls { flex-wrap:wrap; justify-content:flex-end; max-width:calc(100vw - 24px); }`，讓按鈕列在窄螢幕自動折成多行、維持右對齊，不會被推出視窗外。
 
 兩個修正都用真實UI點擊（不是直接呼叫函式）在council.html/live2026.html的縣市議員選舉／縣市長選舉／2026預測／即時開票四種狀態間來回切換驗證，`elig-correct-toggle`的`style.display`與`is2026Predict`/`isLiveTrack26`旗標在每個狀態都正確對應，過程中主控台無JS錯誤。
+
+## 2026-09-01（council.html + live2026.html）— 地圖邊界細線「洞洞」，council.html獨有的council_dist_gj.js也中招
+
+跟test.html/party_list.html同一輪修復（詳見CHANGELOG.md v3.00條目），council.html/live2026.html額外多受影響的部分：縣市議員選區地圖專用的`council_dist_gj.js`（160個選區）跟原住民選區`council_ind_m_gj.js`/`council_ind_p_gj.js`（山地/平地原住民）都各自獨立存在同一種「路徑去而復返」離群點問題——這幾個檔案是縣市議員多席次選區獨有的幾何資料，不跟test.html共用，所以即使data_map_v64.js修好了，council.html還是會在選區地圖上看到殘留的線段，這也是使用者一開始觀察到「區域立委地圖沒有，但縣市議員/縣市長有」的真正原因（縣市長模式共用CD/TC_GJ所以修法涵蓋到，但縣市議員選區的細節邊界只有council_dist_gj.js在管）。三個檔案共移除約190個離群點，驗證方式與門檻同CHANGELOG.md v3.00條目。
