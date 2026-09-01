@@ -343655,12 +343655,12 @@ const TC_2016 = {"南投縣第1選舉區__10008030":{"wp":"dpp","wn":"張國鑫"
 
       <div id="toolbar">
     <div id="nav-mode-row" style="display:flex;align-items:stretch;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;border-radius:6px;flex-shrink:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15);padding-bottom:6px">
-      <a href="test.html" class="btn" style="flex:0 0 auto;min-width:68px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap">區域立委</a>
-      <a href="party_list.html" class="btn" style="flex:0 0 auto;min-width:68px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)">不分區立委</a>
-      <a href="council.html" class="btn active" style="flex:0 0 auto;min-width:68px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)">地方選舉</a>
-      <a href="council.html?goto=2026predict" id="nav-2026predict" class="btn" style="flex:0 0 auto;min-width:88px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)">2026縣市長預測</a>
-      <a href="test.html?goto=baselean" class="btn" style="flex:0 0 auto;min-width:78px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)">政黨基本盤</a>
-      <a href="live2026.html" id="nav-live2026" class="btn" style="flex:0 0 auto;min-width:78px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)">2026即時開票</a>
+      <a href="test.html" class="btn" style="flex:0 0 auto;min-width:68px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap"><span data-zh="區域立委" data-en="District">區域立委</span></a>
+      <a href="party_list.html" class="btn" style="flex:0 0 auto;min-width:68px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)"><span data-zh="不分區立委" data-en="Party-list">不分區立委</span></a>
+      <a href="council.html" class="btn active" style="flex:0 0 auto;min-width:68px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)"><span data-zh="地方選舉" data-en="Local Elections">地方選舉</span></a>
+      <a href="council.html?goto=2026predict" id="nav-2026predict" class="btn" style="flex:0 0 auto;min-width:88px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)"><span data-zh="2026縣市長預測" data-en="2026 Mayor Forecast">2026縣市長預測</span></a>
+      <a href="test.html?goto=baselean" class="btn" style="flex:0 0 auto;min-width:78px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)"><span data-zh="政黨基本盤" data-en="Party Base">政黨基本盤</span></a>
+      <a href="live2026.html" id="nav-live2026" class="btn" style="flex:0 0 auto;min-width:78px;padding:0 10px;text-align:center;text-decoration:none;border:none;background:transparent;border-radius:0;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.15)"><span data-zh="2026即時開票" data-en="2026 Live Election">2026即時開票</span></a>
     </div>
     <script>
       // 導覽列5顆按鈕超出側欄寬度需要橫向捲動——但滑鼠滾輪/大多數trackpad預設只會觸發垂直捲動，
@@ -346301,10 +346301,34 @@ const countyTranslationMap = {};
       return englishName;
     }
 
+    // townshipTranslationMap(手動整理的固定翻譯)覆蓋不到的鄉鎮市區，用pinyin-pro即時轉羅馬拼音
+    // 當自動備援——跟translateCandidate()對2600+候選人名字的處理是同一個理由(手動一個一個補
+    // 全台368個鄉鎮市區不現實)，取捨也一樣：不追求跟每個地方「官方英文名」逐字一致(漢語拼音
+    // vs 各地實際使用的威妥瑪拼音/日治時期舊譯名可能不同)，但至少不再是原始中文，看得懂大致
+    // 發音。市/鎮/鄉/區各自對應英文慣用單位詞尾(City/Town/Township/District)，其餘字元轉拼音、
+    // 音節直接相接、只有整串開頭大寫(跟已有的villageTranslationMap"Zhongmen Village"這種
+    // 既有命名慣例一致，不是每個音節分別大寫)。
+    const _TOWNSHIP_SUFFIX_EN = { '市': 'City', '鎮': 'Town', '鄉': 'Township', '區': 'District' };
+    function _pinyinTownshipFallback(townName) {
+      if (typeof pinyinPro === 'undefined' || !pinyinPro.pinyin) return townName;
+      const lastChar = townName.slice(-1);
+      const suffixEn = _TOWNSHIP_SUFFIX_EN[lastChar];
+      const stem = suffixEn ? townName.slice(0, -1) : townName;
+      try {
+        const syls = pinyinPro.pinyin(stem, { toneType: 'none', type: 'array' });
+        if (!syls || !syls.length) return townName;
+        const joined = syls.join('');
+        const cap = joined.charAt(0).toUpperCase() + joined.slice(1);
+        return suffixEn ? `${cap} ${suffixEn}` : cap;
+      } catch (e) {
+        return townName;
+      }
+    }
     function translateTownship(townName) {
       if (!townName) return '';
       if (currentLang !== 'en') return townName;
-      return townshipTranslationMap[townName] || townName;
+      if (townshipTranslationMap[townName]) return townshipTranslationMap[townName];
+      return _pinyinTownshipFallback(townName);
     }
 
     function translateVillage(vc, name) {
@@ -356815,7 +356839,7 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
         if (s.votes) Object.values(s.votes).forEach(v => { if (v.p==='dpp') _tdg+=v.n; else if (v.p==='kmt') _tdb+=v.n; else if (v.p==='tpp') _tdw+=v.n; else _tdo+=v.n; });
         const _tdt = (_tdg+_tdb+_tdw+_tdo)||1;
         const tcDistBar = `<div class="hist-row"><div class="hist-label">${T('區域立委','District')}</div><div class="hist-bar-wrap"><div class="hist-seg hc-g" style="width:${(_tdg/_tdt*100).toFixed(1)}%"></div><div class="hist-seg hc-b" style="width:${(_tdb/_tdt*100).toFixed(1)}%"></div><div class="hist-seg hc-w" style="width:${(_tdw/_tdt*100).toFixed(1)}%"></div><div class="hist-seg hc-o" style="width:${(_tdo/_tdt*100).toFixed(1)}%"></div></div><div class="hist-nums"><span class="hn-g">${(_tdg/_tdt*100).toFixed(1)}%</span><span class="hn-b">${(_tdb/_tdt*100).toFixed(1)}%</span><span class="hn-w">${(_tdw/_tdt*100).toFixed(1)}%</span><span class="hn-o">${(_tdo/_tdt*100).toFixed(1)}%</span></div></div>`;
-        return tcDistBar + tcPresVoteBarHtml(tcPres) + tcPartyVoteBarHtml(tcPV);
+        return histTripleBoxWrap(tcDistBar + tcPresVoteBarHtml(tcPres) + tcPartyVoteBarHtml(tcPV));
       })();
       const _tcElig = (s.tr && s.tot) ? Math.round(s.tot / (1 - (s.ir||0)/100) / (s.tr/100)) : 0;
       const _caWas=document.getElementById('_ca')?.style.display==='block';
@@ -357404,7 +357428,7 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
       // 因為VC_ED.ed可能殘留2016舊選區名（如"高雄市第9選舉區"），histBoxHtml會因EDB缺該名而回傳空字串
       const _vc24Ed = (vs && vs.ed) ? vs.ed : (info.ed || '');
       const _vcHistBox24 = vs
-        ? (_vcDistRow + vcPresVoteBox + _vcPartyRow)
+        ? histTripleBoxWrap(_vcDistRow + vcPresVoteBox + _vcPartyRow)
         : histBoxHtml(_vc24Ed);
       const _vcElig = (info.tr && info.total) ? Math.round(info.total / (1 - (info.ir||0)/100) / (info.tr/100)) : 0;
       const _caWas=document.getElementById('_ca')?.style.display==='block';
@@ -360798,7 +360822,11 @@ function initTickerLogos() {
           else if (mode === 'third') {
             mapTitle.textContent = compYear + (currentLang === 'zh' ? ' 第三勢力PVI地圖' : ' Third Force PVI Map');
           }
+          else if (mode === 'baselean') mapTitle.textContent = currentLang === 'en' ? '2008-2024 Party Base Support Map' : '2008-2024 政黨基本盤估算地圖';
         }
+      }
+      if (typeof mode !== 'undefined' && mode === 'baselean' && typeof _baseLeanRedrawCurrentLevel === 'function') {
+        _baseLeanRedrawCurrentLevel();
       }
       // Breadcrumb dynamic translation
       const crumb = document.getElementById('crumb');

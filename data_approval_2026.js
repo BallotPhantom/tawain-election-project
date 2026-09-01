@@ -1,4 +1,8 @@
-// 總統（賴清德）／行政院院長（卓榮泰）施政滿意度追蹤（2024-05-20就職起）— sourced 2026-08-15
+// 總統（賴清德）／行政院院長（卓榮泰）施政滿意度追蹤（2024-05-20就職起）— sourced 2026-08-15，
+// 2026-08-31追加更新至2026-08-19（見PRESIDENT_APPROVAL_2025/PREMIER_APPROVAL_2025陣列尾端
+// 「2026-08-31新增」註解區塊：新增震傳媒8/15-17、台灣民心調查8/19-21兩筆總統資料，及台灣民心調查
+// 8/19-21一筆行政院長資料——原本委託美麗島電子報的戴立安2026年7月脫離該報自推「台灣民心調查」，
+// 詳見陣列內註解）
 // （2025年起部分於2026-08-15首次蒐集；2024-05-20至2024-12月的延伸區段於同日稍後追加，
 // 詳見下方「2024年延伸區段」說明）。
 //
@@ -225,7 +229,16 @@ const PRESIDENT_APPROVAL_2025 = [
   { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-04-22", period: "2026/4/22-24", approve_pct: 44.4, disapprove_pct: 47.4, undecided_pct: 8.0, sample_size: 1074, source_url: "https://www.my-formosa.com.tw/DOC_225352.htm" },
   { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-05-20", period: "2026/5/20-22", approve_pct: 45.7, disapprove_pct: 44.9, undecided_pct: 9.4, sample_size: 1078, source_url: "https://www.my-formosa.com.tw/DOC_226123.htm" },
   { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-06-22", period: "2026/6/22-24", approve_pct: 43.9, disapprove_pct: 47.5, undecided_pct: 8.4, sample_size: 1078, source_url: "https://www.my-formosa.com.tw/DOC_226926.htm" },
-  { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-07-28", period: "2026/7/28-30", approve_pct: 44.7, disapprove_pct: 47.4, undecided_pct: 7.9, sample_size: 1200, source_url: "https://www.my-formosa.com.tw/DOC_227893.htm", note: "本檔案蒐集範圍內最新一筆資料（報告發布於2026-08-04），樣本數1200為此系列中唯一擴大樣本的月份" }
+  { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-07-28", period: "2026/7/28-30", approve_pct: 44.7, disapprove_pct: 47.4, undecided_pct: 7.9, sample_size: 1200, source_url: "https://www.my-formosa.com.tw/DOC_227893.htm", note: "2026-08-15/08-19新增兩筆前，本檔案蒐集範圍內最新一筆資料（報告發布於2026-08-04），樣本數1200為此系列中唯一擴大樣本的月份" },
+
+  // ---- 2026-08-31新增：震傳媒(委託山水民意研究)、台灣民心調查（見下方説明）----
+  { pollster: "震傳媒", sponsor: "震傳媒", date: "2026-08-15", period: "2026/8/15-17", approve_pct: 46.9, disapprove_pct: 42.3, undecided_pct: 10.8, sample_size: 1070, source_url: "https://www.zmedia.com.tw/Document/PoolDetail/43759", note: "震傳媒出資委託山水民意研究股份有限公司執行；同一天另有信任度調查(48.5%信任/39.0%不信任)，本檔案只收「施政滿意度」題與其他月份的問法一致" },
+  // 民調專家戴立安2026年7月初結束與《美麗島電子報》的委託關係，自行推出《台灣民心調查》(TST)，
+  // 固定題組延續其本人自2006年設計的「台灣民心指數」一脈(2012-2016台灣民心動態調查、2017-2026/6
+  // 美麗島國政民調)，問卷設計/分析仍是戴立安本人、執行單位仍是畢肯市場研究公司，方法論跟先前
+  // PREMIER/PRESIDENT_APPROVAL裡「美麗島電子報」那些筆數是同一套人馬的延續，只是委託方/品牌名稱
+  // 換了，不是兩個不相干的新民調——分開的pollster名稱純粹反映實際掛名者變化，供之後查證脈絡用。
+  { pollster: "台灣民心調查", sponsor: "台灣民心調查", date: "2026-08-19", period: "2026/8/19-21", approve_pct: 51.4, disapprove_pct: 42.3, undecided_pct: 6.3, sample_size: 1076, source_url: "https://www.businesstoday.com.tw/article/category/183027/post/202608250012/", note: "戴立安脫離美麗島電子報後首篇「台灣民心調查」，執行單位/問卷設計者不變（見上方說明）；同時段信任度49.9%/不信任39.5%，本檔案只收「施政滿意度」題" }
 ];
 
 const PREMIER_APPROVAL_2025 = [
@@ -250,5 +263,8 @@ const PREMIER_APPROVAL_2025 = [
   { pollster: "美麗島電子報", premier_name: "卓榮泰", sponsor: "美麗島電子報", date: "2026-04-22", period: "2026/4/22-24", approve_pct: 42.3, disapprove_pct: 41.8, undecided_pct: 15.9, sample_size: 1074, source_url: "https://www.my-formosa.com.tw/DOC_225352.htm" },
   { pollster: "美麗島電子報", premier_name: "卓榮泰", sponsor: "美麗島電子報", date: "2026-05-20", period: "2026/5/20-22", approve_pct: 40.7, disapprove_pct: 39.7, undecided_pct: 19.6, sample_size: 1078, source_url: "https://www.my-formosa.com.tw/DOC_226123.htm" },
   { pollster: "美麗島電子報", premier_name: "卓榮泰", sponsor: "美麗島電子報", date: "2026-06-22", period: "2026/6/22-24", approve_pct: 40.8, disapprove_pct: 40.0, undecided_pct: 19.3, sample_size: 1078, source_url: "https://www.my-formosa.com.tw/DOC_226926.htm" },
-  { pollster: "美麗島電子報", premier_name: "卓榮泰", sponsor: "美麗島電子報", date: "2026-07-28", period: "2026/7/28-30", approve_pct: 40.2, disapprove_pct: 45.1, undecided_pct: 14.7, sample_size: 1200, source_url: "https://www.my-formosa.com.tw/DOC_227893.htm", note: "本檔案蒐集範圍內最新一筆資料（報告發布於2026-08-04），樣本數1200為此系列中唯一擴大樣本的月份" }
+  { pollster: "美麗島電子報", premier_name: "卓榮泰", sponsor: "美麗島電子報", date: "2026-07-28", period: "2026/7/28-30", approve_pct: 40.2, disapprove_pct: 45.1, undecided_pct: 14.7, sample_size: 1200, source_url: "https://www.my-formosa.com.tw/DOC_227893.htm", note: "2026-08-19新增一筆前，本檔案蒐集範圍內最新一筆資料（報告發布於2026-08-04），樣本數1200為此系列中唯一擴大樣本的月份" },
+
+  // ---- 2026-08-31新增：台灣民心調查（戴立安脫離美麗島電子報後的新品牌，見PRESIDENT_APPROVAL_2025同日期項目說明）----
+  { pollster: "台灣民心調查", premier_name: "卓榮泰", sponsor: "台灣民心調查", date: "2026-08-19", period: "2026/8/19-21", approve_pct: 43.2, disapprove_pct: 40.6, undecided_pct: 16.2, sample_size: 1076, source_url: "https://www.businesstoday.com.tw/article/category/183027/post/202608250012/", note: "戴立安脫離美麗島電子報後首篇「台灣民心調查」；本檔案查找期間找不到2026-08卓榮泰個人施政滿意度的獨立TPOF報告，這筆是唯一同期可用的來源" }
 ];
