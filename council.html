@@ -358078,6 +358078,22 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
       document.getElementById('sidebar-toggle').textContent =
         layout.classList.contains('sidebar-collapsed') ? '☰' : '✕';
     };
+    // 手機/窄螢幕最小限度可視性修復：左側工具列250px+右側資訊面板288px加起來538px，
+    // 在窄螢幕會直接重疊、地圖幾乎被夾死看不到。沿用既有toggleSidebar()同一套
+    // sidebar-collapsed class機制，不是另外發明一套收合邏輯——只是把初始狀態改成
+    // 窄螢幕預設收合，使用者仍可自己點圓形按鈕展開。768px抓常見手機/直式平板斷點，
+    // 桌機視窗不受影響。這不是完整手機版重構(hover互動模式沒有改)，只解決面板重疊
+    // 讓畫面至少看得清楚。
+    (function () {
+      if (window.innerWidth <= 768) {
+        const layout = document.getElementById('layout');
+        const btn = document.getElementById('sidebar-toggle');
+        if (layout && !layout.classList.contains('sidebar-collapsed')) {
+          layout.classList.add('sidebar-collapsed');
+          if (btn) btn.textContent = '☰';
+        }
+      }
+    })();
     // 常駐聲明改成跟著跑馬燈固定位置的圓形按鈕+展開框（見#disclaimer-wrap），不用再監看#left-rail
     // 的高度動態算位置——這批positionDisclaimerNote相關的程式碼已經不需要了
     window.toggleDisclaimerNote = function () {

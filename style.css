@@ -2727,3 +2727,17 @@
 .road-line.road-unclassified{ stroke: rgba(255,255,255,0.26);stroke-width: calc(0.3px * var(--rk)); }
 .road-line.road-residential { stroke: rgba(255,255,255,0.22);stroke-width: calc(0.24px * var(--rk)); }
 #roads-toggle-btn.on { background: rgba(255,214,102,0.22); border-color: rgba(255,214,102,0.6); color: #ffd666; }
+
+/* ── 手機/窄螢幕最小限度可視性修復（2026-09-01）──
+   #left-rail(250px)+#ip(288px)固定寬度加起來538px，窄螢幕會直接重疊、地圖被夾死。
+   左側欄的收合改用JS在載入時判斷寬度呼叫既有sidebar-collapsed機制（見toggleSidebar()
+   旁邊那段自執行函式），這裡只處理#ip：固定288px改成視窗寬度的比例，避免在小螢幕上
+   緊貼邊緣或超出可視範圍。這不是完整響應式重構，只確保面板不重疊、內容看得清楚——
+   互動邏輯（hover觸發面板）沒有改，觸控裝置上多數瀏覽器第一次點擊會連帶觸發mouseover，
+   算堪用但不是真正的手機版，完整觸控重構待日後獨立處理。 */
+@media (max-width: 768px) {
+  #ip {
+    width: min(288px, 82vw) !important;
+    max-width: min(288px, 82vw) !important;
+  }
+}
