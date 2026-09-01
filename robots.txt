@@ -1,36 +1,8 @@
 # Personal, non-commercial technical portfolio project.
-# General crawlers/search engines are welcome — this project is meant to be found.
+# Not ready to be publicly discoverable yet — disallow all crawlers for now.
+# (Note: robots.txt only asks well-behaved crawlers not to crawl; the real
+# "don't show up in search results" mechanism is the <meta name="robots"
+# content="noindex"> tag on each page, which works even for a page that
+# does get crawled. Both are used together here.)
 User-agent: *
-Allow: /
-
-# Best-effort opt-out for AI-training crawlers specifically. Not all bots
-# respect robots.txt, and this can't stop scraping technically — it's a
-# polite, standard declaration of intent, same spirit as this project's own
-# scraper (poll_live2026.py) identifying itself and respecting rate limits
-# when pulling from other public sites.
-User-agent: GPTBot
-Disallow: /
-
-User-agent: ChatGPT-User
-Disallow: /
-
-User-agent: CCBot
-Disallow: /
-
-User-agent: Google-Extended
-Disallow: /
-
-User-agent: anthropic-ai
-Disallow: /
-
-User-agent: ClaudeBot
-Disallow: /
-
-User-agent: Claude-Web
-Disallow: /
-
-User-agent: Bytespider
-Disallow: /
-
-User-agent: PerplexityBot
 Disallow: /
