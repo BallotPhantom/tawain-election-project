@@ -343620,6 +343620,43 @@ const TC_2016 = {"南投縣第1選舉區__10008030":{"wp":"dpp","wn":"張國鑫"
 </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+  <script>
+  // topojson.merge()執行期溶解村里邊界時，就算來源VD資料本身完全乾淨，兩段各自獨立、方向
+  // 沒問題的arc在merge()縫合的接點上仍可能形成銳角折返（跟靜態資料裡的離群點是兩回事，
+  // 是merge()這個動作本身、把多段arc串接成一條新ring時才會浮現的產物，逐一測試單一arc測不出
+  // 來）。做法跟data_map_v64.js等靜態檔案那次修法完全一樣（連續兩段線夾角餘弦值<-0.80視為
+  // 離群點、反覆移除到測不到為止），只是這裡要在瀏覽器執行期、每次topojson.merge()呼叫後
+  // 立刻套用一次，因為選區/鄉鎮的組合是動態的，沒辦法像靜態資料一樣預先修好存檔。
+  function _cleanMergedGeom(geom, thresh) {
+    thresh = (thresh === undefined) ? -0.80 : thresh;
+    function cleanRing(ring) {
+      let guard = 0;
+      while (guard++ < 40) {
+        const n = ring.length;
+        let idx = -1;
+        for (let i = 1; i < n - 1; i++) {
+          const p0 = ring[i-1], p1 = ring[i], p2 = ring[i+1];
+          const v1x = p1[0]-p0[0], v1y = p1[1]-p0[1];
+          const v2x = p2[0]-p1[0], v2y = p2[1]-p1[1];
+          const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+          if (l1 === 0 || l2 === 0) continue;
+          const cos = (v1x*v2x + v1y*v2y) / (l1*l2);
+          if (cos < thresh) { idx = i; break; }
+        }
+        if (idx < 0) break;
+        ring = ring.slice(0, idx).concat(ring.slice(idx+1));
+      }
+      return ring;
+    }
+    if (!geom) return geom;
+    if (geom.type === 'Polygon') {
+      geom.coordinates = geom.coordinates.map(cleanRing);
+    } else if (geom.type === 'MultiPolygon') {
+      geom.coordinates = geom.coordinates.map(poly => poly.map(cleanRing));
+    }
+    return geom;
+  }
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/pinyin-pro/dist/index.min.js"></script>
   <script src="council_dist_gj.js"></script>
   <script src="council_ind_p_gj.js"></script>
@@ -347580,7 +347617,7 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
       Object.entries(GUSHAN_SETTLEMENTS).forEach(([key, c]) => {
         const geoms = VD.objects.villages.geometries.filter(g2 => c.vcs.includes(g2.properties && g2.properties.vc));
         if (!geoms.length) return;
-        const raw = topojson.merge(VD, geoms);
+        const raw = _cleanMergedGeom(topojson.merge(VD, geoms));
         const feat = { type: 'Feature', properties: { key }, geometry: raw.type === 'Feature' ? raw.geometry : raw };
         const volatile = _gushanClusterVolatileShare(c.vcs);
         g.append('path').attr('class', 'gushan-cluster-fill').attr('d', pathFn(feat))
@@ -348518,7 +348555,7 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
       if (typeof VD === 'undefined' || !VD.objects || !VD.objects.villages) return null;
       const geoms = VD.objects.villages.geometries.filter(g => g.properties && g.properties.vc && g.properties.vc.substring(0, 8) === tc);
       if (!geoms.length) return null;
-      const feat = { type: 'Feature', properties: { tc }, geometry: topojson.merge(VD, geoms) };
+      const feat = { type: 'Feature', properties: { tc }, geometry: _cleanMergedGeom(topojson.merge(VD, geoms)) };
       _mergedTcGeomCache[tc] = feat;
       return feat;
     }
@@ -361152,7 +361189,7 @@ function _drawCandCentroidLabels(feats, getCandFn, colorMap, layer, szScale=1.0)
         return vc && vcSet.has(vc);
       });
       if (candGeoms.length > 0) {
-        const merged = topojson.merge(VD, candGeoms);
+        const merged = _cleanMergedGeom(topojson.merge(VD, candGeoms));
         const polys = merged.type === 'Polygon'
           ? [{type:'Feature', properties:{}, geometry: merged}]
           : merged.coordinates.map(c => ({type:'Feature', properties:{}, geometry:{type:'Polygon', coordinates:c}}));
@@ -361225,7 +361262,7 @@ function _candHighlightSetup(fillSel, winMap, keyFn, vcSetFn) {
       return vc && vcSet.has(vc);
     });
     if (!candGeoms.length) return;
-    const merged = topojson.merge(VD, candGeoms);
+    const merged = _cleanMergedGeom(topojson.merge(VD, candGeoms));
     gBase.insert('path', '.cand-label').attr('class','cand-hl-border')
       .attr('d', pathFn({type:'Feature', properties:{}, geometry: merged}))
       .attr('fill','none')
@@ -363674,7 +363711,7 @@ function _mayorGoTC(cc) {
     const tc = f.properties.tc; if (_tcCityKey(tc) !== cc) return;
     if (_mgtcSeen.has(tc)) return; _mgtcSeen.add(tc);
     const vg = _mgtcGeoms[tc] || [];
-    if (vg.length) { const raw = topojson.merge(VD, vg); feats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
+    if (vg.length) { const raw = _cleanMergedGeom(topojson.merge(VD, vg)); feats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
     else feats.push(f);
   });
   const cos = topojson.feature(CD, CD.objects.counties);
@@ -363756,7 +363793,7 @@ function _mayorGoVill(tc, cc) {
     .on('click', (e, d) => { curVC = d.properties.vc; const _ic = document.getElementById('ic'); if (_ic) _ic.innerHTML = _mayorVillPanelHtml(d.properties.vc); });
   const _mvVg = VD.objects.villages.geometries.filter(g => { const vc = g.properties && g.properties.vc; return vc && vc.startsWith(tc); });
   if (_mvVg.length) {
-    const _mvMerged = topojson.merge(VD, _mvVg);
+    const _mvMerged = _cleanMergedGeom(topojson.merge(VD, _mvVg));
     const _mvFeat = {type:'Feature', properties:{tc}, geometry: _mvMerged.type==='Feature'?_mvMerged.geometry:_mvMerged};
     gBg.append('path').attr('class', 'bg-fill').attr('d', pathFn(_mvFeat)).attr('pointer-events', 'none');
     gBase.selectAll('.ft-tc-border').data([_mvFeat]).join('path')
@@ -363830,7 +363867,7 @@ function _mayorGoVillAll(cc) {
     const tc = f.properties.tc; if (_tcCityKey(tc) !== cc) return;
     if (_mvaSeen.has(tc)) return; _mvaSeen.add(tc);
     const vg = _mvaGeoms[tc] || [];
-    if (vg.length) { const raw = topojson.merge(VD, vg); tcFeats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
+    if (vg.length) { const raw = _cleanMergedGeom(topojson.merge(VD, vg)); tcFeats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
     else tcFeats.push(f);
   });
   gBase.selectAll('.ft-tc-border').data(tcFeats).join('path')
@@ -363878,7 +363915,7 @@ function _mayorGoTCAllNational() {
   getTCGJ().features.forEach(f => {
     const tc = f.properties.tc; if (_mnatSeen.has(tc)) return; _mnatSeen.add(tc);
     const vg = _mnatGeoms[tc] || [];
-    if (vg.length) { const raw = topojson.merge(VD, vg); feats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
+    if (vg.length) { const raw = _cleanMergedGeom(topojson.merge(VD, vg)); feats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
     else feats.push(f);
   });
   const cos = topojson.feature(CD, CD.objects.counties);
@@ -364035,7 +364072,7 @@ function _councilGoTCAllNational() {
     _natAllTcSeen.add(tc);
     const vg = _natTcGeoms[tc] || [];
     if (vg.length) {
-      const raw = topojson.merge(VD, vg);
+      const raw = _cleanMergedGeom(topojson.merge(VD, vg));
       feats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw});
     } else { feats.push(f); }
   });
@@ -364791,7 +364828,7 @@ function _councilBuildTCFeats(ed) {
       return vc && vc.startsWith(tc) && _vcToDistKey[vc] === ed;
     });
     if (vg.length) {
-      const raw = topojson.merge(VD, vg);
+      const raw = _cleanMergedGeom(topojson.merge(VD, vg));
       feats.push({type:'Feature', properties:bp, geometry: raw.type==='Feature'?raw.geometry:raw});
     } else {
       feats.push({...f, properties: bp});
@@ -364809,7 +364846,7 @@ function _councilDistMergedFeat(ed) {
     return vc && vcs.has(vc);
   });
   if (!geoms.length) return null;
-  const merged = topojson.merge(VD, geoms);
+  const merged = _cleanMergedGeom(topojson.merge(VD, geoms));
   return {type:'Feature', properties:{ed}, geometry: merged};
 }
 
@@ -374645,7 +374682,7 @@ function _mayorBuildTCFeats(cc) {
     const tc = f.properties.tc; if (_tcCityKey(tc) !== cc) return;
     if (seen.has(tc)) return; seen.add(tc);
     const vg = geoms[tc] || [];
-    if (vg.length) { const raw = topojson.merge(VD, vg); feats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
+    if (vg.length) { const raw = _cleanMergedGeom(topojson.merge(VD, vg)); feats.push({type:'Feature', properties:f.properties, geometry: raw.type==='Feature'?raw.geometry:raw}); }
   });
   return feats;
 }
