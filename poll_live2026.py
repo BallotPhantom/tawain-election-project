@@ -49,6 +49,7 @@ from bs4 import BeautifulSoup
 
 PROJ = Path(__file__).parent
 DATA_FILE = PROJ / 'data_live2026.js'
+MARGIN_LOG_FILE = PROJ / 'data_live2026_margin_log.js'
 
 sys.path.insert(0, str(PROJ))
 from loadjs import load as load_json_style  # noqa: E402  只用在NM(已是雙引號JSON格式)上
@@ -149,7 +150,10 @@ def _norm(s):
 def _build_tc_pool():
     """依cc代碼字首把NM.t(鄉鎮代碼->名稱)分組，逐縣市比對用——縣市內部才需要唯一，
     不同縣市可能同名(例如「東區」)"""
-    NM = load_json_style(str(PROJ / 'live2026.html'), 'const NM')
+    # NM在2026-08-31的瘦身工程中被搬進共用的data_map_v64.js(不再是live2026.html自己內嵌的
+    # 一段)，這裡跟著改路徑——2026-09-02發現這支腳本從瘦身當天起就一直讀不到NM，是這次要
+    # 加領先幅度紀錄功能、實際跑一次--once測試才發現的既有壞掉，不是新功能造成的
+    NM = load_json_style(str(PROJ / 'data_map_v64.js'), 'const NM')
     pool = {}
     for tc, name in NM['t'].items():
         cc = tc[:2] if tc[:2] in ('63', '64', '65', '66', '67', '68') else tc[:5]
@@ -425,6 +429,75 @@ def _write_block(varname, data):
     DATA_FILE.write_text(content, encoding='utf-8')
 
 
+_MARGIN_LOG_HEADER = (
+    "// 2026即時開票——縣市長層領先幅度隨時間變化紀錄，逐來源各自記錄(跟LIVE_TRACK_CC的\n"
+    "// sources[sourceKey]同一個巢狀慣例)，不合併成單一數字/單一條線——不同來源開票速度本來就\n"
+    "// 未必相同，有些直接沿用中選會官方進度、有些是自己統計，混在一起畫成一條線會製造「精確度」\n"
+    "// 的假象，也跟_liveTrack26Html()「每個來源各自一條bar」同一個設計意圖。目前這支腳本只有\n"
+    "// auto_poll一個真正會自動寫入的來源(見FETCHERS)，但結構先比照多來源設計，以後真的多了\n"
+    "// 別的自動來源也能各自累積自己的時間序列，不用重寫資料結構。不記錄黨籍：LIVE_TRACK_CC/\n"
+    "// _parse_cec_table()本身都只有候選人姓名+票數(來源網頁沒結構化黨籍欄位)，前端畫圖時用\n"
+    "// 既有的_liveCandParty(cc, ldrName)即時查，不在Python這端塞一個永遠是null的欄位。\n"
+    "// 結構：{ [ccCode]: { [sourceKey]: [ { ts, ldrName, marginPct }, ... ], ... }, ... }\n"
+)
+
+
+def _ensure_margin_log_file():
+    """LIVE2026_MARGIN_LOG不存在時建立空骨架——跟data_live2026.js的602 key骨架同樣邏輯，
+    只是這裡的骨架是空物件(還沒有任何時間點的快照)，不是602個key，因為只在真的抓到資料、
+    有margin可以算的當下才會新增一個key。"""
+    if MARGIN_LOG_FILE.exists():
+        return
+    MARGIN_LOG_FILE.write_text(_MARGIN_LOG_HEADER + "const LIVE2026_MARGIN_LOG = {};\n", encoding='utf-8')
+
+
+def _append_margin_log(cc_fresh, accepted_keys, source_key='auto_poll'):
+    """縣市長層(cc)專屬——縣市議員層(ed)是多席次SNTV，沒有單一「領先方」的概念(見
+    live2026.html既有註解)，鄉鎮層(tc)資料量太大、逐鄉鎮記錄時間序列narrative價值低，
+    這個MVP範圍先只做縣市長層(2026-09-02使用者要求)。"""
+    _ensure_margin_log_file()
+    try:
+        log = load_js(str(MARGIN_LOG_FILE), 'LIVE2026_MARGIN_LOG')
+    except Exception as e:
+        print(f'  領先幅度紀錄：讀取失敗，這一輪跳過寫入（{e}）', file=sys.stderr)
+        return
+
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    changed = False
+    for key in accepted_keys:
+        info = cc_fresh.get(key)
+        if not info or not info.get('cands'):
+            continue
+        cands_sorted = sorted(info['cands'], key=lambda c: c['votes'], reverse=True)
+        total = sum(c['votes'] for c in cands_sorted)
+        if total <= 0 or len(cands_sorted) < 1:
+            continue
+        top = cands_sorted[0]
+        second_votes = cands_sorted[1]['votes'] if len(cands_sorted) > 1 else 0
+        margin_pct = round((top['votes'] - second_votes) / total * 100, 2)
+        entry = {'ts': ts, 'ldrName': top['name'], 'marginPct': margin_pct}
+        log.setdefault(key, {}).setdefault(source_key, []).append(entry)
+        changed = True
+
+    if not changed:
+        return
+
+    def esc(s):
+        return s.replace('\\', '\\\\').replace("'", "\\'")
+
+    lines = ['const LIVE2026_MARGIN_LOG = {']
+    for key, by_source in log.items():
+        src_strs = []
+        for skey, entries in by_source.items():
+            entry_strs = [f"{{ ts: '{esc(e['ts'])}', ldrName: '{esc(e['ldrName'])}', marginPct: {e['marginPct']} }}" for e in entries]
+            src_strs.append(f'{skey}: [{", ".join(entry_strs)}]')
+        lines.append(f'  "{key}": {{ {", ".join(src_strs)} }},')
+    lines[-1] = lines[-1].rstrip(',')
+    lines.append('};')
+    new_content = _MARGIN_LOG_HEADER + '\n'.join(lines) + '\n'
+    MARGIN_LOG_FILE.write_text(new_content, encoding='utf-8')
+
+
 def run_once(source, allow_all_zero, tc_pool, council_seats, year=2026):
     print(f'[{datetime.now().strftime("%H:%M:%S")}] 抓取中（來源={source}, year={year}）...')
     cc_fresh, tc_fresh, ed_fresh = FETCHERS[source](tc_pool, council_seats, year)
@@ -448,6 +521,14 @@ def run_once(source, allow_all_zero, tc_pool, council_seats, year=2026):
     cc_accepted = _do_layer('LIVE_TRACK_CC', cc_fresh, '縣市長層')
     tc_accepted = _do_layer('LIVE_TRACK_TC', tc_fresh, '鄉鎮市區層', truncate=10)  # 鄉鎮層數量多，避免洗版
     ed_accepted = _do_layer('LIVE_TRACK_ED', ed_fresh, '縣市議員層', truncate=10)
+
+    if cc_accepted:
+        try:
+            _append_margin_log(cc_fresh, cc_accepted)
+        except Exception as e:
+            # 領先幅度紀錄是錦上添花的附加功能，寫入失敗不該連帶讓這一輪的主要開票資料
+            # (LIVE_TRACK_CC/TC/ED，已經在上面_do_layer()各自成功寫入了)也被當成失敗
+            print(f'  領先幅度紀錄：這一輪寫入失敗，不影響主要開票資料（{e}）', file=sys.stderr)
 
     return cc_accepted, tc_accepted, ed_accepted
 

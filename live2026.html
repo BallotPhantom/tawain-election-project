@@ -343683,6 +343683,7 @@ const TC_2016 = {"南投縣第1選舉區__10008030":{"wp":"dpp","wn":"張國鑫"
   <script src="mayor_2018_actual.js"></script>
   <script src="mayor_turnout_stats.js"></script>
   <script src="data_live2026.js"></script>
+  <script src="data_live2026_margin_log.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -363165,13 +363166,35 @@ function _cc26Elig(cc) {
 // 即時開票模式的全台總覽介紹文字——抽成獨立函式，setLiveTrack2026Mode()進入模式時呼叫一次，
 // applyLang()語言切換時（curED/curTC都還沒選定，還停在全台總覽層）也要能重新呼叫同一份，
 // 不然文字會停留在切換當下的語言，跟這個檔案其他panel漏掉applyLang()重繪是同一類bug。
+// 「已回報比例」：只誠實統計「這個key目前有沒有任何來源回報資料」，不做任何票數推估——
+// 跟AP/NYT那種靠投開票所層級即時逐筆資料+歷史回報模式去推估「還剩多少票、可信度多高」的
+// 系統是完全不同量級的東西，這個專案沒有那種granularity的資料來源，也刻意不用官方API，
+// 硬做會變成看起來像有憑有據、其實是編出來的假指標。這裡只算「幾個縣市/選區已經讀到數字」，
+// 不推測誰會贏、不算信賴區間。2026-09-02使用者要求。
+function _liveTrack26ReportedProgress(subMode) {
+  const table = subMode === 'council' ? (typeof LIVE_TRACK_ED !== 'undefined' ? LIVE_TRACK_ED : null)
+    : (typeof LIVE_TRACK_CC !== 'undefined' ? LIVE_TRACK_CC : null);
+  if (!table) return null;
+  const keys = Object.keys(table);
+  const total = keys.length;
+  if (!total) return null;
+  const reported = keys.filter(k => table[k] && table[k].sources && Object.keys(table[k].sources).length > 0).length;
+  return { reported, total };
+}
 function _liveTrack26NationalIntroHtml(subMode) {
   const _subLabel = subMode === 'council' ? T('縣市議員','County/City Council') : T('縣市長','Mayor');
+  const _prog = _liveTrack26ReportedProgress(subMode);
+  const _progUnit = subMode === 'council' ? T('個選區','districts') : T('個縣市','counties');
+  const _progHtml = _prog
+    ? `<div style="margin-top:6px;font-size:11px;color:rgba(252,165,165,0.85)">${T('目前已讀到數字','Currently reporting data for')}：<b style="color:#fca5a5">${_prog.reported}</b> / ${_prog.total} ${_progUnit}`
+      + `<div style="height:4px;border-radius:2px;background:rgba(220,38,38,0.15);margin-top:3px;overflow:hidden"><div style="height:100%;width:${_prog.total ? (_prog.reported/_prog.total*100).toFixed(1) : 0}%;background:#dc2626"></div></div></div>`
+    : '';
   return `<div class="t1" style="color:#fca5a5">${T('2026 即時開票 — 非官方多來源比對','2026 Live Election Night — Unofficial Multi-Source Tracking')}</div>`
     + `<div style="font-size:10px;color:#fca5a5;margin-top:2px;margin-bottom:5px">${_subLabel}</div>`
+    + _progHtml
     + '<div style="color:rgba(252,165,165,0.9);font-size:11px;margin-top:6px;line-height:1.6;border:1px solid rgba(220,38,38,0.35);border-radius:6px;padding:8px;background:rgba(220,38,38,0.08)">'
-    + T('🔴 縣市長層跟鄉鎮市區層(含縣市議員，以整個選區為單位)都優先用新聞網站自己的開票總覽/選區頁面互相比對；少數縣市(新北市/基隆市/高雄市/彰化縣)另外疊加電視台YouTube開票直播當作多來源示範——不使用中選會官方API。同一縣市/鄉鎮如果各來源數字差很多，代表報導本身有落差或誤報，不代表真的作票。移到地圖查看各縣市/鄉鎮目前讀到的數字。',
-        '🔴 Both county/mayor and township level (incl. city council, tracked per multi-town district) are primarily cross-checked via news-site results pages; a few counties (New Taipei, Keelung, Kaohsiung, Changhua) additionally layer in TV stations\' YouTube livestreams as a multi-source demo — no official CEC API is used. If sources diverge for the same county/township, that reflects reporting lag or error, not necessarily vote tampering. Hover the map for each county/township\'s currently-tracked numbers.')
+    + T('🔴 縣市長層跟鄉鎮市區層(含縣市議員，以整個選區為單位)都優先用新聞網站自己的開票總覽/選區頁面互相比對；少數縣市(新北市/基隆市/高雄市/彰化縣)另外疊加電視台YouTube開票直播當作多來源示範——不使用中選會官方API。同一縣市/鄉鎮如果各來源數字差很多，代表報導本身有落差或誤報，不代表真的作票。「已讀到數字」只代表目前有抓到資料的縣市/選區數量，不是投開票所層級的計票進度，也不代表還沒讀到的地方票數多寡。移到地圖查看各縣市/鄉鎮目前讀到的數字。',
+        '🔴 Both county/mayor and township level (incl. city council, tracked per multi-town district) are primarily cross-checked via news-site results pages; a few counties (New Taipei, Keelung, Kaohsiung, Changhua) additionally layer in TV stations\' YouTube livestreams as a multi-source demo — no official CEC API is used. If sources diverge for the same county/township, that reflects reporting lag or error, not necessarily vote tampering. "Currently reporting" only counts how many counties/districts we have any data for — it is not polling-station-level count progress and says nothing about how many votes remain in areas without data yet. Hover the map for each county/township\'s currently-tracked numbers.')
     + '</div>';
 }
 
@@ -363281,13 +363304,70 @@ function _liveTrack26Html(codeKey, table) {
 // 即時開票模式的縣市層獨立面板——完全不含2026預測的民調/蒙地卡羅內容，跟_mayor2026PredictPanelHtml
 // 是兩條分開的路徑。地圖填色/下鑽本身借用is2026Predict那套(setLiveTrack2026Mode()裡會一併打開)，
 // 這裡只換面板要顯示的文字內容。
+// 領先幅度隨時間變化折線圖——逐來源各畫一條自己的線(資料結構見data_live2026_margin_log.js
+// 檔頭註解)，不合併成單一數字/單一條線，跟_liveTrack26Html()「每個來源各自一條bar」同一個
+// 設計意圖：不同來源開票速度未必相同，有些直接沿用中選會官方進度、有些是自己統計，混在一起
+// 會製造「精確度」的假象。目前實際上通常只有auto_poll一個來源，畫出來就是一條線；之後真的
+// 多了別的自動來源，這裡會自然變成多條線疊在同一張圖上，不用重寫。
+// 故意不用單一顏色貫穿整條線代表「這個來源」——改成逐點依_liveCandParty()當下查出的政黨上色，
+// 領先者中途換人時(較少見但真的開票時可能發生)顏色會跟著換，讀者自己看得出「這裡換人領先了」；
+// 多條來源線之間改用虛線/實線交錯區分，而不是額外配色，避免政黨色跟來源色兩套顏色系統打架。
+function _liveMarginTrendSvg(cc) {
+  const log = (typeof LIVE2026_MARGIN_LOG !== 'undefined') ? LIVE2026_MARGIN_LOG[cc] : null;
+  if (!log) return '';
+  const srcKeys = Object.keys(log).filter(sk => log[sk] && log[sk].length >= 2);
+  if (!srcKeys.length) return '';
+  const W = 280, H = 70, padL = 24, padB = 14;
+  const seriesBySrc = srcKeys.map(sk => log[sk].map(e => ({
+    t: new Date(e.ts.replace(' ', 'T')).getTime(), margin: e.marginPct, name: e.ldrName, party: _liveCandParty(cc, e.ldrName)
+  })));
+  const allPts = seriesBySrc.flat();
+  const tMin = Math.min.apply(null, allPts.map(p => p.t)), tMax = Math.max.apply(null, allPts.map(p => p.t));
+  const tRange = (tMax - tMin) || 1;
+  const mMax = Math.max(2, Math.max.apply(null, allPts.map(p => p.margin)) * 1.15);
+  const x = t => padL + ((t - tMin) / tRange) * (W - padL - 4);
+  const y = m => (H - padB) - (m / mMax) * (H - padB - 4);
+  let svg = '';
+  seriesBySrc.forEach((pts, si) => {
+    const dash = si === 0 ? '' : ' stroke-dasharray="3,2"';
+    const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.t).toFixed(1)},${y(p.margin).toFixed(1)}`).join(' ');
+    const lastClr = COUNCIL_CLR[pts[pts.length - 1].party] || '#aaa';
+    const dots = pts.map(p => {
+      const clr = COUNCIL_CLR[p.party] || '#aaa';
+      const hh = new Date(p.t); const timeLbl = `${String(hh.getHours()).padStart(2,'0')}:${String(hh.getMinutes()).padStart(2,'0')}`;
+      return `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.margin).toFixed(1)}" r="2" fill="${clr}" data-t="${p.t}" data-name="${(typeof translateCandidate === 'function' ? translateCandidate(p.name) : p.name)} (${srcKeys[si]})" data-pct="${p.margin.toFixed(1)}" data-date="${timeLbl}" data-clr="${clr}"></circle>`;
+    }).join('');
+    svg += `<path d="${path}" stroke="${lastClr}" stroke-width="1.3" fill="none" opacity="0.85"${dash}></path>${dots}`;
+  });
+  const legend = srcKeys.length > 1
+    ? `<div style="font-size:8px;color:rgba(255,255,255,0.4);margin-top:2px">${srcKeys.map((sk, i) => `${i === 0 ? '━' : '┄'} ${sk}`).join('　')}</div>`
+    : '';
+  const lastLines = srcKeys.map((sk, si) => {
+    const last = seriesBySrc[si][seriesBySrc[si].length - 1];
+    const clr = COUNCIL_CLR[last.party] || '#aaa';
+    const nm = (typeof translateCandidate === 'function' ? translateCandidate(last.name) : last.name);
+    return `<div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px">${srcKeys.length > 1 ? sk + '：' : T('目前','currently') + '：'}<span style="color:${clr};font-weight:600">${nm}</span> ${T('領先','leads by')} ${last.margin.toFixed(1)}%</div>`;
+  }).join('');
+  return `<div style="margin-top:6px">
+    <div style="font-size:9.5px;color:rgba(255,255,255,0.45);margin-bottom:3px">${T('領先幅度隨時間變化','Leading margin over time')}</div>
+    <svg width="${W}" height="${H}" style="overflow:visible">
+      <line x1="${padL}" y1="${(H-padB).toFixed(1)}" x2="${W}" y2="${(H-padB).toFixed(1)}" stroke="rgba(255,255,255,0.1)"></line>
+      <text x="2" y="${(y(0)+3).toFixed(1)}" font-size="7" fill="rgba(255,255,255,0.35)">0%</text>
+      <text x="2" y="${(y(mMax)+3).toFixed(1)}" font-size="7" fill="rgba(255,255,255,0.35)">${mMax.toFixed(0)}%</text>
+      ${svg}
+    </svg>
+    ${lastLines}${legend}
+  </div>`;
+}
 function _liveTrack26CcPanelHtml(cc) {
   const m = (typeof MAYOR_2026_PREDICT !== 'undefined') ? MAYOR_2026_PREDICT[cc] : null;
   const cn = (m && m.county_zh) || _CC_NAME[cc] || cc;
   const body = (typeof LIVE_TRACK_CC !== 'undefined') ? _liveTrack26Html(cc, LIVE_TRACK_CC) : '';
+  const trendChart = _liveMarginTrendSvg(cc);
   return `<div class="t1" style="color:#fca5a5">${cn}</div>
     <div style="font-size:10px;color:#fca5a5;margin-top:2px;margin-bottom:5px">${T('2026 即時開票','2026 Live Election Night')}</div>
     ${body || `<div style="color:rgba(255,255,255,0.4);font-size:10.5px;padding:6px 0">${T('目前查無此縣市的即時開票來源——2026開票夜當天才會有資料','No live tracking source for this county yet — data only appears on 2026 election night')}</div>`}
+    ${trendChart}
     <div style="font-size:9px;color:rgba(255,255,255,0.35);margin-top:6px;line-height:1.5">${T('點選進入鄉鎮市區層，可看到新聞網站開票頁的比對數字','Click into the township level to see cross-checked numbers from news-site results pages')}</div>`;
 }
 

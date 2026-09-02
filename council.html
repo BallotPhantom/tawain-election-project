@@ -364736,6 +364736,47 @@ let COUNCIL_MAYOR_2022 = {
 };
 const _COUNCIL_MAYOR_2022_ACTUAL = COUNCIL_MAYOR_2022; // 穩定參照真實2022開票資料，供切回時還原
 let is2026Predict = false;
+// 2026民調封鎖期（依公職人員選舉罷免法第53條，投票日前10日起至投票結束前不得發布/報導/散布/
+// 評論/引述民調）——這段期間model不會再有新的快照，圖上最後一條虛線就是本次預測模型事實上的
+// 終點，所以整個2026預測功能（btn-mayor-2026按鈕、goto=2026predict捷徑）在此期間直接封鎖，
+// 不只是「資料沒更新」而已。用帶時區的ISO字串(+08:00)而非本地時區運算，不管使用者瀏覽器設哪個
+// 時區，封鎖窗口都以台灣時間為準。
+const _POLL_BLACKOUT_START = new Date('2026-11-18T00:00:00+08:00').getTime();
+const _POLL_BLACKOUT_END   = new Date('2026-11-28T16:00:00+08:00').getTime();
+function _isPollBlackout() {
+  const now = Date.now();
+  return now >= _POLL_BLACKOUT_START && now < _POLL_BLACKOUT_END;
+}
+function _applyPollBlackoutButtonState() {
+  const b26 = document.getElementById('btn-mayor-2026');
+  if (!b26) return;
+  const blocked = _isPollBlackout();
+  b26.disabled = blocked;
+  b26.style.opacity = blocked ? '0.4' : '';
+  b26.style.cursor = blocked ? 'not-allowed' : '';
+  b26.style.pointerEvents = blocked ? 'none' : '';
+  b26.title = blocked
+    ? T('依選罷法規定，投票日前10日至投票結束前不得發布民調預測，此功能暫停使用', 'Legally restricted from 10 days before election day through poll closing — poll-based predictions cannot be published, so this feature is temporarily disabled')
+    : '';
+}
+// 封鎖期開始當下如果使用者頁籤已經開著、且正停在預測畫面上，光反灰按鈕不夠——現有畫面內容
+// 本身就是「已發布的民調預測」，同樣要下架，所以每分鐘檢查一次，封鎖期一到就強制導回一般
+// 縣市長畫面並顯示說明文字（而不是勾掉curED留在原地，因為整個2026預測模式的資料來源本身
+// 這段期間都不該被看到，不是單一某個縣市的畫面問題）
+function _pollBlackoutTick() {
+  _applyPollBlackoutButtonState();
+  if (_isPollBlackout() && typeof is2026Predict !== 'undefined' && is2026Predict) {
+    setMayorMode('2022');
+    const ic = document.getElementById('ic');
+    if (ic) {
+      ic.innerHTML = `<div class="t1">${T('2026 縣市長預測已暫停', '2026 Mayor Prediction Paused')}</div>`
+        + '<div style="color:rgba(255,180,80,0.9);font-size:11px;margin-top:6px;line-height:1.6;border:1px solid rgba(255,180,80,0.3);border-radius:6px;padding:8px;background:rgba(255,180,80,0.08)">'
+        + T('依《公職人員選舉罷免法》第53條規定，投票日前10日起至投票結束前不得發布、報導、散布、評論或引述民調——這段期間不會再有新的模型快照，先前圖上虛線標示的就是本次預測模型事實上的終點。已自動導回一般畫面。',
+            'Under Taiwan’s Election and Recall Act, Art. 53, poll results may not be published, reported, distributed, commented on, or cited from 10 days before election day through the close of voting. No new model snapshot is produced during this window — the last dashed marker on the chart is, in effect, the true endpoint of this prediction model. You’ve been returned to the regular view automatically.')
+        + '</div>';
+    }
+  }
+}
 let mayorDisplayYear = '2022'; // '2014'|'2018'|'2022' — 縣市長選舉模式目前顯示哪一屆真實結果（跟2026預測模式脫鉤，預測模式不受此影響）
 // isCouncilMode跟councilDisplayYear：縣市議員選舉模式專用旗標，架構完全比照isMayorMode/
 // mayorDisplayYear——winnerYear在council模式下永遠釘死在'2022'（跟legislator年份脫鉤），
@@ -374760,6 +374801,11 @@ function setMayorMode(yr) {
 // 總統大選各縣市得票率彙整，候選人名稱是佔位標籤，不是真實民調），民調資料與house-effect
 // 加權模型做好後，只需要換掉MAYOR_2026_PREDICT這份資料本身，這裡的渲染邏輯不用再動
 function setMayor2026PredictMode() {
+  if (typeof _isPollBlackout === 'function' && _isPollBlackout()) {
+    alert(T('依選罷法規定，投票日前10日至投票結束前不得發布民調預測，此功能暫停使用。',
+      'Under election law, poll-based predictions cannot be published from 10 days before election day through poll closing. This feature is temporarily disabled.'));
+    return;
+  }
   if (typeof MAYOR_2026_PREDICT === 'undefined') { alert('2026預測資料尚未載入'); return; }
   isMayorMode = true;
   isCouncilMode = false; // 同setMayorMode()的修正，避免從縣市議員模式切進來時isCouncilMode殘留true
@@ -375457,9 +375503,14 @@ window.addEventListener('load', function() {
   })();
   // 導覽列「2026縣市長預測」快捷按鈕——用URL query string而非額外的JS狀態管理，跳頁後在這裡
   // 補一個檢查，直接覆蓋上面預設跑的2022縣市議員畫面，不用等使用者自己再點一次側欄按鈕
+  // （setMayor2026PredictMode()自己開頭就有封鎖期檢查，這裡不用重複判斷）
   if (new URLSearchParams(location.search).get('goto') === '2026predict' && typeof setMayor2026PredictMode === 'function') {
     setMayor2026PredictMode();
   }
+  // 民調封鎖期：載入當下先套一次按鈕反灰狀態，之後每分鐘檢查一次——涵蓋頁籤開著跨過
+  // 封鎖期起點的情境（見_pollBlackoutTick()註解）
+  if (typeof _applyPollBlackoutButtonState === 'function') _applyPollBlackoutButtonState();
+  if (typeof _pollBlackoutTick === 'function') setInterval(_pollBlackoutTick, 60000);
 });
 
 </script>
