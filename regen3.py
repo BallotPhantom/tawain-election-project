@@ -30,7 +30,7 @@ BASE_MODEL_FALLBACK_WEIGHT = 0.6  # 民調稀疏時，base model佔的權重(0~1
 BASE_MODEL_FALLBACK_EXCLUDE = {'雲林縣'}
 BASE_MODEL_SPARSE_THRESHOLD = 2   # 民調筆數<=這個數字才算「稀疏」，才觸發備援
 
-REF_DATE = datetime(2026, 9, 1)
+REF_DATE = datetime(2026, 9, 2)
 METHOD_K = 0.025
 
 # 新竹縣2026-08-23移出排除名單：查證後發現徐欣瑩2022根本沒參選新竹縣長（2022贏家楊文科不在
