@@ -348384,12 +348384,12 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
         .attr('stroke-width', 0.6)
         .attr('cursor', 'pointer')
         .on('mouseover', function (e, d) {
-          d3.select(this).attr('stroke', '#facc15').attr('stroke-width', 2);
+          d3.select(this).attr('stroke', '#ffcd78').attr('stroke-width', 2).attr('filter', 'drop-shadow(0 0 1px rgba(255,250,230,.55)) drop-shadow(0 0 5px rgba(255,196,92,.85)) drop-shadow(0 0 12px rgba(255,165,50,.5)) drop-shadow(0 0 2px rgba(40,24,4,.4))');
           const ic = document.getElementById('ic');
           if (ic) ic.innerHTML = plCountyPanelHtml(d.properties.cn, year);
         })
         .on('mouseleave', function () {
-          d3.select(this).attr('stroke', 'rgba(255,255,255,.06)').attr('stroke-width', 0.6);
+          d3.select(this).attr('stroke', 'rgba(255,255,255,.06)').attr('stroke-width', 0.6).attr('filter', null);
         })
         .on('click', function (e, d) { _addPLTownshipLayer(d.properties.cn, year); });
       // 縣市底色壓成統一深色（跟其他模式ED層同款），改用鄉鎮級人口密度發光疊圖層顯示顏色/資訊——
@@ -348578,12 +348578,12 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
         .attr('stroke-dasharray', dashOf)
         .attr('cursor', 'pointer')
         .on('mouseover', function (e, d) {
-          d3.select(this).attr('stroke', '#facc15').attr('stroke-width', 2).attr('stroke-dasharray', null);
+          d3.select(this).attr('stroke', '#ffcd78').attr('stroke-width', 2).attr('stroke-dasharray', null).attr('filter', 'drop-shadow(0 0 1px rgba(255,250,230,.55)) drop-shadow(0 0 5px rgba(255,196,92,.85)) drop-shadow(0 0 12px rgba(255,165,50,.5)) drop-shadow(0 0 2px rgba(40,24,4,.4))');
           const ic = document.getElementById('ic');
           if (ic) ic.innerHTML = plTownshipPanelHtml(d.properties.tc, cn, year);
         })
         .on('mouseleave', function (e, d) {
-          d3.select(this).attr('stroke', strokeOf(d)).attr('stroke-width', strokeWOf(d)).attr('stroke-dasharray', dashOf(d));
+          d3.select(this).attr('stroke', strokeOf(d)).attr('stroke-width', strokeWOf(d)).attr('stroke-dasharray', dashOf(d)).attr('filter', null);
         })
         .on('click', function (e, d) { _addPLVillageLayer(cn, year, d.properties.tc); });
       if (typeof fitFeats === 'function') fitFeats(feats);
@@ -348627,12 +348627,12 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
         .attr('stroke-width', 0.22)
         .attr('cursor', 'pointer')
         .on('mouseover', function (e, d) {
-          d3.select(this).attr('stroke', '#facc15').attr('stroke-width', 1.5);
+          d3.select(this).attr('stroke', '#ffcd78').attr('stroke-width', 1.5).attr('filter', 'drop-shadow(0 0 1px rgba(255,250,230,.55)) drop-shadow(0 0 5px rgba(255,196,92,.85)) drop-shadow(0 0 12px rgba(255,165,50,.5)) drop-shadow(0 0 2px rgba(40,24,4,.4))');
           const ic = document.getElementById('ic');
           if (ic) ic.innerHTML = plVillagePanelHtml(d.properties.vc, cn, year);
         })
         .on('mouseleave', function () {
-          d3.select(this).attr('stroke', 'rgba(255,255,255,.35)').attr('stroke-width', 0.22);
+          d3.select(this).attr('stroke', 'rgba(255,255,255,.35)').attr('stroke-width', 0.22).attr('filter', null);
         });
       if (typeof fitFeats === 'function') fitFeats(feats);
       const tcLabel = tcFilter ? (NM.t[tcFilter] || tcFilter) : null;
@@ -362919,14 +362919,14 @@ function _addMayorLayer() {
     .on('mouseover', function(e, d) {
       const cc = _normCCKey(d.properties.cc);
       gBase.selectAll('.ft-mayor-border').attr('stroke', function() { return 'rgba(255,255,255,.18)'; });
-      d3.select(this).attr('stroke', '#facc15').attr('stroke-width', '2.5');
+      d3.select(this).attr('stroke', '#ffcd78').attr('stroke-width', '2.5').attr('filter', 'drop-shadow(0 0 1px rgba(255,250,230,.55)) drop-shadow(0 0 5px rgba(255,196,92,.85)) drop-shadow(0 0 12px rgba(255,165,50,.5)) drop-shadow(0 0 2px rgba(40,24,4,.4))');
       drawCountyHemiForED(cc);
       if (typeof _councilSetCountyDim === 'function') _councilSetCountyDim(cc);
       const ic = document.getElementById('ic');
       if (ic) ic.innerHTML = _mayorPanelHtml(cc);
     })
     .on('mouseleave', function(e, d) {
-      d3.select(this).attr('stroke', 'none');
+      d3.select(this).attr('stroke', 'none').attr('filter', null);
       if (typeof _councilClearCountyDim === 'function') _councilClearCountyDim();
     })
     .on('click', function(e, d) {
