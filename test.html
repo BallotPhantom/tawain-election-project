@@ -343768,10 +343768,6 @@ const TC_2016 = {"南投縣第1選舉區__10008030":{"wp":"dpp","wn":"張國鑫"
         </select>
       </div>
       <div style="display:flex;align-items:stretch;border-radius:6px;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15)">
-        <button class="btn" id="btn-baselean" onclick="setMode('baselean')"
-          style="flex:1;border:none;background:transparent;border-radius:0"><span data-zh="政黨基本盤" data-en="Party Base">政黨基本盤</span></button>
-      </div>
-      <div style="display:flex;align-items:stretch;border-radius:6px;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15)">
         <button class="btn" id="btn-third-jump" onclick="toggleKeyMinorityJump()"
           style="flex:1;border:none;background:transparent;border-radius:0"><span data-zh="關鍵少數" data-en="Key Minority">關鍵少數</span></button>
       </div>
@@ -349068,8 +349064,8 @@ const PRES_TURNOUT_NATIONAL = {"2008": {"elig": 17321622, "turnout": 13221609, "
       // 只要走到這裡，不管是真無黨籍(backed==='ind')、還是有登記但沒被追蹤史料的小黨(勞動黨lp/民國黨
       // mkt/喜樂島聯盟fa這種)，都一律算「其他政黨」，不能落到「第三勢力」(你的要求：只有tpp/npp/tsr/
       // tsu/spgp/gp這6個真的有基本盤史料可查的才叫第三勢力，其餘通通是其他政黨，跟無黨籍同一個桶，
-      // 因為兩者都一樣沒有可查的鐵/中/淺史料)。'third'這個campKey現在只會在_legPLSectionHtml(不分區
-      // 政黨票，跟候選人無關的純政黨票分析)裡出現，候選人這邊不會再回傳'third'。
+      // 因為兩者都一樣沒有可查的鐵/中/淺史料)。'third'這個campKey是不分區政黨票分析專用的分類
+      // （純政黨票，跟候選人無關），候選人這邊不會再回傳'third'。
       return 'other';
       return 'third';
     }
@@ -349128,55 +349124,6 @@ const PRES_TURNOUT_NATIONAL = {"2008": {"elig": 17321622, "turnout": 13221609, "
         <div class="bpct" style="${pctColor?`color:${pctColor};font-weight:700`:''}" title="${T('候選人真實得票佔陣營政黨基本盤理論上限(選舉人數校正版)的催出率','Candidate\'s real votes as % of camp theoretical ceiling (eligible-voter-corrected)')}">${capturedPct.toFixed(1)}%</div>
         <div class="bvote">${T('約','~')}${Math.round(total).toLocaleString()}${T('（理論上限）',' (theoretical max)')}</div>
       </div>`;
-    }
-    // 「不分區立委分析」section：這個範圍內(選區/鄉鎮/村里，不是整個縣市)2024不分區政黨票加總，
-    // 比對政黨基本盤(選舉人數校正版)——geoKey直接吃呼叫端算好的範圍key，ED層傳_legEdGeoKey(ed)
-    // (選區村里清單或單一選區縣市的縣市名)，TC/VC層可以直接傳tc/vc代碼(baseLean5PartySegmentsElig/
-    // _base5PLAggrFor/_legisEligFor本來就原生支援8碼鄉鎮碼/11碼村里碼查表，不需要再另外組村里清單)，
-    // 不用像ED層那樣特別處理——這個function本身不用知道自己是哪個層級，只管geoKey怎麼查表（你的
-    // 要求：鄉鎮市區/村里也要有這兩個section）。
-    function _legPLSectionHtml(geoKey) {
-      const aggr = _base5PLAggrFor(geoKey, 2024);
-      if (!aggr || !aggr.t) return `<div style="color:#bbb;font-size:11px;padding:8px 0">${T('本選區無2024不分區政黨票資料','No 2024 party-list data for this district')}</div>`;
-      const denom = aggr.t;
-      // third(小小黨，有登記但沒被BASE5_MAIN_PARTIES追蹤)、other(其他游離殘值)分兩列——不分區政黨票
-      // 本身就是投給「政黨」的票，沒有無黨籍選項，other這條殘值代表的是「所有沒被8個追蹤政黨算到的
-      // 政黨票」，跟third(有追蹤鐵/中/淺的6個小黨:tpp/npp/tsr/tsu/spgp/gp)是兩個不同的資料桶，
-      // 跟區域立委那邊third/other分兩條bar的邏輯一致，不能合成一條。
-      const rows = ['dpp', 'kmt', 'third', 'other'].map(campKey => {
-        let realVotes;
-        if (campKey === 'other') {
-          const known = BASE5_MAIN_PARTIES.reduce((s, p) => s + (aggr[p] || 0), 0);
-          realVotes = Math.max(0, aggr.t - known);
-        } else {
-          const parties = campKey === 'dpp' ? ['dpp'] : campKey === 'kmt' ? ['kmt'] : BASE5_CAMPS_3.third.parties;
-          realVotes = parties.reduce((s, p) => s + (aggr[p] || 0), 0);
-        }
-        const pct = denom > 0 ? realVotes / denom * 100 : 0;
-        const label = _legCandCampLabel(campKey);
-        const color = campKey === 'other' ? '#888888' : BASE5_CAMPS_3[campKey].color;
-        const realRow = `<div class="bar-row"><div class="blb" style="border-right:none">${T(label[0],label[1])}</div><div class="bbg"><div class="bfill" style="width:${Math.max(pct,0).toFixed(1)}%;background:${color}"></div></div><div class="bpct">${pct.toFixed(1)}%</div><div class="bvote">${Math.round(realVotes).toLocaleString()}</div></div>`;
-        return realRow + _legCandCampBarHtml(campKey, geoKey, denom, realVotes, null);
-      }).join('');
-      return `<div style="font-size:9px;color:rgba(255,255,255,0.4);margin-bottom:6px">${T('本選區範圍內2024不分區政黨票加總，對比政黨基本盤理論上限(選舉人數校正版)','2024 party-list votes summed within this district only, vs. camp theoretical ceiling (eligible-voter-corrected)')}</div>` + rows;
-    }
-    // 「區域立委分析」/「不分區立委分析」分頁切換——ED/TC/VC三層都有這兩個section(你的要求)，
-    // 狀態要跨重繪保留(滑鼠移到同一層級內不同地方、或切換層級都會觸發panel重繪，不能每次都跳回
-    // 預設分頁)，所以開在panel函式外層當模組層級變數，不是每次重繪都重新宣告——三層共用同一個
-    // tab狀態(切一次，ED/TC/VC都跟著換，不是各自獨立記憶)，比較符合「我在看區域候選人分析」這種
-    // 連續瀏覽情境的直覺。重繪用#ic.dataset.kind('ed'/'tc'/'vc')判斷目前停在哪一層，呼叫對應的
-    // panel函式，不是寫死呼叫showEDPanel。
-    let _legTab = 'district';
-    window.setLegTab = function (tab) {
-      _legTab = tab;
-      const kind = document.getElementById('ic')?.dataset.kind;
-      if (kind === 'ed' && typeof curEDPanel !== 'undefined' && curEDPanel) showEDPanel(curEDPanel);
-      else if (kind === 'tc' && typeof curTCPanel !== 'undefined' && curTCPanel) showTCPanel(curTCPanel, curTCPanel.split('__')[1]);
-      else if (kind === 'vc' && typeof curVC !== 'undefined' && curVC) showVCPanel(curVC);
-    };
-    function _legTabBarHtml() {
-      const tabBtn = (tab, zh, en) => `<button class="btn${_legTab === tab ? ' active' : ''}" onclick="setLegTab('${tab}')" style="flex:1;font-size:10px;padding:4px 6px;border-radius:4px">${T(zh, en)}</button>`;
-      return `<div style="display:flex;gap:4px;margin-bottom:6px">${tabBtn('district', '區域立委分析', 'District Legislator')}${tabBtn('pl', '不分區立委分析', 'Party-List Legislator')}</div>`;
     }
     // council.html的面板是hover/click當下即時算的HTML，不像地圖顏色寫死在SVG path上，切換
     // 這個flag後下次hover同一個地方就會自動套用新版，不用強制重畫整層——但test.html的政黨
@@ -357627,6 +357574,13 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
               const sorted = s20.cands.slice().sort((a, b) => b.pct - a.pct);
               const major = [], minor = [];
               sorted.forEach(c => { const d2 = getCandidateDisplay(c.n, c.p, c.pct, 2020); if (d2.code === 'other_small' || (!isMajorParty(d2.code, 2020) && c.pct < 10)) minor.push({ ...c, disp: d2 }); else major.push({ ...c, disp: d2 }); });
+              // 政黨基本盤理論上限比對（2026-09-05使用者要求擴充到2016/2020，原本只有2024有）：
+              // 用同一套_legCandCampBarHtml/_legEdGeoKey/_legCandCampExclude，geoKey查表本來就是
+              // 依縣市/村里代碼(不分年份)，候選人政黨分類改吃這裡已經算好的disp.code(getCandidateDisplay
+              // 本來就有把yr=2020傳進去，比_legCandCampKey內部寫死2024的resolveThirdForceBacked更準)
+              const _isWinnerMode20 = (mode === 'winner');
+              const _legCounty20 = _isWinnerMode20 ? _legEdGeoKey(ed) : null;
+              const _legExcludeParties20 = _isWinnerMode20 ? _legCandCampExclude(major.concat(minor).map(m => ({ n: m.n, p: m.p, code: m.disp.code })), ed) : null;
               const renderRow = c => {
                 const _pct = (typeof c.pct === 'number') ? c.pct : ((s20.tot > 0) ? (c.v / s20.tot * 100) : 0);
                 const _v = (typeof c.v === 'number') ? c.v : 0;
@@ -357637,7 +357591,9 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
                 const check = (isWinnerMode && isElected) ? '<span style="color:#2ebd59;font-weight:bold;margin-right:2px">&#10004;</span>' : '';
                 const op = isWinnerMode ? (isElected ? '1' : '0.4') : '1';
                 const termBadge = _legTermBadgeSlot(ed, c.n, isElected, isWinnerMode, '2020');
-                return `<div class="bar-row"><div class="blb" style="border-right:none;${ns}" title="${translateCandidate(c.n)}（${c.disp.label}）">${check}${translateCandidate(c.n)}</div>${termBadge}${ico}<div class="bbg"><div class="bfill" style="width:${_pct.toFixed(1)}%;background:${c.disp.color};opacity:${op}"></div></div><div class="bpct" style="${ns}">${_pct.toFixed(1)}%</div>${getPrevPartyNote(c.n,2020,c.disp.code)}<div class="bvote" style="${ns}">${_v.toLocaleString()}</div></div>`;
+                let row = `<div class="bar-row"><div class="blb" style="border-right:none;${ns}" title="${translateCandidate(c.n)}（${c.disp.label}）">${check}${translateCandidate(c.n)}</div>${termBadge}${ico}<div class="bbg"><div class="bfill" style="width:${_pct.toFixed(1)}%;background:${c.disp.color};opacity:${op}"></div></div><div class="bpct" style="${ns}">${_pct.toFixed(1)}%</div>${getPrevPartyNote(c.n,2020,c.disp.code)}<div class="bvote" style="${ns}">${_v.toLocaleString()}</div></div>`;
+                if (_isWinnerMode20) row += _legCandCampBarHtml(_legCandCampKey({ n: c.n, p: c.p, code: c.disp.code }, ed), _legCounty20, s20.tot, _v, _legExcludeParties20);
+                return row;
               };
               let html = major.map(renderRow).join('');
               if (minor.length === 1) { html += renderRow(minor[0]); }
@@ -357710,6 +357666,14 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
                 if (d2.code === 'ind_notable' || d2.code === 'ind') d2 = { ...d2, code: 'ind', color: '#555' };
                 if (d2.code === 'other_small' || (!isMajorParty(d2.code, 2016) && _pct16 < 10)) minor.push({ ...c, disp: d2 }); else major.push({ ...c, disp: d2 });
               });
+              // 政黨基本盤理論上限比對（2026-09-05使用者要求擴充到2016/2020，原本只有2024有）：
+              // geoKey用_legEdGeoKey(ed)——傳現行(2024)選區名，單一選區縣市直接查county名(跟選區
+              // 重劃無關，2016照樣準)，多選區縣市才會用村里清單細分，這種情況下2016舊選區範圍如果
+              // 跟2024不同，理論上限會是「2024選區範圍」的量而非2016當年真實範圍，屬已知的近似值
+              // （跟這個檔案其他2016↔2020板塊移轉比較的既有限制一致，不是這裡才有的新問題）。
+              const _isWinnerMode16 = (mode === 'winner');
+              const _legCounty16 = _isWinnerMode16 ? _legEdGeoKey(ed) : null;
+              const _legExcludeParties16 = _isWinnerMode16 ? _legCandCampExclude(major.concat(minor).map(m => ({ n: m.n, p: m.p, code: m.disp.code })), ed) : null;
               const renderRow = c => {
                 const _pct = (typeof c.pct === 'number') ? c.pct : ((s16.tot > 0) ? (c.v / s16.tot * 100) : 0);
                 const _v = (typeof c.v === 'number') ? c.v : 0;
@@ -357720,7 +357684,9 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
                 const check = (isWinnerMode && isElected) ? '<span style="color:#2ebd59;font-weight:bold;margin-right:2px">&#10004;</span>' : '';
                 const op = isWinnerMode ? (isElected ? '1' : '0.4') : '1';
                 const termBadge = _legTermBadgeSlot(ed, c.n, isElected, isWinnerMode, '2016');
-                return `<div class="bar-row"><div class="blb" style="border-right:none;${ns}" title="${translateCandidate(c.n)}（${c.disp.label}）">${check}${translateCandidate(c.n)}</div>${termBadge}${ico}<div class="bbg"><div class="bfill" style="width:${_pct.toFixed(1)}%;background:${c.disp.color};opacity:${op}"></div></div><div class="bpct" style="${ns}">${_pct.toFixed(1)}%</div>${getPrevPartyNote(c.n,2016,c.disp.code)}<div class="bvote" style="${ns}">${_v.toLocaleString()}</div></div>`;
+                let row = `<div class="bar-row"><div class="blb" style="border-right:none;${ns}" title="${translateCandidate(c.n)}（${c.disp.label}）">${check}${translateCandidate(c.n)}</div>${termBadge}${ico}<div class="bbg"><div class="bfill" style="width:${_pct.toFixed(1)}%;background:${c.disp.color};opacity:${op}"></div></div><div class="bpct" style="${ns}">${_pct.toFixed(1)}%</div>${getPrevPartyNote(c.n,2016,c.disp.code)}<div class="bvote" style="${ns}">${_v.toLocaleString()}</div></div>`;
+                if (_isWinnerMode16) row += _legCandCampBarHtml(_legCandCampKey({ n: c.n, p: c.p, code: c.disp.code }, ed), _legCounty16, s16.tot, _v, _legExcludeParties16);
+                return row;
               };
               let html = major.map(renderRow).join('');
               if (minor.length === 1) { html += renderRow(minor[0]); }
@@ -358049,10 +358015,7 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
       // 這兩張被換過內容的卡片會一起被蓋住，鄉鎮市區分類/選區趨勢就完全看不到、沒有備援位置。
       // 改成直接把_edCompInner（鄉鎮市區分類+區域立委趨勢，本來就有算但沒被用到）放進#ic本體，
       // 拿掉「歷史開票」，這樣不管浮動卡片收合與否，這兩塊分析內容都固定看得到。
-      const _edCandSection = (mode === 'comp') ? _edCompInner
-        : isWinner
-          ? (_legTabBarHtml() + (_legTab === 'pl' ? _legPLSectionHtml(_legEdGeoKey(ed)) : _edCandBars))
-          : _edCandBars;
+      const _edCandSection = (mode === 'comp') ? _edCompInner : _edCandBars;
       document.getElementById('ic').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="t1">${translateED(ed)}</div></div>${_edHeaderRight}</div>` + winBadge(s, s.wpct) + (_edTurnout ? `<div style="display:flex;justify-content:flex-start;margin-top:2px">${_edTurnout}</div>` : '') + pviBlock
         + (_hist24inner ? _hist24inner + SEC_DIVIDER : '') + _edCandSection
         + `<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1.5px solid rgba(255,255,255,0.16);align-items:center">`
@@ -358482,7 +358445,7 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
       const _tcIsThirdPR = (mode === 'third' && thirdSubMode === 'pr');
       const _tcHideWinBadge = _tcIsThirdPR || mode === 'sim';
       document.getElementById('ic').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="t1">${translateTownship(tn)}</div><div class="t2">${translateED(s.ed)}</div></div>${_tcPviBadge}</div>` + (_tcHideWinBadge ? '' : winBadge(s, s.wpct, true)) + (_tc24Turnout ? `<div style="display:flex;justify-content:flex-start;margin-top:2px">${_tc24Turnout}</div>` : '') + tcPviBlock
-        + (mode === 'comp' ? _tcCompInner : ((mode === 'third' && thirdSubMode === 'pr') ? _tcThirdPRInner : (mode === 'third' ? _tcThirdKeyInner : mode === 'sim' ? '' : _tcThirdKeyInner + _tcHistBox + SEC_DIVIDER + (mode === 'winner' ? (_legTabBarHtml() + (_legTab === 'pl' ? _legPLSectionHtml(tc) : _tc24CandFull)) : _tc24CandFull))))
+        + (mode === 'comp' ? _tcCompInner : ((mode === 'third' && thirdSubMode === 'pr') ? _tcThirdPRInner : (mode === 'third' ? _tcThirdKeyInner : mode === 'sim' ? '' : _tcThirdKeyInner + _tcHistBox + SEC_DIVIDER + _tc24CandFull)))
         + `<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1.5px solid rgba(255,255,255,0.16);align-items:center">`
         + `<div class="hint" style="flex:1;text-align:center;margin-top:0;padding-top:0;border-top:none">${T("點擊進入村里層","Enter village layer")} ▶</div>`
         + `<button class="btn" style="flex:1;font-size:10px;padding:4px 4px;background:rgba(27,158,75,0.18);color:#4ade80;border:1px solid rgba(27,158,75,0.45);border-radius:4px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 6px rgba(74,222,128,0.4);cursor:pointer" onclick="goVillAll('${curED || s.ed}')"><span data-zh="⊞ 全選區村里" data-en="⊞ All Villages">${T("⊞ 全選區村里","⊞ All Villages")}</span></button>`
@@ -359095,7 +359058,7 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
                   return _prInner?boxedCollapseSection(T('不分區政黨票分析','PR Vote Analysis'),_prInner,'_pcr'):'';
                 })()
               : _vcThirdKeyInner))
-          : _vcHistBox24 + SEC_DIVIDER + (mode === 'winner' ? (_legTabBarHtml() + (_legTab === 'pl' ? _legPLSectionHtml(vc) : _vc24Full)) : _vc24Full))
+          : _vcHistBox24 + SEC_DIVIDER + _vc24Full)
         ;
       if (_caWas) { const _cb=document.getElementById('_ca'); if(_cb){_cb.style.display='block';_cb.previousElementSibling.firstChild.textContent='▼ ';} }
       if (_pcaWas) { const _cb=document.getElementById('_pca'); if(_cb){_cb.style.display='block';_cb.previousElementSibling.firstChild.textContent='▼ ';} }
