@@ -343753,6 +343753,10 @@ const TC_2016 = {"南投縣第1選舉區__10008030":{"wp":"dpp","wn":"張國鑫"
       <button class="btn" id="btn-third-jump" onclick="togglePRJump()"
         style="flex:1;border:none;background:transparent;border-radius:0"><span data-zh="第三勢力黨派投票指數" data-en="Third Force PVI">第三勢力黨派投票指數</span></button>
     </div>
+    <div style="display:flex;align-items:stretch;border-radius:6px;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15);margin-bottom:4px">
+      <button class="btn" id="btn-baselean" onclick="setMode('baselean')"
+        style="flex:1;border:none;background:transparent;border-radius:0"><span data-zh="政黨基本盤" data-en="Party Base">政黨基本盤</span></button>
+    </div>
     <div data-section="district" style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
       <div style="display:flex;align-items:stretch;border-radius:6px;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15)">
         <button class="btn" id="btn-comp" onclick="setMode('comp')"
@@ -343773,10 +343777,6 @@ const TC_2016 = {"南投縣第1選舉區__10008030":{"wp":"dpp","wn":"張國鑫"
           <option value="2p"><span data-zh="藍綠對決" data-en="Two-Party">藍綠對決</span></option>
           <option value="byelection"><span data-zh="補選模式" data-en="By-Election Mode">補選模式</span></option>
         </select>
-      </div>
-      <div style="display:flex;align-items:stretch;border-radius:6px;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15)">
-        <button class="btn" id="btn-baselean" onclick="setMode('baselean')"
-          style="flex:1;border:none;background:transparent;border-radius:0"><span data-zh="政黨基本盤" data-en="Party Base">政黨基本盤</span></button>
       </div>
     </div>
     <div class="sep"></div>
@@ -347401,6 +347401,12 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
       const trendSection = boxedCollapseSection(T('不分區得票演變（民進黨vs國民黨）', 'Party-list Trend (DPP vs KMT)'), histTripleBoxWrap(trendRows) + shiftHtml, 'pl-trend');
       const thirdForceSection = boxedCollapseSection(T('兩黨vs第三勢力（佔全部政黨票）', 'Two Major vs Third Force (share of all votes)'), histTripleBoxWrap(thirdForceRows), 'pl-thirdforce');
       const voteSection = boxedCollapseSection(T('開票結果', 'Vote Results'), rows, 'pl-votes');
+      // 政黨基本盤理論上限比對——原本是「區域立委分析」選區/鄉鎮/村里panel裡的「不分區立委分析」
+      // 分頁(_legPLSectionHtml)，2026-09-05使用者要求整個搬過來：縣市層級的不分區地圖本來就是
+      // 看整個縣市的政黨票，比對整個縣市的政黨基本盤理論上限才是同一個尺度，不用像原本那樣切分頁；
+      // _legPLSectionHtml/_legCandCampBarHtml/baseLean5PartySegmentsElig這些底層函式本來就是
+      // 依縣市名查表(county-keyed)，直接傳cn進去完全不用改——這裡是唯一改動，不用複製一份新邏輯
+      const ceilingSection = boxedCollapseSection(T('政黨基本盤理論上限比對', 'vs. Camp Theoretical Ceiling'), _legPLSectionHtml(cn), 'pl-ceiling');
       // 投票率/有效票率跟底部「點擊進入鄉鎮市區/全選區村里」這排，位置跟樣式都比照歷史勝選選區面板
       // （turnoutBadgeHtml就是歷史勝選在用的同一個函式），縣市/選區只是彙總範圍不同，UI慣例統一
       const turnout = countyTurnoutStats(cn, yr);
@@ -347408,7 +347414,7 @@ const SEC_DIVIDER = '<div style="margin:8px 0"></div>';
       const drillRow = `<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1.5px solid rgba(255,255,255,0.16);align-items:center">`
         + `<div class="hint" style="flex:1;text-align:center;margin-top:0;padding-top:0;border-top:none" onclick="_addPLTownshipLayer('${cn}','${yr}')">${T('點擊地圖進入鄉鎮市區','Click the map to enter townships')} ▶</div>`
         + `<button class="btn" style="flex:1;font-size:10px;padding:4px 6px;background:rgba(27,158,75,0.18);color:#4ade80;border:1px solid rgba(27,158,75,0.45);border-radius:4px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 6px rgba(74,222,128,0.4);cursor:pointer" onclick="_addPLVillageLayer('${cn}','${yr}')"><span data-zh="⊞ 全選區村里" data-en="⊞ All Villages">${T('⊞ 全選區村里','⊞ All Villages')}</span></button></div>`;
-      return `<div class="t1">${cn}</div><div class="t2">${_plYearLabel(yr)} ${T('不分區政黨票（依縣市加總）', 'Party-list Vote (by county)')}</div>${turnoutHtml}${SEC_DIVIDER}${trendSection}${thirdForceSection}${voteSection}${drillRow}`;
+      return `<div class="t1">${cn}</div><div class="t2">${_plYearLabel(yr)} ${T('不分區政黨票（依縣市加總）', 'Party-list Vote (by county)')}</div>${turnoutHtml}${SEC_DIVIDER}${trendSection}${thirdForceSection}${voteSection}${ceilingSection}${drillRow}`;
     }
     function _addPLCountyLayer(year) {
       if (typeof CD === 'undefined' || !CD.objects || !CD.objects.counties) return;

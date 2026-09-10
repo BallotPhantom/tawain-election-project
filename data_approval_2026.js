@@ -238,7 +238,11 @@ const PRESIDENT_APPROVAL_2025 = [
   // 美麗島國政民調)，問卷設計/分析仍是戴立安本人、執行單位仍是畢肯市場研究公司，方法論跟先前
   // PREMIER/PRESIDENT_APPROVAL裡「美麗島電子報」那些筆數是同一套人馬的延續，只是委託方/品牌名稱
   // 換了，不是兩個不相干的新民調——分開的pollster名稱純粹反映實際掛名者變化，供之後查證脈絡用。
-  { pollster: "台灣民心調查", sponsor: "台灣民心調查", date: "2026-08-19", period: "2026/8/19-21", approve_pct: 51.4, disapprove_pct: 42.3, undecided_pct: 6.3, sample_size: 1076, source_url: "https://www.businesstoday.com.tw/article/category/183027/post/202608250012/", note: "戴立安脫離美麗島電子報後首篇「台灣民心調查」，執行單位/問卷設計者不變（見上方說明）；同時段信任度49.9%/不信任39.5%，本檔案只收「施政滿意度」題" }
+  { pollster: "台灣民心調查", sponsor: "台灣民心調查", date: "2026-08-19", period: "2026/8/19-21", approve_pct: 51.4, disapprove_pct: 42.3, undecided_pct: 6.3, sample_size: 1076, source_url: "https://www.businesstoday.com.tw/article/category/183027/post/202608250012/", note: "戴立安脫離美麗島電子報後首篇「台灣民心調查」，執行單位/問卷設計者不變（見上方說明）；同時段信任度49.9%/不信任39.5%，本檔案只收「施政滿意度」題" },
+
+  // ---- 2026-09-10新增：美麗島電子報8/24-26、TVBS民調中心8/31-9/2 ----
+  { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-08-24", period: "2026/8/24-26", approve_pct: 46.4, disapprove_pct: 43.9, undecided_pct: 9.7, sample_size: 1632, source_url: "https://zh.wikipedia.org/wiki/對賴清德政府的民意調查", note: "undecided_pct為反推值（100-46.4-43.9）；資料來源為維基百科彙整頁面轉引，非該次報告原始連結，樣本數1632明顯大於本系列其他月份（約1075-1200），不確定是否為擴大樣本或不同題組，供之後查證" },
+  { pollster: "TVBS民調中心", sponsor: "TVBS", date: "2026-08-31", period: "2026/8/31-9/2", approve_pct: 39, disapprove_pct: 38, undecided_pct: 22, sample_size: 1127, source_url: "https://www.chinatimes.com/realtimenews/20260904003992-260407?chdtv", note: "與同機構5月調查相比，滿意度38%→39%持平，不滿意度45%→38%明顯下降，沒意見17%→22%上升，報導解讀為不滿意度下降主要轉為觀望而非轉為肯定；市話+手機雙底冊，95%信心水準抽樣誤差±2.9個百分點" }
 ];
 
 const PREMIER_APPROVAL_2025 = [
@@ -266,5 +270,8 @@ const PREMIER_APPROVAL_2025 = [
   { pollster: "美麗島電子報", premier_name: "卓榮泰", sponsor: "美麗島電子報", date: "2026-07-28", period: "2026/7/28-30", approve_pct: 40.2, disapprove_pct: 45.1, undecided_pct: 14.7, sample_size: 1200, source_url: "https://www.my-formosa.com.tw/DOC_227893.htm", note: "2026-08-19新增一筆前，本檔案蒐集範圍內最新一筆資料（報告發布於2026-08-04），樣本數1200為此系列中唯一擴大樣本的月份" },
 
   // ---- 2026-08-31新增：台灣民心調查（戴立安脫離美麗島電子報後的新品牌，見PRESIDENT_APPROVAL_2025同日期項目說明）----
-  { pollster: "台灣民心調查", premier_name: "卓榮泰", sponsor: "台灣民心調查", date: "2026-08-19", period: "2026/8/19-21", approve_pct: 43.2, disapprove_pct: 40.6, undecided_pct: 16.2, sample_size: 1076, source_url: "https://www.businesstoday.com.tw/article/category/183027/post/202608250012/", note: "戴立安脫離美麗島電子報後首篇「台灣民心調查」；本檔案查找期間找不到2026-08卓榮泰個人施政滿意度的獨立TPOF報告，這筆是唯一同期可用的來源" }
+  { pollster: "台灣民心調查", premier_name: "卓榮泰", sponsor: "台灣民心調查", date: "2026-08-19", period: "2026/8/19-21", approve_pct: 43.2, disapprove_pct: 40.6, undecided_pct: 16.2, sample_size: 1076, source_url: "https://www.businesstoday.com.tw/article/category/183027/post/202608250012/", note: "戴立安脫離美麗島電子報後首篇「台灣民心調查」；本檔案查找期間找不到2026-08卓榮泰個人施政滿意度的獨立TPOF報告，這筆是唯一同期可用的來源" },
+
+  // ---- 2026-09-10新增：TVBS民調中心8/31-9/2（與PRESIDENT_APPROVAL_2025同一篇報導同時公布） ----
+  { pollster: "TVBS民調中心", premier_name: "卓榮泰", sponsor: "TVBS", date: "2026-08-31", period: "2026/8/31-9/2", approve_pct: 37, disapprove_pct: 38, undecided_pct: 25, sample_size: 1127, source_url: "https://www.chinatimes.com/realtimenews/20260904003992-260407?chdtv", note: "與同機構同篇報導的總統滿意度調查同時段執行；沒意見比例上升至25%，報導指整體內閣施政表現仍未獲過半數民眾肯定" }
 ];
