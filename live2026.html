@@ -363009,13 +363009,18 @@ function _addMayorLayer() {
       .attr('pointer-events', 'none');
   }
 
-  // 查無民調縣市的灰色遮罩——蓋在底色上面的獨立半透明層，不動底色本身的hue/opacity
+  // 查無民調縣市的灰色遮罩——蓋在底色上面的獨立半透明層，不動底色本身的hue/opacity。
+  // 限定純預測模式(!isLiveTrack26)：即時開票時is2026Predict仍然是true(setLiveTrack2026Mode
+  // 會先呼叫setMayor2026PredictMode()再疊加isLiveTrack26旗標，兩者不是互斥的)，這層遮罩
+  // 概念只對應「查無2026民調」，開票夜看到的是真實票數，不該被這層遮罩蓋住
+  // （2026-09-10使用者抓到這個漏洞：一開始漏了這個排除條件，直接影響到開票網站）。
   gBase.selectAll('.ft-mayor-noprediction-veil').remove();
-  const _noPredFeats = cos.features.filter(d => {
+  const _isPredictOnly = !(typeof isLiveTrack26 !== 'undefined' && isLiveTrack26);
+  const _noPredFeats = _isPredictOnly ? cos.features.filter(d => {
     const cc = _normCCKey(d.properties.cc);
     const m = COUNCIL_MAYOR_2022[cc];
     return m && m.no_prediction;
-  });
+  }) : [];
   if (_noPredFeats.length) {
     gBase.selectAll('.ft-mayor-noprediction-veil')
       .data(_noPredFeats).join('path')
