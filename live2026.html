@@ -375354,6 +375354,11 @@ function setLiveTrack2026Mode(subMode) {
     setMayor2026PredictMode();
   }
   isLiveTrack26 = true;
+  // setMayor2026PredictMode()剛剛執行的當下isLiveTrack26還是舊值(通常是false)，_addMayorLayer()/
+  // _mayorGoTC()裡「查無民調縣市蓋灰紗」的判斷會誤判成一般預測模式而把遮罩加上去，等這裡把旗標
+  // 翻成true才發現已經晚了——跟下面_applyLive26Colors()註解講的是同一類時序問題。直接在這裡
+  // 補刪一次，不用等下次重繪才清掉（開票模式一開始就不該看到任何遮罩殘影）。
+  gBase.selectAll('.ft-mayor-noprediction-veil,.ft-mayor-tc-noprediction-veil').remove();
   window._live2026CurrentSub = subMode;
   // 縣市長：地圖染色換成即時讀到的領先方(白=尚無來源)。縣市議員：SNTV多席次選區沒有單一
   // 「領先方」可以染色，一律用跟白色(見_applyLiveTrack26CouncilColors註解)，不沿用2022舊結果
