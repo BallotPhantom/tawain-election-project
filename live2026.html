@@ -362975,20 +362975,23 @@ function _addMayorLayer() {
   const cos = topojson.feature(CD, CD.objects.counties);
   gBase.selectAll('.ft-mayor-fill,.ft-mayor-border').remove();
 
-  // no_prediction:true（南投縣/屏東縣/苗栗縣/連江縣——查無可信2026民調，只有歷史推估）
-  // 地圖上一律顯示中性灰，不畫出帶有政黨傾向的顏色，避免讓人誤以為歷史推估等同於有依據的預測
+  // no_prediction:true（南投縣/屏東縣/苗栗縣/連江縣——查無可信2026民調，只有歷史推估）：
+  // 2026-09-10使用者要求做出區分——不是完全不上色(那樣看不出來歷史推估本身的政黨傾向)，
+  // 也不是跟有真實民調的縣市同飽和度上色(那樣會誤導成「這是有依據的預測」)，底色改成一律
+  // 用winMarginFill正常上色，muted效果改用下面獨立的.ft-mayor-noprediction-veil半透明
+  // 灰色遮罩疊圖層做出來——不是調這裡的fill-opacity，因為.glow-core/.ft-popglow這兩層
+  // 本身是全國共用的鄉鎮級人口密度發光疊圖層，fill-opacity已經被popDensityScale佔用，
+  // 硬改會跟人口密度亮度打架。（跟council.html同一套做法，這裡是live2026.html自己的copy）
   gGlow.selectAll('.glow-core').attr('fill', d => {
     const cc = _tcCityKey(d.properties.tc);
     const m = COUNCIL_MAYOR_2022[cc];
     if (!m) return '#aaa';
-    if (m.no_prediction) return '#555a63';
     return winMarginFill(m.p, _mayorMargin(cc), COUNCIL_CLR[m.p] || '#aaa');
   });
   gBase.selectAll('.ft-popglow').attr('fill', d => {
     const cc = _tcCityKey(d.properties.tc);
     const m = COUNCIL_MAYOR_2022[cc];
     if (!m) return '#aaa';
-    if (m.no_prediction) return '#555a63';
     return winMarginFill(m.p, _mayorMargin(cc), COUNCIL_CLR[m.p] || '#aaa');
   });
 
@@ -363003,6 +363006,22 @@ function _addMayorLayer() {
       .attr('stroke', 'rgba(255,255,255,.18)')
       .attr('stroke-width', '1')
       .attr('vector-effect', 'non-scaling-stroke')
+      .attr('pointer-events', 'none');
+  }
+
+  // 查無民調縣市的灰色遮罩——蓋在底色上面的獨立半透明層，不動底色本身的hue/opacity
+  gBase.selectAll('.ft-mayor-noprediction-veil').remove();
+  const _noPredFeats = cos.features.filter(d => {
+    const cc = _normCCKey(d.properties.cc);
+    const m = COUNCIL_MAYOR_2022[cc];
+    return m && m.no_prediction;
+  });
+  if (_noPredFeats.length) {
+    gBase.selectAll('.ft-mayor-noprediction-veil')
+      .data(_noPredFeats).join('path')
+      .attr('class', 'ft ft-mayor-noprediction-veil')
+      .attr('d', pathFn)
+      .attr('fill', 'rgba(0,0,0,0.6)')
       .attr('pointer-events', 'none');
   }
 
@@ -363805,8 +363824,6 @@ function _mayorGoTC(cc) {
       if (councilHeatParty) return _mayorTcPartyHeatFill(d.properties.tc, councilHeatParty);
       const tm = MAYOR_2022_TC[d.properties.tc];
       if (!tm || !tm.tot) return '#aaa';
-      const _pcc = COUNCIL_MAYOR_2022[_tcCityKey(d.properties.tc)];
-      if (_pcc && _pcc.no_prediction) return '#555a63';
       const s = (tm.cands||[]).slice().sort((a,b)=>b.v-a.v);
       const margin = s.length>=2 ? (s[0].v - s[1].v)/tm.tot : 0;
       return winMarginFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
@@ -363827,6 +363844,22 @@ function _mayorGoTC(cc) {
       curTC = d.properties.tc;
       goVill(curTC, cc);
     });
+  // 查無民調縣市鑽進鄉鎮層時同樣蒙灰紗——跟縣市層.ft-mayor-noprediction-veil同一套做法。
+  // 限定is2026Predict(不含isLiveTrack26)：即時開票模式的顏色來自真實開票數字，no_prediction
+  // 這個「查無2026民調」的概念在那個情境下不適用，不能照樣蓋遮罩
+  gBase.selectAll('.ft-mayor-tc-noprediction-veil').remove();
+  {
+    const _pcc = COUNCIL_MAYOR_2022[cc];
+    const _isPredict = typeof is2026Predict !== 'undefined' && is2026Predict && !(typeof isLiveTrack26 !== 'undefined' && isLiveTrack26);
+    if (_isPredict && _pcc && _pcc.no_prediction) {
+      gBase.selectAll('.ft-mayor-tc-noprediction-veil')
+        .data(feats).join('path')
+        .attr('class', 'ft ft-mayor-tc-noprediction-veil')
+        .attr('d', pathFn)
+        .attr('fill', 'rgba(0,0,0,0.6)')
+        .attr('pointer-events', 'none');
+    }
+  }
   gBase.selectAll('.ft-tc-border').data(feats).join('path')
     .attr('class', 'ft-tc-border').attr('d', pathFn)
     .attr('fill', 'none').attr('stroke', 'rgba(0,0,0,0.28)').attr('stroke-width', 1.0)
