@@ -362848,13 +362848,6 @@ function _addMayorLayer() {
   const cos = topojson.feature(CD, CD.objects.counties);
   gBase.selectAll('.ft-mayor-fill,.ft-mayor-border').remove();
 
-  // no_prediction:true（南投縣/屏東縣/苗栗縣/連江縣——查無可信2026民調，只有歷史推估）：
-  // 2026-09-10使用者要求做出區分——不是完全不上色(那樣看不出來歷史推估本身的政黨傾向)，
-  // 也不是跟有真實民調的縣市同飽和度上色(那樣會誤導成「這是有依據的預測」)，底色改成一律
-  // 用winMarginFill正常上色，muted效果改用下面獨立的.ft-mayor-noprediction-veil半透明
-  // 灰色遮罩疊圖層做出來——不是調這裡的fill-opacity，因為.glow-core/.ft-popglow這兩層
-  // 本身是全國共用的鄉鎮級人口密度發光疊圖層，fill-opacity已經被popDensityScale佔用，
-  // 硬改會跟人口密度亮度打架（實測過，同一個縣市裡每個鄉鎮數值都不一樣，就是這個原因）。
   gGlow.selectAll('.glow-core').attr('fill', d => {
     const cc = _tcCityKey(d.properties.tc);
     const m = COUNCIL_MAYOR_2022[cc];
@@ -362879,25 +362872,6 @@ function _addMayorLayer() {
       .attr('stroke', 'rgba(255,255,255,.18)')
       .attr('stroke-width', '1')
       .attr('vector-effect', 'non-scaling-stroke')
-      .attr('pointer-events', 'none');
-  }
-
-  // 查無民調縣市的灰色遮罩——蓋在底色上面的獨立半透明層，不動底色本身的hue/opacity
-  // （你的要求：不要整片綠/藍，要有「蒙一層灰紗」的感覺，這樣旁邊有真民調的縣市才會
-  // 明顯亮/飽和很多，一眼看出兩種縣市的可信度不同）。深淺原本比照_councilSetCountyDim()
-  // 選縣市時那層黑色遮罩(0.45)，你覺得不夠明顯，加深到0.6。
-  gBase.selectAll('.ft-mayor-noprediction-veil').remove();
-  const _noPredFeats = cos.features.filter(d => {
-    const cc = _normCCKey(d.properties.cc);
-    const m = COUNCIL_MAYOR_2022[cc];
-    return m && m.no_prediction;
-  });
-  if (_noPredFeats.length) {
-    gBase.selectAll('.ft-mayor-noprediction-veil')
-      .data(_noPredFeats).join('path')
-      .attr('class', 'ft ft-mayor-noprediction-veil')
-      .attr('d', pathFn)
-      .attr('fill', 'rgba(0,0,0,0.6)')
       .attr('pointer-events', 'none');
   }
 
@@ -363475,20 +363449,6 @@ function _mayorGoTC(cc) {
       curTC = d.properties.tc;
       goVill(curTC, cc);
     });
-  // 查無民調縣市鑽進鄉鎮層時同樣蒙灰紗——跟縣市層.ft-mayor-noprediction-veil同一套做法/
-  // 同一個顏色深淺，不是縣市層才有、鑽進去就消失（2026-09-10使用者要求）
-  gBase.selectAll('.ft-mayor-tc-noprediction-veil').remove();
-  {
-    const _pcc = COUNCIL_MAYOR_2022[cc];
-    if (_pcc && _pcc.no_prediction) {
-      gBase.selectAll('.ft-mayor-tc-noprediction-veil')
-        .data(feats).join('path')
-        .attr('class', 'ft ft-mayor-tc-noprediction-veil')
-        .attr('d', pathFn)
-        .attr('fill', 'rgba(0,0,0,0.6)')
-        .attr('pointer-events', 'none');
-    }
-  }
   gBase.selectAll('.ft-tc-border').data(feats).join('path')
     .attr('class', 'ft-tc-border').attr('d', pathFn)
     .attr('fill', 'none').attr('stroke', 'rgba(0,0,0,0.28)').attr('stroke-width', 1.0)
@@ -363659,8 +363619,6 @@ function _mayorGoTCAllNational() {
     .attr('fill', d => {
       const tm = MAYOR_2022_TC[d.properties.tc];
       if (!tm || !tm.tot) return '#aaa';
-      const _pcc = COUNCIL_MAYOR_2022[_tcCityKey(d.properties.tc)];
-      if (_pcc && _pcc.no_prediction) return '#555a63';
       const s = (tm.cands||[]).slice().sort((a,b)=>b.v-a.v);
       const margin = s.length>=2 ? (s[0].v - s[1].v)/tm.tot : 0;
       return winMarginFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
@@ -365540,44 +365498,44 @@ const MAYOR_2026_PREDICT_TC = {
   '10009180':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5656,pct:56.56,tot:10000,elig:19445,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5656, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4344, "e": 0}]},
   '10009190':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6006,pct:60.06,tot:10000,elig:22664,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6006, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3994, "e": 0}]},
   '10009200':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5131,pct:51.31,tot:10000,elig:20643,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5131, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4869, "e": 0}]},
-  '64000010':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5957,pct:59.57,tot:10000,elig:19934,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5957, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4043, "e": 0}]},
-  '64000020':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5361,pct:53.61,tot:10000,elig:111871,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5361, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4639, "e": 0}]},
-  '64000030':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5113,pct:51.13,tot:10000,elig:158654,cands:[{"n": "柯志恩", "p": "kmt", "v": 5113, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4887, "e": 0}]},
-  '64000040':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5537,pct:55.37,tot:10000,elig:154114,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5537, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4463, "e": 0}]},
-  '64000050':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5724,pct:57.24,tot:10000,elig:276533,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5724, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4276, "e": 0}]},
-  '64000060':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5461,pct:54.61,tot:10000,elig:41422,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5461, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4539, "e": 0}]},
-  '64000070':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5472,pct:54.72,tot:10000,elig:23286,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5472, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4528, "e": 0}]},
-  '64000080':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5398,pct:53.98,tot:10000,elig:137800,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5398, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4602, "e": 0}]},
-  '64000090':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5770,pct:57.7,tot:10000,elig:153507,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5770, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4230, "e": 0}]},
-  '64000100':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6522,pct:65.22,tot:10000,elig:23220,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6522, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3478, "e": 0}]},
-  '64000110':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5906,pct:59.06,tot:10000,elig:128727,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5906, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4094, "e": 0}]},
-  '64000120':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5451,pct:54.51,tot:10000,elig:293753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5451, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4549, "e": 0}]},
-  '64000130':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6260,pct:62.6,tot:10000,elig:57490,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6260, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3740, "e": 0}]},
-  '64000140':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5877,pct:58.77,tot:10000,elig:95180,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5877, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4123, "e": 0}]},
-  '64000150':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6322,pct:63.22,tot:10000,elig:35263,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6322, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3678, "e": 0}]},
-  '64000160':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6352,pct:63.52,tot:10000,elig:29138,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6352, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3648, "e": 0}]},
-  '64000170':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6023,pct:60.23,tot:10000,elig:78670,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6023, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3977, "e": 0}]},
-  '64000180':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5754,pct:57.54,tot:10000,elig:38377,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5754, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4246, "e": 0}]},
-  '64000190':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5502,pct:55.02,tot:10000,elig:78470,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5502, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4498, "e": 0}]},
-  '64000200':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6452,pct:64.52,tot:10000,elig:34321,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6452, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3548, "e": 0}]},
-  '64000210':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5985,pct:59.85,tot:10000,elig:25168,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5985, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4015, "e": 0}]},
-  '64000220':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6245,pct:62.45,tot:10000,elig:6158,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6245, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3755, "e": 0}]},
-  '64000230':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6368,pct:63.68,tot:10000,elig:23423,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6368, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3632, "e": 0}]},
-  '64000240':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5764,pct:57.64,tot:10000,elig:41753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5764, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4236, "e": 0}]},
-  '64000250':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6050,pct:60.5,tot:10000,elig:25078,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6050, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3950, "e": 0}]},
-  '64000260':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6004,pct:60.04,tot:10000,elig:25362,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6004, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3996, "e": 0}]},
-  '64000270':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5912,pct:59.12,tot:10000,elig:11806,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5912, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4088, "e": 0}]},
-  '64000280':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5776,pct:57.76,tot:10000,elig:15775,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5776, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4224, "e": 0}]},
-  '64000290':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6342,pct:63.42,tot:10000,elig:30001,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6342, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3658, "e": 0}]},
-  '64000300':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5752,pct:57.52,tot:10000,elig:30037,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5752, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4248, "e": 0}]},
-  '64000310':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5286,pct:52.86,tot:10000,elig:33223,cands:[{"n": "柯志恩", "p": "kmt", "v": 5286, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4714, "e": 0}]},
-  '64000320':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5453,pct:54.53,tot:10000,elig:10564,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5453, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4547, "e": 0}]},
-  '64000330':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5238,pct:52.38,tot:10000,elig:5075,cands:[{"n": "柯志恩", "p": "kmt", "v": 5238, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4762, "e": 0}]},
-  '64000340':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5223,pct:52.23,tot:10000,elig:9889,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5223, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4777, "e": 0}]},
-  '64000350':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5587,pct:55.87,tot:10000,elig:12162,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5587, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4413, "e": 0}]},
-  '64000360':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6385,pct:63.85,tot:10000,elig:1594,cands:[{"n": "柯志恩", "p": "kmt", "v": 6385, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3615, "e": 0}]},
-  '64000370':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6576,pct:65.76,tot:10000,elig:3404,cands:[{"n": "柯志恩", "p": "kmt", "v": 6576, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3424, "e": 0}]},
-  '64000380':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6037,pct:60.37,tot:10000,elig:2421,cands:[{"n": "柯志恩", "p": "kmt", "v": 6037, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3963, "e": 0}]},
+  '64000010':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5911,pct:59.11,tot:10000,elig:19934,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5911, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4089, "e": 0}]},
+  '64000020':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5315,pct:53.15,tot:10000,elig:111871,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5315, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4685, "e": 0}]},
+  '64000030':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5159,pct:51.59,tot:10000,elig:158654,cands:[{"n": "柯志恩", "p": "kmt", "v": 5159, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4841, "e": 0}]},
+  '64000040':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5491,pct:54.91,tot:10000,elig:154114,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5491, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4509, "e": 0}]},
+  '64000050':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5678,pct:56.78,tot:10000,elig:276533,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5678, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4322, "e": 0}]},
+  '64000060':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5415,pct:54.15,tot:10000,elig:41422,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5415, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4585, "e": 0}]},
+  '64000070':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5426,pct:54.26,tot:10000,elig:23286,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5426, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4574, "e": 0}]},
+  '64000080':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5352,pct:53.52,tot:10000,elig:137800,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5352, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4648, "e": 0}]},
+  '64000090':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5724,pct:57.24,tot:10000,elig:153507,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5724, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4276, "e": 0}]},
+  '64000100':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6476,pct:64.76,tot:10000,elig:23220,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6476, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3524, "e": 0}]},
+  '64000110':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5860,pct:58.6,tot:10000,elig:128727,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5860, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4140, "e": 0}]},
+  '64000120':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5405,pct:54.05,tot:10000,elig:293753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5405, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4595, "e": 0}]},
+  '64000130':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6214,pct:62.14,tot:10000,elig:57490,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6214, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3786, "e": 0}]},
+  '64000140':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5831,pct:58.31,tot:10000,elig:95180,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5831, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4169, "e": 0}]},
+  '64000150':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6276,pct:62.76,tot:10000,elig:35263,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6276, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3724, "e": 0}]},
+  '64000160':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6306,pct:63.06,tot:10000,elig:29138,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6306, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3694, "e": 0}]},
+  '64000170':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5977,pct:59.77,tot:10000,elig:78670,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5977, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4023, "e": 0}]},
+  '64000180':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5708,pct:57.08,tot:10000,elig:38377,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5708, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4292, "e": 0}]},
+  '64000190':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5456,pct:54.56,tot:10000,elig:78470,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5456, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4544, "e": 0}]},
+  '64000200':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6406,pct:64.06,tot:10000,elig:34321,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6406, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3594, "e": 0}]},
+  '64000210':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5939,pct:59.39,tot:10000,elig:25168,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5939, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4061, "e": 0}]},
+  '64000220':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6199,pct:61.99,tot:10000,elig:6158,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6199, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3801, "e": 0}]},
+  '64000230':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6322,pct:63.22,tot:10000,elig:23423,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6322, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3678, "e": 0}]},
+  '64000240':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5718,pct:57.18,tot:10000,elig:41753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5718, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4282, "e": 0}]},
+  '64000250':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6004,pct:60.04,tot:10000,elig:25078,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6004, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3996, "e": 0}]},
+  '64000260':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5958,pct:59.58,tot:10000,elig:25362,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5958, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4042, "e": 0}]},
+  '64000270':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5866,pct:58.66,tot:10000,elig:11806,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5866, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4134, "e": 0}]},
+  '64000280':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5730,pct:57.3,tot:10000,elig:15775,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5730, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4270, "e": 0}]},
+  '64000290':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6296,pct:62.96,tot:10000,elig:30001,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6296, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3704, "e": 0}]},
+  '64000300':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5706,pct:57.06,tot:10000,elig:30037,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5706, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4294, "e": 0}]},
+  '64000310':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5332,pct:53.32,tot:10000,elig:33223,cands:[{"n": "柯志恩", "p": "kmt", "v": 5332, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4668, "e": 0}]},
+  '64000320':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5407,pct:54.07,tot:10000,elig:10564,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5407, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4593, "e": 0}]},
+  '64000330':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5284,pct:52.84,tot:10000,elig:5075,cands:[{"n": "柯志恩", "p": "kmt", "v": 5284, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4716, "e": 0}]},
+  '64000340':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5177,pct:51.77,tot:10000,elig:9889,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5177, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4823, "e": 0}]},
+  '64000350':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5541,pct:55.41,tot:10000,elig:12162,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5541, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4459, "e": 0}]},
+  '64000360':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6431,pct:64.31,tot:10000,elig:1594,cands:[{"n": "柯志恩", "p": "kmt", "v": 6431, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3569, "e": 0}]},
+  '64000370':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6622,pct:66.22,tot:10000,elig:3404,cands:[{"n": "柯志恩", "p": "kmt", "v": 6622, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3378, "e": 0}]},
+  '64000380':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6083,pct:60.83,tot:10000,elig:2421,cands:[{"n": "柯志恩", "p": "kmt", "v": 6083, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3917, "e": 0}]},
 };
 
 let MAYOR_2022_VILL = {
@@ -374531,8 +374489,6 @@ function togglePviHeat() {
         if (councilHeatParty) return _mayorTcPartyHeatFill(d.properties.tc, councilHeatParty);
         const tm = typeof MAYOR_2022_TC !== 'undefined' && MAYOR_2022_TC[d.properties.tc];
         if (!tm || !tm.tot) return '#aaa';
-        const _pcc = COUNCIL_MAYOR_2022[_tcCityKey(d.properties.tc)];
-        if (_pcc && _pcc.no_prediction) return '#555a63';
         const s = (tm.cands||[]).slice().sort((a,b)=>b.v-a.v);
         const margin = s.length>=2 ? (s[0].v-s[1].v)/tm.tot : 0;
         return winMarginFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
@@ -374577,8 +374533,6 @@ function setHeatParty(party) {
         if (councilHeatParty) return _mayorTcPartyHeatFill(d.properties.tc, councilHeatParty);
         const tm = typeof MAYOR_2022_TC !== 'undefined' && MAYOR_2022_TC[d.properties.tc];
         if (!tm || !tm.tot) return '#aaa';
-        const _pcc = COUNCIL_MAYOR_2022[_tcCityKey(d.properties.tc)];
-        if (_pcc && _pcc.no_prediction) return '#555a63';
         const s = (tm.cands||[]).slice().sort((a,b)=>b.v-a.v);
         const margin = s.length>=2 ? (s[0].v-s[1].v)/tm.tot : 0;
         return winMarginFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
