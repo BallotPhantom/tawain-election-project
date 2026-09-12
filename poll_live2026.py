@@ -133,6 +133,13 @@ CC_MAP = {
     '宜蘭縣': '10002', '金門縣': '09020', '連江縣': '09007', '彰化縣': '10007', '南投縣': '10008',
     '雲林縣': '10009', '嘉義縣': '10010', '屏東縣': '10013', '台東縣': '10014', '澎湖縣': '10016',
 }
+# 來源類型標記——2026-09-11使用者提供的背景資料：台灣開票報導有兩種本質不同的來源，文字/網路
+# 媒體(自由時報、聯合報、中央社、關鍵評論網等)幾乎全部只轉載中選會官方系統的數字，慢但準；電視台
+# (TVBS、三立、東森、民視、台視等)開票前段主要靠自己派工讀生「報票」，快但可能被等比例灌票/事後
+# 校正回歸。這個欄位純粹是說明來源類型，寫進data_live2026.js給前端顯示用，不影響任何抓取/驗證/
+# 計算邏輯。自由時報屬於前者('net')；FETCHERS之後如果真的加了電視台來源，記得標'tv'。
+LTN_SOURCE_LABEL = '自由時報(即時)'
+LTN_SOURCE_TYPE = 'net'
 LTN_SLUGS = {
     '台北市': 'Taipei', '新北市': 'NewTaipei', '桃園市': 'Taoyuan', '台中市': 'Taichung',
     '台南市': 'Tainan', '高雄市': 'Kaohsiung', '基隆市': 'Keelung', '新竹市': 'HsinchuCity',
@@ -270,7 +277,7 @@ def _parse_council_page(html, cc, council_seats, now_label):
             continue
         cands = _parse_cec_table(table)
         if cands:
-            out[dk] = {'cands': cands, 'source_label': '自由時報(即時)', 'ts': now_label}
+            out[dk] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label}
     return out
 
 
@@ -311,7 +318,7 @@ def fetch_ltn(tc_pool, council_seats, year=2026):
                 if county_table:
                     cands = _parse_cec_table(county_table)
                     if cands:
-                        cc_out[cc] = {'cands': cands, 'source_label': '自由時報(即時)', 'ts': now_label}
+                        cc_out[cc] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label}
             else:
                 print(f'  [ltn] {county} 找不到中選會開票結果區塊——網站結構可能變了，需要重新檢查', file=sys.stderr)
 
@@ -326,7 +333,7 @@ def fetch_ltn(tc_pool, council_seats, year=2026):
                     continue  # 名稱對不到，跳過這個鄉鎮，不影響其他鄉鎮/縣市層資料
                 cands = _parse_cec_table(dtable)
                 if cands:
-                    tc_out[tc] = {'cands': cands, 'source_label': '自由時報(即時)', 'ts': now_label}
+                    tc_out[tc] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label}
         except Exception as e:
             print(f'  [ltn] {county} 縣市長/鄉鎮層解析失敗(網站結構可能變了): {e}', file=sys.stderr)
 
@@ -395,7 +402,7 @@ def _merge_layer(varname, fresh, allow_all_zero, source_key='auto_poll'):
         accepted.append(key)
         entry = current.setdefault(key, {'sources': {}, 'final': False})
         entry['sources'][source_key] = {
-            'label': info['source_label'], 'ts': info['ts'],
+            'label': info['source_label'], 'type': info.get('source_type'), 'ts': info['ts'],
             'cands': [{'n': c['name'], 'v': c['votes']} for c in info['cands']],
             'elected': None,
         }
@@ -416,7 +423,8 @@ def _write_block(varname, data):
         for skey, s in entry['sources'].items():
             cand_str = ', '.join(f"{{ n: '{esc(c['n'])}', v: {c['v']} }}" for c in s['cands'])
             elected = f"'{esc(s['elected'])}'" if s.get('elected') else 'null'
-            src_strs.append(f"{skey}: {{ label: '{esc(s['label'])}', ts: '{esc(s['ts'])}', cands: [{cand_str}], elected: {elected} }}")
+            src_type = f"'{esc(s['type'])}'" if s.get('type') else 'null'
+            src_strs.append(f"{skey}: {{ label: '{esc(s['label'])}', type: {src_type}, ts: '{esc(s['ts'])}', cands: [{cand_str}], elected: {elected} }}")
         lines.append(f'  "{key}": {{ sources: {{ {", ".join(src_strs)} }}, final: {str(entry.get("final", False)).lower()} }},')
     lines[-1] = lines[-1].rstrip(',')
     lines.append('};')

@@ -363201,6 +363201,28 @@ function _liveTrack26NationalIntroHtml(subMode) {
 // 有沒有異常，同一個設計意圖見專案討論記錄。沒有這個代碼的即時資料時回傳空字串，面板照舊只顯示
 // 民調預測，不會多出一個空區塊。每個候選人數字下面另外附「跟base model對照」（該候選人在
 // MAYOR_2026_PREDICT/_TC裡的預測得票率，差距用▲/▼標示）——即時數字本身不取代預測，是拿來對照的。
+// 來源類型標籤——2026-09-11使用者提供的背景資料：文字/網路媒體(自由時報、聯合報、中央社、
+// 關鍵評論網等)幾乎全部只轉載中選會官方系統的數字，慢但準；電視台(TVBS、三立、東森、民視、
+// 台視等)開票前段主要靠自己派工讀生「報票」，快但可能被等比例灌票/事後校正回歸。優先讀
+// poll_live2026.py寫入的s.type('net'/'tv')；沒有這個欄位時(例如data_live2026_2022rehearsal.js.bak
+// 這種早於這個欄位存在的舊資料)退回用s.label文字比對台名，兩條路徑最後畫出同一種badge。
+const _LIVE26_SOURCE_TYPE_INFO = {
+  net: { txt: T('網路媒體・中選會系統', 'Web media · CEC official'), color: '#4ade80' },
+  tv: { txt: T('電視台・自行報票', 'TV station · self-reported tally'), color: '#fbbf24' },
+};
+function _live26SourceTypeBadge(s) {
+  let type = s.type;
+  if (!type) {
+    const netOutlets = ['自由時報', '聯合報', '中央社', '中央通訊社', '關鍵評論網'];
+    const tvOutlets = ['TVBS', '東森', '三立', '民視', '台視', '中視', '華視', '中天'];
+    const label = s.label || '';
+    if (netOutlets.some(o => label.includes(o))) type = 'net';
+    else if (tvOutlets.some(o => label.includes(o))) type = 'tv';
+  }
+  const info = type && _LIVE26_SOURCE_TYPE_INFO[type];
+  if (!info) return '';
+  return `<span style="margin-left:6px;padding:1px 5px;border-radius:3px;font-size:8.5px;background:${info.color}22;color:${info.color};border:1px solid ${info.color}55">${info.txt}</span>`;
+}
 function _liveTrack26Html(codeKey, table) {
   const entry = table && table[codeKey];
   if (!entry || !entry.sources) return '';
@@ -363284,7 +363306,7 @@ function _liveTrack26Html(codeKey, table) {
     // 使用者明確要求：TVBS一個匡、三立一個匡，各自獨立，才看得出來是「不同來源各自回報」而不是
     // 同一份資料的兩段文字
     return `<div style="border:1px solid rgba(220,38,38,0.35);border-radius:8px;padding:8px;margin-bottom:6px;background:rgba(220,38,38,0.06)">
-      <div style="font-size:9.5px;color:#fca5a5;margin-bottom:3px">${s.label} · ${s.ts}</div>
+      <div style="font-size:9.5px;color:#fca5a5;margin-bottom:3px">${s.label} · ${s.ts}${_live26SourceTypeBadge(s)}</div>
       ${rows}${turnoutHtml}
     </div>`;
   }).join('');
