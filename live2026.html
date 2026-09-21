@@ -362966,6 +362966,27 @@ function _applyLiveTrack26CouncilColors() {
   gGlow.selectAll('.glow-core').attr('fill', _LIVE26_NO_DATA_COLOR);
   gBase.selectAll('.ft-popglow').attr('fill', _LIVE26_NO_DATA_COLOR);
 }
+// 2026-09-21：原本試過flat灰/黃色蓋掉差距<5%的margin色，使用者後來改主意，要求跟consistency
+// 對齊——winMarginFill()本身的t = Math.max(0.05, (margin-0.05)/0.2)在margin<=5%時整段被鎖在
+// 下限t=0.05，等於0.1%差距(新竹縣)跟4.9%差距染出來是同一個顏色，看不出誰更接近五五波。這裡
+// 延伸同一套配色公式，把t直接等於margin本身(0~0.05區間)，margin=5%時t=0.05，跟winMarginFill()
+// 原本的下限值無縫銜接；margin越接近0，t越接近0，顏色越接近純白，不是切成另一個顏色，是同一條
+// 色階继续往下延伸。即時開票模式不受影響：_applyLiveTrack26MapColors()/.ft-tc開頭的
+// isLiveTrack26 guard會在這層之後(或之前)接手蓋掉，這裡不用額外排除。
+function _mc2026TossupFill(party, margin, realColor) {
+  // 原本讓t跟winMarginFill()的下限t=0.05在margin=5%處無縫銜接(線性或平方都試過)，實測後肉眼
+  // 看不出0.1%(新竹縣)跟3%(新北市)的差別——因為這樣算出來的混色比例(ratio)範圍只有0.05~0.2875，
+  // 對pastel色來說太窄，不管曲線形狀怎麼調都逃不出這個先天視覺差距上限。改成不跟主色階銜接、
+  // 自己獨立拉寬到0.05(margin=0，接近純白)~0.40(margin=5%，比主色階下限更飽和一些)，代價是
+  // margin剛好等於5%的地方跟主色階間會有一個小跳動——2026-09-21使用者選定接受這個取捨，換取
+  // toss-up範圍內部真的看得出濃淡差異。
+  const ratio = 0.05 + 0.35 * Math.min(1, margin / 0.05);
+  const hex = (realColor || '#aaa').replace('#', '');
+  const hex6 = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+  const r = parseInt(hex6.substring(0, 2), 16), g = parseInt(hex6.substring(2, 4), 16), b = parseInt(hex6.substring(4, 6), 16);
+  const mix = (c) => ~~(255 - (255 - c) * ratio);
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+}
 function _mayorMargin(cc) {
   const m = COUNCIL_MAYOR_2022[cc];
   if (!m || !m.cands || !m.tot) return 0;
@@ -362981,13 +363002,17 @@ function _addMayorLayer() {
     const cc = _tcCityKey(d.properties.tc);
     const m = COUNCIL_MAYOR_2022[cc];
     if (!m) return '#aaa';
-    return winMarginFill(m.p, _mayorMargin(cc), COUNCIL_CLR[m.p] || '#aaa');
+    const margin = _mayorMargin(cc);
+    if (typeof is2026Predict !== 'undefined' && is2026Predict && margin < 0.05) return _mc2026TossupFill(m.p, margin, COUNCIL_CLR[m.p] || '#aaa');
+    return winMarginFill(m.p, margin, COUNCIL_CLR[m.p] || '#aaa');
   });
   gBase.selectAll('.ft-popglow').attr('fill', d => {
     const cc = _tcCityKey(d.properties.tc);
     const m = COUNCIL_MAYOR_2022[cc];
     if (!m) return '#aaa';
-    return winMarginFill(m.p, _mayorMargin(cc), COUNCIL_CLR[m.p] || '#aaa');
+    const margin = _mayorMargin(cc);
+    if (typeof is2026Predict !== 'undefined' && is2026Predict && margin < 0.05) return _mc2026TossupFill(m.p, margin, COUNCIL_CLR[m.p] || '#aaa');
+    return winMarginFill(m.p, margin, COUNCIL_CLR[m.p] || '#aaa');
   });
 
   gBase.selectAll('.ft-mayor-border').remove();
@@ -363827,6 +363852,7 @@ function _mayorGoTC(cc) {
       if (!tm || !tm.tot) return '#aaa';
       const s = (tm.cands||[]).slice().sort((a,b)=>b.v-a.v);
       const margin = s.length>=2 ? (s[0].v - s[1].v)/tm.tot : 0;
+      if (typeof is2026Predict !== 'undefined' && is2026Predict && margin < 0.05) return _mc2026TossupFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
       return winMarginFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
     })
     .attr('fill-opacity', 1)
@@ -364027,6 +364053,7 @@ function _mayorGoTCAllNational() {
       if (!tm || !tm.tot) return '#aaa';
       const s = (tm.cands||[]).slice().sort((a,b)=>b.v-a.v);
       const margin = s.length>=2 ? (s[0].v - s[1].v)/tm.tot : 0;
+      if (typeof is2026Predict !== 'undefined' && is2026Predict && margin < 0.05) return _mc2026TossupFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
       return winMarginFill(tm.p, margin, COUNCIL_CLR[tm.p]||'#aaa');
     })
     .attr('stroke', 'rgba(0,0,0,0.12)').attr('stroke-width', 0.5).attr('vector-effect', 'non-scaling-stroke')
