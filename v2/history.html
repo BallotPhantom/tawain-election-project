@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Unified History (V2)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../style.css">
+<style>
+  /* V2-only shell styling. Does not modify style.css or any V1 file — this
+     block only styles elements that live inside this new page. */
+  #v2-nav {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    background: rgba(5, 5, 10, 0.7);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    position: relative;
+    z-index: 20;
+  }
+  #v2-home {
+    color: rgba(255,255,255,0.6); text-decoration: none; font-size: 12px; font-weight: 600; white-space: nowrap;
+    padding: 4px 10px; border: 1px solid rgba(255,255,255,0.12); border-radius: 7px;
+  }
+  #v2-home:hover { color: #fff; border-color: rgba(255,255,255,0.3); }
+  #v2-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.9);
+    white-space: nowrap;
+  }
+  #v2-title .v2-badge {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(168, 85, 247, 0.18);
+    border: 1px solid rgba(168, 85, 247, 0.45);
+    color: #d8b4fe;
+    vertical-align: middle;
+  }
+  .v2-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.02);
+  }
+  .v2-group-label {
+    font-size: 9.5px;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.05em;
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .v2-crumb-sep { color: rgba(255,255,255,0.25); font-size: 11px; }
+  .btn:disabled, .btn[disabled] {
+    opacity: 0.32 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+  }
+  #v2-status {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.45);
+    white-space: nowrap;
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #v2-status.warn { color: #fbbf24; }
+  #v2-frame-wrap { flex: 1; position: relative; }
+  /* Both engines are persistent, permanently-mounted iframes stacked exactly
+     on top of each other; only the active one is visible. visibility:hidden
+     (not display:none) is required here — display:none zeroes clientWidth/
+     clientHeight, which corrupts the hidden engine's D3 projection fitting
+     the moment it's shown again (confirmed via prototype: negative/degenerate
+     scale). visibility:hidden preserves a real layout box, so this never
+     happens, and it also natively drops pointer-event hit-testing on the
+     hidden iframe (pointer-events:none kept anyway, defensively). */
+  .v2-engine-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: #0b0d12;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .v2-engine-frame.v2-engine-active {
+    visibility: visible;
+    pointer-events: auto;
+  }
+  #v2-boot-veil {
+    position: absolute; inset: 0;
+    background: #0b0d12;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.5);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    z-index: 5;
+    transition: opacity 0.25s ease;
+  }
+  #v2-boot-veil.hidden { opacity: 0; pointer-events: none; }
+  a.v2-link {
+    font-size: 10.5px;
+    color: rgba(40,200,200,0.85);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  a.v2-link:hover { text-decoration: underline; }
+  /* zh / EN switch — same look as the other V2 pages (v2-shell.css .v2-lang) */
+  #v2-lang { margin-left: auto; display: inline-flex; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; overflow: hidden; }
+  #v2-lang button { font: inherit; font-size: 11.5px; font-weight: 600; color: #e7eaf0; background: transparent; border: 0; padding: 5px 10px; cursor: pointer; }
+  #v2-lang button[aria-pressed="true"] { background: rgba(40,200,200,.22); }
+  #v2-lang button:focus-visible { outline: 2px solid #28c8c8; outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+  <div id="v2-nav">
+    <a id="v2-home" href="index.html" data-zh="← 首頁" data-en="← Home">← 首頁</a>
+    <div id="v2-title"><span data-zh="歷屆選舉" data-en="Election History">歷屆選舉</span> <span class="v2-badge">V2</span></div>
+
+    <span class="v2-crumb-sep">/</span>
+
+    <div class="v2-group" id="v2-scope-group">
+      <span class="v2-group-label" data-zh="範圍" data-en="Scope">範圍</span>
+      <button class="btn active" data-scope="local" data-zh="地方" data-en="Local">地方</button>
+      <button class="btn" data-scope="national" data-zh="全國" data-en="National">全國</button>
+    </div>
+
+    <span class="v2-crumb-sep">/</span>
+
+    <div class="v2-group" id="v2-type-group">
+      <span class="v2-group-label" data-zh="選舉類型" data-en="Election">選舉類型</span>
+      <button class="btn active" data-type="mayor" data-type-scope="local" data-zh="縣市長" data-en="Mayor">縣市長</button>
+      <button class="btn" data-type="councilor" data-type-scope="local" data-zh="縣市議員" data-en="Councilor">縣市議員</button>
+      <button class="btn" data-type="township" data-type-scope="local" data-zh-title="鄉鎮市長＋直轄市山地原住民區長；直轄市、省轄市的一般區區長為官派，地圖畫成黑色底圖；點鄉鎮進入村里層" data-en-title="Township mayors + elected heads of the special-municipality indigenous districts; other district heads are appointed (drawn black); click a township for its villages" data-zh="鄉鎮市區長" data-en="Township Head">鄉鎮市區長</button>
+      <button class="btn" data-type="townrep" data-type-scope="local" data-zh-title="鄉鎮市民代表（含平地原住民代表、直轄市山地原住民區民代表）；全台是代表會色塊，點鄉鎮進入村里層；面板上方半圓圖是代表會席次" data-en-title="Township representatives (incl. lowland-indigenous and indigenous-district representatives); the map shows each council, click a township for its villages; the hemicycle shows the council's seats" data-zh="鄉鎮市民代表" data-en="Township Rep">鄉鎮市民代表</button>
+      <button class="btn" data-type="villchief" data-type-scope="local" data-zh-title="村長／里長；最底層，地圖直接是全台村里，不再往下點" data-en-title="Village / borough chiefs — the lowest level; the map shows every village nationwide" data-zh="村里長" data-en="Village Chief">村里長</button>
+      <button class="btn" data-type="legislative" data-type-scope="national" data-zh="立法委員" data-en="Legislators">立法委員</button>
+    </div>
+
+    <span class="v2-crumb-sep">/</span>
+
+    <div class="v2-group" id="v2-year-group">
+      <span class="v2-group-label" data-zh="年份" data-en="Year">年份</span>
+      <button class="btn" data-year="2014" data-year-scope="local">2014</button>
+      <button class="btn" data-year="2018" data-year-scope="local">2018</button>
+      <button class="btn active" data-year="2022" data-year-scope="local">2022</button>
+      <button class="btn" data-year="2008" data-year-scope="national">2008</button>
+      <button class="btn" data-year="2012" data-year-scope="national">2012</button>
+      <button class="btn" data-year="2016" data-year-scope="national" data-zh-title="區域選區：部分區域無完整資料會顯示灰色" data-en-title="Districts: some areas lack complete data and show grey">2016</button>
+      <button class="btn" data-year="2020" data-year-scope="national">2020</button>
+      <button class="btn" data-year="2024" data-year-scope="national">2024</button>
+    </div>
+
+    <span class="v2-crumb-sep" id="v2-submode-sep">/</span>
+
+    <div class="v2-group" id="v2-submode-group">
+      <span class="v2-group-label" data-zh="子模式" data-en="View">子模式</span>
+      <button class="btn active" data-submode="party" data-submode-scope="councilor" data-zh-title="政黨得票比例加總" data-en-title="Vote share summed by party" data-zh="政黨比例" data-en="By party">政黨比例</button>
+      <button class="btn" data-submode="candidate" data-submode-scope="councilor" data-zh-title="單一最高票候選人" data-en-title="The single top vote-getter" data-zh="最高候選人" data-en="Top candidate">最高候選人</button>
+      <button class="btn active" data-submode="geo" data-submode-scope="legislative" data-zh-title="區域立委選區地圖" data-en-title="Constituency map" data-zh="區域選區" data-en="Constituencies">區域選區</button>
+      <button class="btn" data-submode="ind-p" data-submode-scope="legislative" data-zh-title="平地原住民立委" data-en-title="Lowland indigenous legislators" data-zh="平地原住民" data-en="Lowland Indigenous">平地原住民</button>
+      <button class="btn" data-submode="ind-m" data-submode-scope="legislative" data-zh-title="山地原住民立委" data-en-title="Highland indigenous legislators" data-zh="山地原住民" data-en="Highland Indigenous">山地原住民</button>
+      <button class="btn" data-submode="pl" data-submode-scope="legislative" data-zh-title="不分區政黨票地圖" data-en-title="Party-list vote map" data-zh="不分區" data-en="Party list">不分區</button>
+    </div>
+
+    <a class="v2-link" id="v2-compare-link" href="../council.html" target="_blank" rel="noopener">↗ 對照原始 V1 (council.html)</a>
+
+    <div id="v2-status">初始化中…</div>
+
+    <div id="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+  </div>
+
+  <div id="v2-frame-wrap">
+    <div id="v2-boot-veil" data-zh="正在載入地圖引擎（資料量較大，請稍候）…" data-en="Loading the map engine (large data, please wait)…">正在載入 V1 地圖引擎（資料量較大，請稍候）…</div>
+    <!-- Both iframes start with no src: JS alone decides load order/timing
+         (Local first, National only after Local is usable) — see script. -->
+    <iframe id="v2-frame-local" class="v2-engine-frame" title="V1 map engine (Local / council.html), reused unmodified"></iframe>
+    <iframe id="v2-frame-national" class="v2-engine-frame" title="V1 map engine (National / test.html), reused unmodified"></iframe>
+  </div>
+
+<script src="i18n.js?v=20261029c"></script>
+<script src="navbar.js?v=20261030a"></script>
+<script src="disclaimer.js?v=20261031c"></script>
+<script src="toolbtns.js?v=20261031a"></script>
+<script src="legbars.js?v=20261027f"></script>
+<script src="noglow.js?v=20261029f"></script>
+<script src="data_legind.js?v=20261027a"></script>
+<script src="tcborder.js?v=20261029a"></script>
+<script src="history-legind.js?v=20261028g"></script>
+<script src="data_legdist.js?v=20261028d"></script>
+<script src="data_career.js?v=20261029a"></script>
+<script src="career.js?v=20261029a"></script>
+<script src="history-legdist.js?v=20261028o"></script>
+<script src="data_pl_national.js?v=20261028c"></script>
+<script src="history-plnat.js?v=20261028i"></script>
+<script src="data_township_head.js?v=20261026c"></script>
+<script src="data_township_head_vill.js?v=20261027b"></script>
+<script src="history-townhead.js?v=20261028u"></script>
+<script src="data_village_chief.js?v=20261027a"></script>
+<script src="history-villchief.js?v=20261027h"></script>
+<script src="data_township_rep.js?v=20261027a"></script>
+<script src="history-townrep.js?v=20261028u"></script>
+<script>
+(function () {
+  // Unified History V2 — pure navigation/orchestration shell.
+  // Renders NOTHING of its own. Local scope embeds council.html and drives it
+  // via setMayorMode / setCouncilElectionMode / setCouncilMode. National scope
+  // embeds test.html (council.html's own top-nav links there for Geographic
+  // District Legislator — its legislative engine is deliberately disabled
+  // in council.html itself, see 2026-08-16 comment on winner-year-select in
+  // council.html's source) and drives it via setMode / setWinnerYear /
+  // setIndLegMode. No V1 file is read, copied, or altered by this script.
+  //
+  // Persistent dual-engine architecture (2026-09-26): both V1 engines get
+  // their own permanent <iframe> and are never re-navigated after their first
+  // load. Local (council.html) loads immediately since it is V2's initial
+  // scope; National (test.html) is only requested AFTER Local's first view is
+  // fully usable, preloaded silently in the background, then kept resident
+  // forever. Scope switching after that is a CSS visibility toggle between
+  // the two already-loaded iframes — no reload, no state loss. Replaces the
+  // old single-iframe src-swap model (15-25s reload per Local<->National
+  // switch) — see CHANGELOG_v2.md's feasibility audit for the measurements
+  // and the display:none pitfall (corrupts D3 projection scale) that ruled
+  // out that hiding strategy in favor of visibility:hidden.
+  var ENGINE_SRC = { local: '../council.html', national: '../test.html' };
+
+  // ---- language (user 2026-10-29: 「歷屆頁要有中英文切換然後中英文切換應該要放在上方的常駐列跟index or v2一樣」) ----
+  // One zh / EN switch in the bar, the other V2 pages' look and storage (localStorage v2_lang). The bar labels carry
+  // data-zh / data-en (and data-zh-title / data-en-title); both engines get setLang(); V2's overlays read the engine's T().
+  var lang = 'zh';
+  try { var savedLang = localStorage.getItem('v2_lang'); if (savedLang === 'en' || savedLang === 'zh') lang = savedLang; } catch (e) {}
+  function T(zh, en) { return lang === 'en' ? en : zh; }
+  function applyLang() {
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-zh]'), function (el) { el.textContent = el.getAttribute('data-' + lang); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-zh-title]'), function (el) { el.title = el.getAttribute('data-' + lang + '-title'); });
+    Array.prototype.forEach.call(document.querySelectorAll('#v2-lang button'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === lang)); });
+  }
+  var statusEl = document.getElementById('v2-status');
+  var veil = document.getElementById('v2-boot-veil');
+  var titleEl = document.getElementById('v2-title');
+  var compareLink = document.getElementById('v2-compare-link');
+  var scopeBtns = Array.prototype.slice.call(document.querySelectorAll('#v2-scope-group [data-scope]'));
+  var typeBtns = Array.prototype.slice.call(document.querySelectorAll('#v2-type-group [data-type]'));
+  var typeBtnsAll = Array.prototype.slice.call(document.querySelectorAll('#v2-type-group .btn'));
+  var yearBtns = Array.prototype.slice.call(document.querySelectorAll('#v2-year-group [data-year]'));
+  var submodeGroup = document.getElementById('v2-submode-group');
+  var submodeSep = document.getElementById('v2-submode-sep');
+  // Selects by data-submode-scope, not data-submode, so it also picks up the
+  // disabled Party-List placeholder chip (which has no data-submode value
+  // since it isn't selectable yet).
+  var submodeBtns = Array.prototype.slice.call(document.querySelectorAll('#v2-submode-group [data-submode-scope]'));
+
+  var state = {
+    scope: 'local',
+    type: 'mayor',
+    localYear: '2022',
+    councilSubmode: 'party',
+    legYear: '2024',
+    legSubmode: 'geo'
+  };
+
+  // History is data-adaptive: each Legislative sub-mode has its own real V1
+  // year range, not a single shared range forced across all of them.
+  // Geographic District: winner-year-select's actual options (2016 is V1's
+  // own documented placeholder year — some regions render grey, kept as-is).
+  // Lowland/Highland Indigenous: IND_LEG_P/IND_LEG_M are flat, un-keyed-by-
+  // year objects in V1 — confirmed there is no 2016/2020 variant, only a
+  // 2024 roster (matching HIST_IND_SEATS_2016/2020 being seat-count-only).
+  // Party-List: setPLCountyMode's own plcounty-year-select options, minus
+  // 'sim' (推演) — that is scenario simulation, not a historical result, and
+  // belongs to a future Forecast/Simulation area, not History.
+  var LEG_YEARS_BY_SUBMODE = {
+    geo: ['2008', '2012', '2016', '2020', '2024'],   // 2008 / 2012: V2 on the 2016 district map (history-legdist.js)
+    'ind-p': ['2016', '2020', '2024'],   // V2 draws these from CEC files (history-legind.js); the engine only has 2024
+    'ind-m': ['2016', '2020', '2024'],
+    pl: ['2008', '2012', '2016', '2020', '2024'],
+    // (縣市席次點 seat dots removed 2026-10-27, user: 「把席次原點功能刪掉」; history-seatdots.js kept in backup/)
+  };
+
+  function setStatus(text, warn) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle('warn', !!warn);
+  }
+
+  function renderControls() {
+    scopeBtns.forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-scope') === state.scope);
+    });
+
+    typeBtnsAll.forEach(function (b) {
+      var show = b.getAttribute('data-type-scope') === state.scope;
+      b.style.display = show ? '' : 'none';
+      if (b.hasAttribute('data-type')) {
+        b.classList.toggle('active', b.getAttribute('data-type') === state.type);
+      }
+    });
+
+    yearBtns.forEach(function (b) {
+      var yr = b.getAttribute('data-year');
+      var scopeMatch = b.getAttribute('data-year-scope') === state.scope;
+      var show = scopeMatch;
+      if (scopeMatch && state.scope === 'national') {
+        // Data-adaptive: only show years the *current* Legislative sub-mode
+        // actually has data for (e.g. Party-List's wider 2008–2024 range vs.
+        // Geographic/Indigenous's narrower one) rather than one shared range.
+        var allowed = LEG_YEARS_BY_SUBMODE[state.legSubmode] || [];
+        show = allowed.indexOf(yr) !== -1;
+      }
+      b.style.display = show ? '' : 'none';
+      var activeYr = state.scope === 'national' ? state.legYear : state.localYear;
+      b.classList.toggle('active', yr === activeYr);
+    });
+
+    var showSubmode = (state.scope === 'local' && state.type === 'councilor') ||
+                       (state.scope === 'national' && state.type === 'legislative');
+    submodeGroup.style.display = showSubmode ? '' : 'none';
+    submodeSep.style.display = showSubmode ? '' : 'none';
+    submodeBtns.forEach(function (b) {
+      var grp = b.getAttribute('data-submode-scope');
+      var relevant = (grp === 'councilor' && state.scope === 'local' && state.type === 'councilor') ||
+                     (grp === 'legislative' && state.scope === 'national' && state.type === 'legislative');
+      b.style.display = relevant ? '' : 'none';
+      if (!relevant) return;
+      var sm = grp === 'councilor' ? state.councilSubmode : state.legSubmode;
+      b.classList.toggle('active', b.getAttribute('data-submode') === sm);
+      // No per-year disabling needed here: switching TO a sub-mode always
+      // snaps the year to a value that sub-mode actually supports (see the
+      // sub-mode click handler below), so every sub-mode button stays safely
+      // clickable regardless of whatever year happens to be selected now.
+    });
+
+    compareLink.href = ENGINE_SRC[state.scope];
+    compareLink.textContent = T('↗ 對照原始 V1', '↗ Original V1') + ' (' + (state.scope === 'national' ? 'test.html' : 'council.html') + ')';
+
+    var typeLabel = state.scope === 'national' ? T('立法委員', 'Legislators') : (state.type === 'councilor' ? T('縣市議員', 'Councilors') : state.type === 'township' ? T('鄉鎮市區長', 'Township heads') : state.type === 'villchief' ? T('村里長', 'Village chiefs') : state.type === 'townrep' ? T('鄉鎮市民代表', 'Township representatives') : T('縣市長', 'Mayors'));
+    document.title = T('歷屆選舉', 'Election History') + ' · V2 — ' + typeLabel;
+  }
+
+  // ---- Dual persistent engine lifecycle ------------------------------------
+  //
+  // Each engine (local/national) owns a permanent iframe and its own
+  // ready/loading flags. There is no shared `generation` counter anymore
+  // (unlike the old single-iframe model): the hazard it protected against — a
+  // stale readiness-poll resolving against a document that a newer navigation
+  // has since replaced — cannot occur here, because each iframe navigates
+  // exactly ONCE in its whole lifetime (bootEngine() below refuses to start a
+  // second load once `ready` or `loading` is true). The one remaining hazard,
+  // a duplicate concurrent load of the same engine, is what ready/loading
+  // guard instead.
+  var engines = {
+    local:    { frame: document.getElementById('v2-frame-local'),    ready: false, loading: false, lastApplied: null },
+    national: { frame: document.getElementById('v2-frame-national'), ready: false, loading: false, lastApplied: null }
+  };
+
+  // Set when the user switches Scope to an engine that is still
+  // background-loading — the moment that engine becomes ready, it is
+  // activated automatically instead of leaving the user stuck on the veil.
+  var pendingScope = null;
+
+  function engineKeyForScope(scope) { return scope === 'national' ? 'national' : 'local'; }
+
+  function showEngine(key) {
+    engines.local.frame.classList.toggle('v2-engine-active', key === 'local');
+    engines.national.frame.classList.toggle('v2-engine-active', key === 'national');
+  }
+
+  // scope-aware readiness check: council.html (local) and test.html (national)
+  // expose different entry-point functions, so poll for whichever set matches
+  // the engine being loaded.
+  function waitForEngine(win, key, cb, tries) {
+    tries = tries || 0;
+    try {
+      var okLocal = typeof win.setMayorMode === 'function' && typeof win.setCouncilElectionMode === 'function';
+      var okNational = typeof win.setMode === 'function' && typeof win.setWinnerYear === 'function' && typeof win.setIndLegMode === 'function' && typeof win.setPLCountyMode === 'function';
+      var ok = key === 'national' ? okNational : okLocal;
+      // CD/VD are top-level `const` in a classic (non-module) script, so they
+      // never become window.CD — only reachable as bare identifiers via eval()
+      // in the iframe's own global scope, not as a contentWindow property.
+      if (ok && win.eval('typeof CD') !== 'undefined') {
+        cb(win);
+        return;
+      }
+    } catch (e) {
+      setStatus(T('⚠ 無法存取 V1 頁面內容（cross-origin）。若是用 file:// 直接開啟，請改用本機伺服器：python3 -m http.server 8080，再開 http://localhost:8080/v2/history.html', '⚠ Cannot read the V1 page (cross-origin). If opened via file://, use a local server instead: python3 -m http.server 8080, then http://localhost:8080/v2/history.html'), true);
+      return;
+    }
+    if (tries > 150) { // ~30s
+      setStatus(T('⚠ 等待 V1 引擎（' + key + '）逾時（資料檔可能仍在載入，可嘗試重新整理）', '⚠ Timed out waiting for the V1 engine (' + key + '); data may still be loading — try reloading'), true);
+      return;
+    }
+    setTimeout(function () { waitForEngine(win, key, cb, tries + 1); }, 200);
+  }
+
+  // History shows plain results only: every 政黨基本盤 (party base model)
+  // comparison is removed from this page (user, 2026-10-22). V1 files stay
+  // untouched — this runs inside V2's own iframe copy of each engine:
+  //  - candidate camp bars, the air-vote tail row and the compare note
+  //    (mayor: county / township / village; legislative: district, 2024
+  //    township / village) → the V1 builders return '' here;
+  //  - the council 2022 「政黨基本盤比對」 switch and its output, and the
+  //    「選舉人數校正」 button (it only changes those comparisons) → hidden;
+  //  - the village-panel 「政黨基本盤：無法估算」 note (10 villages) → dropped.
+  // All are top-level function declarations in V1, so replacing the iframe
+  // window's property replaces what V1's own call sites reach.
+  var BASE5_EMPTY_BUILDERS = ['_base5CandCampBarHtml', '_base5TailHtml', '_base5MayorCompareNoteHtml', '_legCandCampBarHtml'];
+  // The 「第三勢力 未派人參選 0」 row V1 writes straight into the legislative
+  // panel (no third-force candidate in the district) only exists to carry the
+  // third-force base-model bar, so it goes with the other comparisons. V1
+  // builds it inline, so the panel is watched and the row removed when it appears.
+  function dropThirdPlaceholder(win) {
+    var ic = win.document.getElementById('ic');
+    if (!ic || ic.v2ThirdWatch || typeof win.MutationObserver !== 'function') return;
+    var sweep = function () {
+      ic.querySelectorAll('.bar-row').forEach(function (r) {
+        var lbl = r.querySelector('.blb'), pct = r.querySelector('.bpct');
+        if (lbl && pct && /^(第三勢力|Third Force)$/.test(lbl.textContent.trim()) && /^(未派人參選|No candidate)$/.test(pct.textContent.trim())) r.remove();
+      });
+    };
+    ic.v2ThirdWatch = new win.MutationObserver(sweep);
+    ic.v2ThirdWatch.observe(ic, { childList: true, subtree: true });
+    sweep();
+  }
+
+  // Map titles: the engine writes some in Chinese only (council.html 「yyyy 縣市長地圖」「yyyy 縣市議員地圖」, the legislative
+  // 「yyyy 台灣立委選舉儀表板」), and V2's own layers write theirs once in the language of the moment — so after a switch
+  // the title stayed in the old language. Each engine's #map-title is watched and its known endings swapped to the
+  // current language (i18n audit 2026-10-29).
+  var TITLE_PAIRS = [[' 縣市長地圖', ' Mayoral Map'], [' 縣市議員地圖', ' Council Map'], [' 台灣立委選舉儀表板', ' Taiwan Legislative Election Dashboard'],
+    [' 鄉鎮市區長地圖', ' Township Head Map'], [' 鄉鎮市民代表地圖', ' Township Representative Map'], [' 村里長地圖', ' Village Chief Map'],
+    [' 不分區政黨票地圖', ' Party-list Vote Map'], [' 平地原住民立委地圖', ' Lowland Indigenous Legislator Map'], [' 山地原住民立委地圖', ' Highland Indigenous Legislator Map'],
+    [' Taiwan Election Dashboard', ' Taiwan Legislative Election Dashboard']];
+  function fixTitle(doc) {
+    var mt = doc.getElementById('map-title'); if (!mt) return;
+    var t = mt.textContent, u = t;
+    TITLE_PAIRS.forEach(function (p) {
+      var from = lang === 'en' ? p[0] : p[1], to = lang === 'en' ? p[1] : p[0];
+      if (p[0] === ' Taiwan Election Dashboard') { from = p[0]; to = lang === 'en' ? p[1] : ' 台灣立委選舉儀表板'; }
+      if (u.slice(-from.length) === from) u = u.slice(0, -from.length) + to;
+    });
+    if (u !== t) mt.textContent = u;
+  }
+  function watchTitle(win) {
+    var mt = win.document.getElementById('map-title');
+    if (!mt || mt.v2TitleWatch) return;
+    mt.v2TitleWatch = new win.MutationObserver(function () { fixTitle(win.document); });
+    mt.v2TitleWatch.observe(mt, { childList: true, characterData: true, subtree: true });
+    fixTitle(win.document);
+  }
+
+  function stripBase5(win) {
+    try {
+      var doc = win.document;
+      watchTitle(win);
+      if (window.V2I18n) window.V2I18n.attach(win);   // English safety net (v2/i18n.js)
+      if (!doc.getElementById('v2-strip-base5')) {
+        var st = doc.createElement('style');
+        st.id = 'v2-strip-base5';
+        // #toolbar: V1's own mode switching — History's V2 nav above replaces it
+        // #btn-pvi3 / #btn-plcounty-jump-wrap: mode switches V1 keeps outside #toolbar
+        // #roads-toggle-btn: 道路圖層 button (user 2026-10-28: removed on every page)
+        // .ind-leg-btn: the 原住民 seat card's two map buttons and their row (user 2026-10-28: 「直接完全關掉」)
+        // #left-rail / #map-title / #sidebar-toggle / .zbts: the 2026 forecast page's layout (user 2026-10-31: 「在2026做的版面
+        // 更新都套用在其他模式中」) — top-left corner cleared, ＋／− gone; crumb, national-view buttons and ⚠ sit in the bar
+        // #seat-summary-float (Local engine only): the 「直轄市長 6・縣市長 16・合計 22」 fold card, the 中央選舉 seat card's
+        // layout reused for local races (user 2026-10-31: 「hist mode的地方選舉得原本中央選舉的折疊卡都隱藏 就是直下市長6....那個」)
+        var local = /council\.html/.test(win.location.pathname);
+        st.textContent = '#toolbar, #btn-pvi3, #btn-plcounty-jump-wrap, #camp-toggle-btn, #party-heatmap-row, #party-heatmap-select-row, #elig-correct-toggle, #council-base5-toggle-row, #ccp-base5-compare, #roads-toggle-btn, .ind-leg-btn, div:has(> .ind-leg-btn), #lang-toggle, ' +
+          '#left-rail, #map-title, #sidebar-toggle, .zbts' + (local ? ', #seat-summary-float' : '') + ' { display: none !important; }';   // #lang-toggle: the engine's own zh/EN switch — the V2 bar has one (2026-10-29)
+        doc.head.appendChild(st);
+      }
+      // hover outline = the 2027 補選預測 page's (#f5c518, 2.2 px, no glow) in every mode — same rule as v2-shell.js's
+      // HOVER27_CSS (user 2026-10-28: 「歷屆頁各模式的黃框…要改」)
+      if (!doc.getElementById('v2-hover27-style')) {
+        var hs = doc.createElement('style');
+        hs.id = 'v2-hover27-style';
+        hs.textContent = '[stroke="#ffcd78"], .ft-ed:hover, .ft-tc:hover, .ft-vill:hover, .nat-tc-hover-ed, .nat-vill-hover-ed { stroke: #f5c518 !important; stroke-width: 2.2px !important; filter: none !important; vector-effect: non-scaling-stroke; }';
+        doc.head.appendChild(hs);
+      }
+      // candidate rows: smaller 得票率 / 票數 columns, so the bar keeps its width with the 連任 / 跳槽 tag slot beside the name
+      // (user 2026-10-28: 「47.7% 433,684 要不要改成字體縮小…」「因為這樣夾tag 長條圖又縮小了」); one line each (no 「24.9 / %」 wrap)
+      if (!doc.getElementById('v2-barcols-style')) {
+        var bc = doc.createElement('style');
+        bc.id = 'v2-barcols-style';
+        bc.textContent = '.bar-row .bpct, .bar-row-detail .bpct { width: 36px !important; font-size: 9.5px !important; white-space: nowrap; }\n' +
+          '.bar-row .bvote, .bar-row-detail .bvote { width: 46px !important; font-size: 8.5px !important; white-space: nowrap; }';
+        doc.head.appendChild(bc);
+      }
+      BASE5_EMPTY_BUILDERS.forEach(function (n) {
+        if (typeof win[n] === 'function') win[n] = function () { return ''; };
+      });
+      dropThirdPlaceholder(win);
+      var vill = win._mayorVillPanelHtml;
+      if (typeof vill === 'function' && !vill.v2Stripped) {
+        var wrapped = function () {
+          return vill.apply(this, arguments).replace(/<div[^>]*>(?:政黨基本盤：無法估算|Party base model: cannot be estimated)[\s\S]*?<\/div>/, '');
+        };
+        wrapped.v2Stripped = true;
+        win._mayorVillPanelHtml = wrapped;
+      }
+      if (win.eval('typeof showCouncilBase5 !== "undefined" && showCouncilBase5') && typeof win.toggleCouncilBase5 === 'function') {
+        win.toggleCouncilBase5();
+      }
+      var lang = null;
+      try { lang = localStorage.getItem('v2_lang'); } catch (e2) {}
+      if ((lang === 'en' || lang === 'zh') && typeof win.setLang === 'function') win.setLang(lang);
+    } catch (e) {
+      setStatus(T('⚠ 移除基本盤比對時出錯：', '⚠ Error removing the base-vote comparison: ') + e.message, true);
+    }
+  }
+
+  // No forced pop-ups in V2 (user, 2026-10-22): V1's setMode() opens a guide /
+  // research disclaimer the first time a mode is entered (and asks the party
+  // question once per load). Every setMode() — V1's own internal calls too,
+  // they reach the same global — now passes the gate; the guide is still one
+  // click away on V1's "i" and red ⚠ buttons.
+  function quietOnboarding(win) {
+    if (typeof win.setMode !== 'function' || win.setMode.v2Quiet) return;
+    var orig = win.setMode;
+    var quiet = function () {
+      try { win.eval('_skipOnboardGateOnce = true'); } catch (e) {}
+      return orig.apply(this, arguments);
+    };
+    quiet.v2Quiet = true;
+    win.setMode = quiet;
+    try { win.eval('_winnerPartyAskedThisLoad = true'); } catch (e) {}
+    // party perspective stays on 「總」 (its button is hidden): no party lit, no camp filter
+    try { win.eval('if (typeof _histSeatParty !== "undefined") _histSeatParty = null; if (typeof campFilter !== "undefined") campFilter = null;'); } catch (e) {}
+    // a guide V1 already opened while loading (before this ran) is closed the
+    // way Escape closes it; the page's own setup picks the mode right after
+    var modal = win.document.getElementById('comp-onboard-modal');
+    if (modal && modal.style.display !== 'none' && typeof win.closeCompOnboarding === 'function') {
+      try { win.closeCompOnboarding(false); } catch (e) {}
+      modal.style.display = 'none';
+    }
+  }
+
+  // Starts loading one engine's iframe for the first (and only) time in its
+  // lifetime. Guarded against duplicate concurrent loads (requirement: never
+  // start a second load of an engine already loading/loaded). `onReady` fires
+  // once, after the iframe has both fired its native `load` event AND exposed
+  // the V1 entry points that engine's scope needs.
+  function bootEngine(key, onReady) {
+    var eng = engines[key];
+    if (eng.ready || eng.loading) return;
+    eng.loading = true;
+    var startedAt = performance.now();
+    eng.frame.addEventListener('load', function onLoad() {
+      waitForEngine(eng.frame.contentWindow, key, function (win) {
+        quietOnboarding(win);
+        stripBase5(win);
+        // township layers in the shared 原住民 border style, every mode (v2/tcborder.js)
+        if (window.V2TcBorder) { window.V2TcBorder.attach(win); window.V2TcBorder.unifyBadges(win); window.V2TcBorder.fixEd2016(win); }
+        if (window.V2Career) window.V2Career.attach(win);   // 跳槽 tags in candidate rows (v2/career.js)   // + 區域立委-style result tags (council.html)
+        // legislative bars as long as the mayor / council ones (legbars.js; the national test.html engine only)
+        if (key === 'national' && window.V2LegBars) window.V2LegBars.attach(win);
+        // population glow hidden in every History election, both engines (noglow.js; hidden only, V1 untouched)
+        if (window.V2NoGlow) window.V2NoGlow.attach(win);
+        eng.ready = true;
+        eng.loading = false;
+        eng.loadMs = performance.now() - startedAt;
+        if (onReady) onReady(win);
+      });
+    });
+    eng.frame.src = ENGINE_SRC[key];
+  }
+
+  function desiredSnapshotFor(key) {
+    if (key === 'local') {
+      if (state.type === 'township') return { type: 'township', year: state.localYear };
+      if (state.type === 'villchief') return { type: 'villchief', year: state.localYear };
+      if (state.type === 'townrep') return { type: 'townrep', year: state.localYear };
+      return state.type === 'mayor'
+        ? { type: 'mayor', year: state.localYear }
+        : { type: 'councilor', year: state.localYear, submode: state.councilSubmode };
+    }
+    if (state.legSubmode === 'pl') return { submode: 'pl', year: state.legYear };
+    if (state.legSubmode === 'ind-p' || state.legSubmode === 'ind-m') return { submode: state.legSubmode, year: state.legYear };
+    return { submode: 'geo', year: state.legYear };
+  }
+
+  // Applies V2's *current* desired state to one engine via the same V1 entry
+  // points its own toolbar would call — but the minimum call needed:
+  //  - if the engine's last-applied snapshot already matches (e.g. switching
+  //    back to an engine nothing changed since last time), skip the V1 call
+  //    entirely instead of re-running an unnecessary 5-9s redraw (state stays
+  //    authoritative in V2, but an already-correct engine is never reset
+  //    merely because it becomes visible again);
+  //  - if only the Councilor sub-mode changed (year/type unchanged), use the
+  //    lighter setCouncilMode()-only path (replaces the old, call-site-based
+  //    applyCouncilSubModeOnly() with the same effect, now data-driven);
+  //  - otherwise run the full sequence, exactly as V1's own toolbar would:
+  //    Local/Mayor -> setMayorMode(yr); Local/Councilor -> setCouncilElectionMode(yr)+setCouncilMode(submode);
+  //    National Geographic/Indigenous -> setMode('winner')+setWinnerYear(yr)[+setIndLegMode];
+  //    National Party-List -> setMode('winner')+setPLCountyMode(yr) (setPLCountyMode is
+  //    defined identically in test.html/party_list.html and ignores winnerYear entirely).
+  function applyToEngine(key, opts) {
+    var eng = engines[key];
+    renderControls();
+    if (!eng.ready) return;
+    var desired = desiredSnapshotFor(key);
+    var force = !!(opts && opts.force);
+    var prev = eng.lastApplied;
+    if (!force && prev && JSON.stringify(prev) === JSON.stringify(desired)) {
+      setStatus(T('（' + (key === 'national' ? '全國' : '地方') + '引擎已是此狀態，未重新呼叫 V1）', '(' + (key === 'national' ? 'National' : 'Local') + ' engine already in this state)'));
+      return;
+    }
+    var win = eng.frame.contentWindow;
+    // 跳槽 tags: which race the panel shows (v2/career.js) — 不分區 has party rows only
+    var RACE = { mayor: 'M', councilor: 'C', township: 'T', townrep: 'R', villchief: 'V' };
+    win.__v2CareerCtx = key === 'local' ? (RACE[desired.type] ? { race: RACE[desired.type], year: desired.year } : null)
+      : (desired.submode === 'pl' ? null : { race: 'L', year: desired.year });
+    try {
+      if (key === 'local') {
+        if (window.V2TownshipHead) window.V2TownshipHead.clear(win);
+        if (window.V2VillageChief) window.V2VillageChief.clear(win);
+        if (window.V2TownshipRep) window.V2TownshipRep.clear(win);
+        if (desired.type === 'townrep') {
+          // 鄉鎮市民代表：V1 setMayorMode(yr) sets up the mode, then V2 redraws the map as 代表會 blocks (the engine's
+          // 縣市議員 政黨比例 colouring, no population glow), the hemicycle in the engine's county-council box, click
+          // a township → its villages (history-townrep.js)
+          win.setMayorMode(desired.year);
+          var nTr = window.V2TownshipRep.draw(win, desired.year);
+          setStatus(T('鄉鎮市民代表 ' + desired.year + '：' + nTr + ' 席', 'Township representatives ' + desired.year + ': ' + nTr + ' seats'));
+        } else if (desired.type === 'villchief') {
+          // 村里長：V1 setMayorMode(yr) sets up the mode (legend, chips, panel), then V2 redraws the map as the
+          // engine's 全台村里 view with the village-chief results, no population glow; the lowest level, no
+          // drill-down; panels are built from the engine's own pieces (history-villchief.js)
+          win.setMayorMode(desired.year);
+          var nVc = window.V2VillageChief.draw(win, desired.year);
+          setStatus(T('村里長 ' + desired.year + '：' + nVc + ' 個村里', 'Village chiefs ' + desired.year + ': ' + nVc + ' villages'));
+        } else if (desired.type === 'township') {
+          // 鄉鎮市區長：V1 setMayorMode(yr) sets up the mode (legend, chips, panel), then V2 redraws the map as
+          // the engine's 全台鄉鎮市區 view with the township-head results, no population glow; click a
+          // township → its village layer; panels are built from the engine's own pieces (history-townhead.js)
+          win.setMayorMode(desired.year);
+          var nTh = window.V2TownshipHead.draw(win, desired.year);
+          setStatus(T('鄉鎮市區長 ' + desired.year + '：' + nTh + ' 個有選舉的鄉鎮市區', 'Township heads ' + desired.year + ': ' + nTh + ' elected townships'));
+        } else if (desired.type === 'councilor' && prev && prev.type === 'councilor' && prev.year === desired.year) {
+          win.setCouncilMode(desired.submode);
+          setStatus(T('縣市議員 ' + desired.year, 'Councilors ' + desired.year));
+        } else if (desired.type === 'mayor') {
+          win.setMayorMode(desired.year);
+          setStatus(T('縣市長 ' + desired.year, 'Mayors ' + desired.year));
+        } else {
+          win.setCouncilElectionMode(desired.year);
+          win.setCouncilMode(desired.submode);
+          setStatus(T('縣市議員 ' + desired.year, 'Councilors ' + desired.year));
+        }
+      } else {
+        if (window.V2LegInd) window.V2LegInd.clear(win);
+        var wasLegDist = window.V2LegDist ? window.V2LegDist.clear(win) : false;
+        var legDist = desired.submode === 'geo' && (desired.year === '2008' || desired.year === '2012');
+        // 政黨輪替分析 fold: 區域立委 only (user 2026-10-28: 「把政黨輪替分析折疊隱藏」「不分區裡的…也要」「只保留區域立委」).
+        // The engine shows / hides #flip-analysis-box itself, so a class on its root wins over its inline display.
+        // 不分區: its 跑馬燈 (#ticker) hidden too (user: 「把跑馬燈（不分區的）隱藏」); 原住民: 圓餅 / 激戰區域 buttons hidden
+        // (user: 「「山地平地原住民立委」隱藏圓餅跟激戰區域按鈕」)
+        if (window.V2PLNat) window.V2PLNat.clear(win);
+        if (!win.document.getElementById('v2-flipfold-style')) {
+          var fs = win.document.createElement('style');
+          fs.id = 'v2-flipfold-style';
+          fs.textContent = 'html.v2-noflip #flip-analysis-box { display: none !important; }\n' +
+            'html.v2-pl #ticker { display: none !important; }\n' +
+            'html.v2-ind #pie-swing-row { display: none !important; }\n' +
+            // its map-legend holds only the 激戰區域 key there, for the overlay the hidden button switched
+            'html.v2-ind #map-legend { display: none !important; }\n' +
+            // 區域立委 2008 / 2012 (history-legdist.js): the engine underneath is on 2016 — its 2016-only boxes are hidden
+            // (圓餅 / 激戰區域 and, for 2012, 政黨輪替分析 run on 2008 / 2012 data — history-legdist.js; 2008 has no earlier
+            // year, so its 政黨輪替分析 box is hidden — user 2026-10-28: 「政黨輪替分析加在2012(2008隱藏）」)
+            'html.v2-legdist-noflip #flip-analysis-box { display: none !important; }';
+          win.document.head.appendChild(fs);
+        }
+        var rootCls = win.document.documentElement.classList;
+        rootCls.toggle('v2-noflip', desired.submode !== 'geo');
+        rootCls.toggle('v2-legdist', legDist);
+        rootCls.toggle('v2-pl', desired.submode === 'pl');
+        rootCls.toggle('v2-ind', desired.submode === 'ind-p' || desired.submode === 'ind-m');
+        win.setMode('winner');
+        if (desired.submode === 'pl') {
+          win.setPLCountyMode(desired.year);
+          // 不分區 is one nationwide district: V2 starts at a 全台 block + 34-seat hemicycle, click → the engine's 22 縣市
+          window.V2PLNat.draw(win, desired.year);
+          setStatus(T('不分區 ' + desired.year, 'Party list ' + desired.year));
+        } else {
+          win.setWinnerYear(legDist ? '2016' : desired.year);
+          if (legDist) {
+            // 2008 / 2012 were fought on the 2016 districts: the engine draws its 2016 map state, V2 the year's results
+            window.V2LegDist.draw(win, desired.year);
+            setStatus(T('區域立委 ' + desired.year + '（2016 選區圖＋' + desired.year + ' 中選會資料）', 'District legislators ' + desired.year + ' (2016 district map + ' + desired.year + ' CEC data)'));
+          } else if (desired.submode === 'ind-p' || desired.submode === 'ind-m') {
+            var t = desired.submode === 'ind-p' ? 'p' : 'm';
+            win.setIndLegMode(t);
+            // 原住民立委 is one nationwide district: V2 redraws it as 全台 → 22 縣市 → 鄉鎮 → 村里 from CEC files
+            // (history-legind.js; all three years — the engine's own IND_LEG_* is 2024 only)
+            window.V2LegInd.draw(win, desired.year, t);
+            setStatus(T('原住民立委 ' + desired.year, 'Indigenous legislators ' + desired.year));
+          } else {
+            if (wasLegDist) win.goED();   // 2008 / 2012 → 2016: the engine was already on 2016 and would not redraw
+            // 2016 / 2020 / 2024: the same 全台 seat panel as 2008 / 2012 on the engine's 全台 view (history-legdist.js)
+            if (desired.submode === 'geo') window.V2LegDist.setNationalYear(win, desired.year);
+            setStatus(T('區域立委 ' + desired.year, 'District legislators ' + desired.year));
+          }
+        }
+      }
+      eng.lastApplied = desired;
+    } catch (e) {
+      setStatus(T('⚠ 呼叫失敗：', '⚠ Call failed: ') + e.message, true);
+    }
+  }
+
+  function applyCurrent(opts) {
+    applyToEngine(engineKeyForScope(state.scope), opts);
+  }
+
+  function activateEngine(key) {
+    pendingScope = null;
+    showEngine(key);
+    veil.classList.add('hidden');
+    applyToEngine(key);
+    if (tools) tools.refresh();
+    if (navBar) navBar.refresh();
+    if (disc) disc.refresh();
+  }
+  // the engine's 「i」 and 色盲友善 buttons in the bar (v2/toolbtns.js; user 2026-10-29: 「放到上方的常駐欄位」) — they act on
+  // the engine on screen; 色盲友善 exists only in the Local engine (council.html)
+  var tools = window.V2Tools ? window.V2Tools.mount(document.getElementById('v2-nav'), document.getElementById('v2-lang'), function () {
+    var k = engineKeyForScope(state.scope), e = engines[k];
+    return e && e.ready ? document.getElementById('v2-frame-' + k).contentWindow : null;
+  }, function () { return lang; }) : null;
+  // crumb + 全台鄉鎮市區 / 全台村里, then ⚠, in the bar left of the 「i」 — the 2026 forecast page's layout (v2/navbar.js,
+  // v2/disclaimer.js; user 2026-10-31: 「在2026做的版面更新都套用在其他模式中」); both follow the engine on screen
+  var activeWin = function () {
+    var k = engineKeyForScope(state.scope), e = engines[k];
+    return e && e.ready ? document.getElementById('v2-frame-' + k).contentWindow : null;
+  };
+  var navBox = document.getElementById('v2-nav'), navBefore = function () { return navBox.querySelector('.v2-tools') || document.getElementById('v2-lang'); };
+  var navBar = window.V2NavBar ? window.V2NavBar.mount(navBox, navBefore(), activeWin) : null;
+  var disc = window.V2Disclaimer ? window.V2Disclaimer.mount(navBox, navBefore(), activeWin) : null;
+
+  // Which Election Type values are meaningful for each Scope. This is the
+  // actual root cause fix for the old "year switch does nothing" bug: the
+  // apply dispatch used to be `if (scope==='local') {...} else if
+  // (type==='legislative') {...}` — if state.type was left over from the
+  // other scope, NEITHER branch matched and the apply silently no-opped. It
+  // was never a timing race; forcing state.type to a valid value for the new
+  // scope removes the invalid state entirely rather than papering over it.
+  var VALID_TYPES = { local: ['mayor', 'councilor', 'township', 'townrep', 'villchief'], national: ['legislative'] };
+  function setScope(s) {
+    if (s === state.scope) { applyCurrent(); return; }
+    state.scope = s;
+    if (VALID_TYPES[s].indexOf(state.type) === -1) state.type = VALID_TYPES[s][0];
+    renderControls();
+    var key = engineKeyForScope(s);
+    var eng = engines[key];
+    if (eng.ready) {
+      activateEngine(key);
+    } else {
+      // Secondary engine's background preload hasn't finished yet (or, in the
+      // rare edge case of a switch fired before the preload trigger even ran,
+      // hasn't started at all) — show the loading state, never start a
+      // duplicate load, and activate the instant it becomes ready.
+      pendingScope = key;
+      veil.classList.remove('hidden');
+      setStatus(T((key === 'national' ? '全國' : '地方') + '引擎仍在背景載入中，完成後會自動顯示…', (key === 'national' ? 'National' : 'Local') + ' engine still loading in the background; it will appear when ready…'));
+      if (!eng.loading) bootEngine(key, function () { if (pendingScope === key) activateEngine(key); });
+    }
+  }
+
+  // ---- boot sequence --------------------------------------------------------
+  // 1. Load ONLY the primary engine (Local, V2's initial scope).
+  // 2. Wait for it to be ready and its first view fully applied/rendered.
+  // 3. Only then start preloading National in the background. It stays
+  //    silent (no status/veil change) unless the user switches to it before
+  //    it finishes, per setScope()'s pendingScope path.
+  //    Deliberately NOT gated on requestAnimationFrame: rAF is throttled/
+  //    paused entirely by the browser on a tab that lacks document focus
+  //    (confirmed via testing — a user who opens History in a background
+  //    tab would get no preload at all until they focus it, silently
+  //    defeating the whole point). setTimeout(fn, 0) alone still yields one
+  //    tick back to the browser first, but fires regardless of tab focus.
+  showEngine('local');
+  applyLang();
+  Array.prototype.forEach.call(document.querySelectorAll('#v2-lang button'), function (b) {
+    b.addEventListener('click', function () {
+      var l = b.getAttribute('data-lang');
+      if (l === lang) return;
+      lang = l;
+      try { localStorage.setItem('v2_lang', lang); } catch (e) {}
+      applyLang();
+      renderControls();
+      // both engines switch (each redraws its own panels / map titles); V2 overlays render through the engine's T()
+      ['local', 'national'].forEach(function (k) {
+        var w = engines[k] && engines[k].ready && document.getElementById('v2-frame-' + k).contentWindow;
+        if (w && typeof w.setLang === 'function') { try { w.setLang(lang); } catch (e) {} }
+        if (w) fixTitle(w.document);
+      });
+      setStatus('');   // the last status was written in the old language
+      if (tools) tools.refresh();
+      if (disc) disc.refresh();
+    });
+  });
+  setStatus(T('正在載入地方引擎…', 'Loading the Local engine…'));
+  bootEngine('local', function () {
+    veil.classList.add('hidden');
+    applyToEngine('local', { force: true });
+    if (tools) tools.refresh();
+    if (navBar) navBar.refresh();
+    if (disc) disc.refresh();
+    setTimeout(function () {
+      bootEngine('national', function () {
+        if (pendingScope === 'national') activateEngine('national');
+      });
+    }, 0);
+  });
+
+  scopeBtns.forEach(function (b) {
+    b.addEventListener('click', function () { setScope(b.getAttribute('data-scope')); });
+  });
+
+  typeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = b.getAttribute('data-type');
+      if (t === state.type) return;
+      state.type = t;
+      applyCurrent();
+    });
+  });
+
+  yearBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      // A year button is only ever visible when LEG_YEARS_BY_SUBMODE already
+      // confirms the current sub-mode supports it (see renderControls), so
+      // no further validation is needed here — clicking it is always safe.
+      var yr = b.getAttribute('data-year');
+      if (state.scope === 'national') {
+        if (yr === state.legYear) return;
+        state.legYear = yr;
+      } else {
+        if (yr === state.localYear) return;
+        state.localYear = yr;
+      }
+      applyCurrent();
+    });
+  });
+
+  submodeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.disabled) return;
+      var grp = b.getAttribute('data-submode-scope');
+      var m = b.getAttribute('data-submode');
+      if (grp === 'councilor') {
+        if (m === state.councilSubmode) return;
+        state.councilSubmode = m;
+        applyCurrent();
+      } else {
+        if (m === state.legSubmode) return;
+        state.legSubmode = m;
+        // Data-adaptive year preservation: keep the current year if the
+        // destination sub-mode actually supports it (e.g. Geographic 2020 ->
+        // Party-List stays 2020); otherwise snap to that sub-mode's most
+        // recent supported year (e.g. Party-List 2012 -> Geographic can't
+        // stay 2012, so it becomes 2024) rather than entering an invalid
+        // combination.
+        var allowed = LEG_YEARS_BY_SUBMODE[m] || [];
+        if (allowed.indexOf(state.legYear) === -1) {
+          state.legYear = allowed[allowed.length - 1];
+        }
+        applyCurrent();
+      }
+    });
+  });
+
+  renderControls();
+})();
+</script>
+
+</body>
+</html>

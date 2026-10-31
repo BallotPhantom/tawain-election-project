@@ -352445,9 +352445,12 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
         const _latestApproval = polls => (polls || []).filter(p => p && p.date)
           .slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
         const _fillApprovalSlot = (numId, lblId, polls, subjectZh, subjectEn) => {
-          const latest = _latestApproval(polls);
+          const latest = _approvalWeightedNow(polls);
           const numEl = document.getElementById(numId);
           if (!latest) { setLblP(lblId, subjectZh, subjectEn); if (numEl) { numEl.textContent = '--'; numEl.style.color = ''; } return; }
+          // 加權平均（近90天全國民調，見_approvalWeightedNow），不再只取最後公布的一份
+          latest.approve_pct = latest.approve; latest.disapprove_pct = latest.disapprove;
+          if (numEl) numEl.title = (currentLang === 'en' ? `Weighted average of ${latest.n} national polls, ${latest.from}–${latest.to}` : `近90天${latest.n}份全國民調加權平均（${latest.from}～${latest.to}）`);
           const isDisapprove = latest.disapprove_pct > latest.approve_pct;
           const val = isDisapprove ? latest.disapprove_pct : latest.approve_pct;
           setLblP(lblId, subjectZh + (isDisapprove ? '不支持率' : '支持率'), subjectEn + (isDisapprove ? ' Disapprove' : ' Approve'));
@@ -362134,7 +362137,7 @@ function _addCouncilLayer() {
 
 // ── 2026 縣市長預測：民調權重公式（跟產生data_mayor2026_predict.js的Python腳本用同一套公式，
 // 這裡重新用JS實作一次是為了在面板上即時顯示每筆民調實際被賦予的權重，不是為了重新彙整資料）──
-const POLL_REF_DATE = new Date('2026-08-14');
+const POLL_REF_DATE = new Date('2026-10-26'); // 跟regen3.py的REF_DATE同步
 function _pollParseEndDate(dateStr) {
   if (!dateStr) return null;
   const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
@@ -362145,10 +362148,17 @@ function _pollIsInformal(pollster, note) {
   const text = (pollster || '') + (note || '');
   return /YouTube|街頭|非正式|非科學/.test(text);
 }
+// 跟regen3.py的is_self_commissioned()/SKEWED_SAMPLE_SPONSORS同步（2026-10-26）：候選人陣營委託、
+// 以及樣本結構明顯失衡的委託方（信民協會），跟政黨委託一樣0.4。
+const POLL_SKEWED_SAMPLE_SPONSORS = new Set(['信民協會']);
+function _pollIsSelfCommissioned(sponsor) {
+  return !!sponsor && sponsor !== 'unknown' && /競選總部|競選辦公室|團隊|後援會|之友會/.test(sponsor);
+}
 function _pollHouseWeight(pollster, sponsor) {
   const lean = (typeof POLL_HOUSE_LEAN !== 'undefined' && POLL_HOUSE_LEAN[pollster]) ? POLL_HOUSE_LEAN[pollster].lean : 'unknown';
   const isPartyInternal = sponsor && sponsor !== 'unknown' && /黨/.test(sponsor);
   if (isPartyInternal) return 0.4;
+  if (_pollIsSelfCommissioned(sponsor) || POLL_SKEWED_SAMPLE_SPONSORS.has(sponsor)) return 0.4;
   if (lean === 'blue' || lean === 'green') return 0.7;
   return 1.0;
 }
@@ -362299,8 +362309,8 @@ function _renderMarginHistogramSvg(margins, colorLead, colorTrail) {
 // 高斯核加權趨勢+標準差——依時間距離給權重（越近某評估點權重越高），同時乘上外部傳入的
 // 房效/來源權重(p.hw)，在時間軸上取40個評估點算出加權平均±加權標準差。抽成共用函式讓民調
 // 折線圖跟總統/行政院滿意度趨勢圖用同一套邏輯，不要各自維護一份容易日後跑掉。
-function _gaussTrendStats(series, tMin, tRange, bwMs, getVal) {
-  const N = 40;
+function _gaussTrendStats(series, tMin, tRange, bwMs, getVal, nSamples) {
+  const N = nSamples || 40;
   const out = [];
   for (let i = 0; i < N; i++) {
     const te = tMin + (i / (N - 1)) * tRange;
@@ -362333,7 +362343,7 @@ function _renderPollLineChartSvg(polls, mc) {
     const hw = _pollHouseWeight(p.pollster, p.sponsor);
     cands.forEach(c => {
       const normPct = sumPct > 0 ? (c.pct || 0) / sumPct * 100 : c.pct;
-      pts.push({ t: d.getTime(), name: c.name, party: c.party, pct: normPct, dateLbl: p.date || '', hw });
+      pts.push({ t: d.getTime(), name: c.name, party: c.party, pct: normPct, dateLbl: p.date || '', hw, pollster: p.pollster || '' });
     });
   });
   if (pts.length < 2) return '';
@@ -362366,13 +362376,17 @@ function _renderPollLineChartSvg(polls, mc) {
   // 起伏的曲線+淡色帶——這樣線的形狀是民調真正告訴我們的「支持度怎麼隨時間變動」，不是模型單一
   // 估計值硬拉成一條線。模型當下的10-90區間改成只在最右側畫一個小標記，供對照「模型現在信多少」
   // 用，不再假裝成一條貫穿全圖的趨勢線。
-  const bwMs = Math.max(tRange / 6, 12 * 86400000);
+  // 平滑寬度固定30天（2026-10-26，使用者要求縮短）：原本「整段時間的1/6」在各縣市是37~70天，
+  // 最近一個月的民調會被兩三個月前的舊民調稀釋。每週取一個點畫線。
+  const bwMs = 30 * 86400000;
   let bandSvg = '';
+  const _trendData = [];
   Object.keys(byName).forEach(name => {
     const series = byName[name].slice().sort((a, b) => a.t - b.t);
     const clr = partyClr[series[0].party] || '#888';
-    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.pct);
+    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.pct, Math.max(40, Math.ceil(tRange / (7 * 86400000))));
     if (trend.length < 2) return;
+    _trendData.push({ n: _dispCandName(name), c: clr, p: trend.map(pt => [Math.round(pt.t), +pt.mean.toFixed(2)]) });
     const bandTop = trend.map(pt => `${x(pt.t).toFixed(1)},${y(Math.min(100, pt.mean + pt.sd)).toFixed(1)}`).join(' L');
     const bandBot = trend.slice().reverse().map(pt => `${x(pt.t).toFixed(1)},${y(Math.max(0, pt.mean - pt.sd)).toFixed(1)}`).join(' L');
     const linePath = trend.map((pt, i) => `${i === 0 ? 'M' : 'L'}${x(pt.t).toFixed(1)},${y(pt.mean).toFixed(1)}`).join(' ');
@@ -362394,7 +362408,7 @@ function _renderPollLineChartSvg(polls, mc) {
   Object.keys(byName).forEach(name => {
     const series = byName[name].slice().sort((a, b) => a.t - b.t);
     const clr = partyClr[series[0].party] || '#888';
-    const dots = series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.pct).toFixed(1)}" r="1.6" fill="${clr}" opacity="0.5" data-t="${p.t}" data-name="${_dispCandName(p.name)}" data-pct="${p.pct.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${clr}"></circle>`).join('');
+    const dots = series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.pct).toFixed(1)}" r="1.6" fill="${clr}" opacity="0.5" data-t="${p.t}" data-name="${_dispCandName(p.name)}" data-pct="${p.pct.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${clr}" data-pollster="${p.pollster}" data-hw="${p.hw}"></circle>`).join('');
     svg += dots;
   });
   // y軸刻度線畫在資料svg裡（跟著捲動，橫跨全寬），但刻度文字放在固定不捲動的軸svg
@@ -362413,7 +362427,7 @@ function _renderPollLineChartSvg(polls, mc) {
       <div style="display:flex;align-items:flex-start">
         <svg viewBox="0 0 ${axisW} ${H}" style="width:${axisW}px;height:88px;display:block;flex-shrink:0">${yAxisLabels}</svg>
         <div class="pch-scrollwrap" style="position:relative;overflow-x:auto;overflow-y:hidden;flex:1">
-          <svg viewBox="0 0 ${dataW} ${H}" style="width:${dataW}px;height:88px;display:block">${bandSvg}${yGridLines}${svg}${mcMarkerSvg}${cross}${overlay}</svg>
+          <svg viewBox="0 0 ${dataW} ${H}" preserveAspectRatio="none" style="width:${dataW}px;height:88px;display:block" data-trends="${encodeURIComponent(JSON.stringify(_trendData))}">${bandSvg}${yGridLines}${svg}${mcMarkerSvg}${cross}${overlay}</svg>
         </div>
       </div>
       <div class="pch-tip" style="display:none;position:absolute;top:2px;background:rgba(15,15,25,0.92);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 6px;font-size:8.5px;white-space:nowrap;pointer-events:none;z-index:5"></div>
@@ -362440,7 +362454,7 @@ function _pchMove(evt) {
   });
   if (bestT === null) return;
   let cxAtT = null, dateLbl = '';
-  const rows = [];
+  const rows = [], srcs = new Set();
   dots.forEach(d => {
     const match = d.getAttribute('data-t') === bestT;
     d.setAttribute('r', match ? '3' : '1.6');
@@ -362448,7 +362462,11 @@ function _pchMove(evt) {
     if (match) {
       cxAtT = d.getAttribute('cx');
       dateLbl = d.getAttribute('data-date');
-      rows.push(`<div style="color:${d.getAttribute('data-clr')}">${d.getAttribute('data-name')} ${d.getAttribute('data-pct')}%</div>`);
+      // 2026-10-26：民調點多帶機構名稱與機構權重（data-pollster/data-hw，只有民調／滿意度兩張圖有；
+      // 當選率趨勢圖的點沒有這兩個屬性，維持原樣）
+      const _pl = d.getAttribute('data-pollster'), _hw = d.getAttribute('data-hw');
+      if (_pl) srcs.add(`${_pl}${_hw ? ` ×${(+_hw).toFixed(1)}` : ''}`);
+      rows.push({ name: d.getAttribute('data-name'), pct: d.getAttribute('data-pct'), clr: d.getAttribute('data-clr') });
     }
   });
   const cross = svg.querySelector('.pch-cross');
@@ -362467,16 +362485,30 @@ function _pchMove(evt) {
     const dotScreenX = rect.left + (parseFloat(cxAtT) - vb.x) / vb.width * rect.width;
     let leftPx = dotScreenX - outerRect.left;
     // 夾在外層容器可視寬度內，避免tooltip本身（估寬~140px）伸到容器外面看起來被切掉
-    const tipW = 140;
+    const tipW = 170;
     leftPx = Math.max(tipW / 2, Math.min(outerRect.width - tipW / 2, leftPx));
     tip.style.left = leftPx + 'px';
     tip.style.transform = 'translateX(-50%)';
     // 2026-09-21：金門縣roster從2人擴到7人後，原本針對「當時最多候選人的縣市」(澎湖縣6人)
     // 調的maxRows=6開始截斷、跳出「還有1筆」——調整成7，跟目前全部縣市裡最多候選人數對齊。
     const maxRows = 7;
-    const shown = rows.slice(0, maxRows).join('');
+    // 2026-10-26：精簡版——機構×權重只在標題列寫一次，每行「名稱 原始值（趨勢 x%）」
+    const trendMap = {};
+    const _tr = svg.getAttribute('data-trends');
+    if (_tr) {
+      const tNum = +bestT;
+      JSON.parse(decodeURIComponent(_tr)).forEach(s => {
+        const p = s.p; if (!p.length) return;
+        let v = p[p.length - 1][1];
+        if (tNum <= p[0][0]) v = p[0][1];
+        else for (let i = 1; i < p.length; i++) if (p[i][0] >= tNum) { const f = (tNum - p[i-1][0]) / (p[i][0] - p[i-1][0]); v = p[i-1][1] + f * (p[i][1] - p[i-1][1]); break; }
+        trendMap[s.n] = v;
+      });
+    }
+    const shown = rows.slice(0, maxRows).map(r => `<div style="color:${r.clr}">${r.name} ${r.pct}%${trendMap[r.name] != null ? `<span style="color:rgba(255,255,255,0.4)">（${T('趨勢','trend')} ${trendMap[r.name].toFixed(1)}%）</span>` : ''}</div>`).join('');
     const more = rows.length > maxRows ? `<div style="color:rgba(255,255,255,0.4)">${T(`…還有${rows.length - maxRows}筆（同日多組情境）`,`…${rows.length - maxRows} more (multiple scenarios same day)`)}</div>` : '';
-    tip.innerHTML = `<div style="font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:2px">${dateLbl}</div>${shown}${more}`;
+    const srcLbl = srcs.size ? ` <span style="font-weight:400;color:rgba(255,255,255,0.45)">${[...srcs].join('、')}</span>` : '';
+    tip.innerHTML = `<div style="font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:1px">${dateLbl}${srcLbl}</div>${shown}${more}`;
   }
 }
 function _pchLeave(evt) {
@@ -362519,25 +362551,29 @@ function _renderApprovalTrendSvg(polls, seriesDefs) {
   const dataW = Math.max(240, nT * 26);
   const x = t => padL + ((t - tMin) / tRange) * (dataW - padL - padR);
   const y = v => (H - padB) - ((v - yMin) / yRange) * (H - padB - 4);
-  const bwMs = Math.max(tRange / 6, 20 * 86400000);
+  // 平滑寬度固定45天（2026-10-26）：原本用「整段時間的1/6」，滿意度資料累積到2年多(~860天)
+  // 後等於每點跟前後~5個月一起平均，2025年中TPOF不滿意55-58%那段下滑被抹成一條平線。
+  const bwMs = 45 * 86400000;
   const byKey = {};
   pts.forEach(p => { (byKey[p.key] = byKey[p.key] || []).push(p); });
   let bandSvg = '', dotsSvg = '';
   // 跟民調折線圖同一套_gaussTrendStats：加權平均±加權標準差畫成粗線+淡色帶，取代原本只有
   // 平均線、沒有區間的版本——滿意度調查本來就跟候選人民調一樣，同一時期會有多家不同機構
   // 各自數字有落差，這個離散度本身就是有意義的不確定性，應該畫出來而不是只呈現單一平滑值。
+  const _trendData = [];
   seriesDefs.forEach(sd => {
     const series = (byKey[sd.key] || []).slice().sort((a, b) => a.t - b.t);
     if (!series.length) return;
-    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.val);
+    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.val, Math.max(40, Math.ceil(tRange / (7 * 86400000))));
     if (trend.length >= 2) {
+      _trendData.push({ n: sd.label, c: sd.color, p: trend.map(pt => [Math.round(pt.t), +pt.mean.toFixed(2)]) });
       const bandTop = trend.map(pt => `${x(pt.t).toFixed(1)},${y(Math.min(100, pt.mean + pt.sd)).toFixed(1)}`).join(' L');
       const bandBot = trend.slice().reverse().map(pt => `${x(pt.t).toFixed(1)},${y(Math.max(0, pt.mean - pt.sd)).toFixed(1)}`).join(' L');
       const linePath = trend.map((pt, i) => `${i === 0 ? 'M' : 'L'}${x(pt.t).toFixed(1)},${y(pt.mean).toFixed(1)}`).join(' ');
       bandSvg += `<path d="M${bandTop} L${bandBot} Z" fill="${sd.color}" opacity="0.16"></path>
         <path d="${linePath}" stroke="${sd.color}" stroke-width="2" fill="none" opacity="0.9"></path>`;
     }
-    dotsSvg += series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.val).toFixed(1)}" r="1.6" fill="${sd.color}" opacity="0.5" data-t="${p.t}" data-name="${sd.label}" data-pct="${p.val.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${sd.color}"></circle>`).join('');
+    dotsSvg += series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.val).toFixed(1)}" r="1.6" fill="${sd.color}" opacity="0.5" data-t="${p.t}" data-name="${sd.label}" data-pct="${p.val.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${sd.color}" data-pollster="${p.pollster}" data-hw="${p.hw}"></circle>`).join('');
   });
   const yGridLines = [yMin, (yMin + yMax) / 2, yMax].map(v =>
     `<line x1="0" y1="${y(v).toFixed(1)}" x2="${dataW}" y2="${y(v).toFixed(1)}" stroke="rgba(255,255,255,0.06)"></line>`
@@ -362554,12 +362590,33 @@ function _renderApprovalTrendSvg(polls, seriesDefs) {
       <div style="display:flex;align-items:flex-start">
         <svg viewBox="0 0 ${axisW} ${H}" style="width:${axisW}px;height:88px;display:block;flex-shrink:0">${yAxisLabels}</svg>
         <div class="pch-scrollwrap" style="position:relative;overflow-x:auto;overflow-y:hidden;flex:1">
-          <svg viewBox="0 0 ${dataW} ${H}" style="width:${dataW}px;height:88px;display:block">${yGridLines}${bandSvg}${dotsSvg}${cross}${overlay}</svg>
+          <svg viewBox="0 0 ${dataW} ${H}" preserveAspectRatio="none" style="width:${dataW}px;height:88px;display:block" data-trends="${encodeURIComponent(JSON.stringify(_trendData))}">${yGridLines}${bandSvg}${dotsSvg}${cross}${overlay}</svg>
         </div>
       </div>
       <div class="pch-tip" style="display:none;position:absolute;top:2px;background:rgba(15,15,25,0.92);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 6px;font-size:8.5px;white-space:nowrap;pointer-events:none;z-index:5"></div>
     </div>
   </div>`;
+}
+// 總統／閣揆滿意度「目前」的加權估計（2026-10-26）：取最新一筆民調日期往前90天內的全國民調，
+// 權重＝_pollHouseWeight（機構立場0.7／政黨或陣營委託0.4）× exp(-距最新一筆天數/120)，跟縣市長
+// 民調同一套權重。原本右上角只顯示「最後公布的那一份」，數字會跟著哪家最後發布而跳動。
+// 這個數字只供參考，不進縣市長預測模型（2018/2022回測加入國政滿意度反而變差）。
+function _approvalWeightedNow(polls) {
+  const rows = (polls || []).map(p => ({ p, d: _pollParseEndDate(p.date) }))
+    .filter(r => r.d && r.p.approve_pct != null && r.p.disapprove_pct != null);
+  if (!rows.length) return null;
+  const tMax = Math.max.apply(null, rows.map(r => r.d.getTime()));
+  const win = rows.filter(r => (tMax - r.d.getTime()) / 86400000 <= 90);
+  let wSum = 0, aSum = 0, dSum = 0;
+  const used = win.map(r => {
+    const days = (tMax - r.d.getTime()) / 86400000;
+    const w = _pollHouseWeight(r.p.pollster, r.p.sponsor) * Math.exp(-days / 120);
+    wSum += w; aSum += w * r.p.approve_pct; dSum += w * r.p.disapprove_pct;
+    return { pollster: r.p.pollster, date: r.p.date, w, a: r.p.approve_pct, dis: r.p.disapprove_pct };
+  }).sort((x, y) => y.w - x.w);
+  if (wSum <= 0) return null;
+  return { approve: aSum / wSum, disapprove: dSum / wSum, n: used.length, used, wSum,
+    to: new Date(tMax).toISOString().slice(0, 10), from: new Date(tMax - 90 * 86400000).toISOString().slice(0, 10) };
 }
 function _renderApprovalCardHtml(title, polls) {
   const seriesDefs = [
@@ -362571,8 +362628,13 @@ function _renderApprovalCardHtml(title, polls) {
   const latest = (polls || []).slice().filter(p => _pollParseEndDate(p.date)).sort((a, b) => _pollParseEndDate(b.date) - _pollParseEndDate(a.date))[0];
   const _latestUndecided = latest && latest.undecided_pct !== undefined && latest.undecided_pct !== null
     ? T(`／不表態${latest.undecided_pct}%`,` / Undecided ${latest.undecided_pct}%`) : '';
+  const _wn = _approvalWeightedNow(polls);
+  const weightedNote = _wn
+    ? `<div style="font-size:9.5px;color:rgba(255,255,255,0.7);margin-bottom:2px">${T(`加權平均（${_wn.from}～${_wn.to}，${_wn.n}份全國民調）：滿意${_wn.approve.toFixed(1)}%／不滿意${_wn.disapprove.toFixed(1)}%`,`Weighted average (${_wn.from}–${_wn.to}, ${_wn.n} national polls): Approve ${_wn.approve.toFixed(1)}% / Disapprove ${_wn.disapprove.toFixed(1)}%`)}</div>
+       <div style="font-size:8.5px;color:rgba(196,181,253,0.6);margin-bottom:3px;line-height:1.5">${T('權重：','Weights: ')}${_wn.used.map(u => `${u.pollster} ${u.date.slice(5)} ${(100 * u.w / _wn.wSum).toFixed(0)}%`).join('、')}${T('（偏藍／偏綠機構×0.7、政黨或陣營委託×0.4、越舊越低；僅供參考，不進預測模型）',' (Blue/Green-leaning ×0.7, party/campaign-commissioned ×0.4, older polls weigh less; reference only, not used in the forecast model)')}</div>`
+    : '';
   const latestNote = latest
-    ? `<div style="font-size:9px;color:rgba(255,255,255,0.45);margin-bottom:5px">${T(`最新：${latest.pollster} ${latest.date}　滿意${latest.approve_pct}%／不滿意${latest.disapprove_pct}%${_latestUndecided}`,`Latest: ${latest.pollster} ${latest.date}　Approve ${latest.approve_pct}% / Disapprove ${latest.disapprove_pct}%${_latestUndecided}`)}</div>`
+    ? weightedNote + `<div style="font-size:9px;color:rgba(255,255,255,0.45);margin-bottom:5px">${T(`最新：${latest.pollster} ${latest.date}　滿意${latest.approve_pct}%／不滿意${latest.disapprove_pct}%${_latestUndecided}`,`Latest: ${latest.pollster} ${latest.date}　Approve ${latest.approve_pct}% / Disapprove ${latest.disapprove_pct}%${_latestUndecided}`)}</div>`
     : '';
   return `<div style="border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:8px;background:rgba(124,58,237,0.06)">
     <div style="font-size:10px;font-weight:700;color:#c4b5fd;letter-spacing:0.05em;margin-bottom:4px">${title}</div>
@@ -362937,8 +362999,11 @@ function _liveTrack26Color(codeKey, table, ccForParty) {
 // 裡跑一次拿到新物件，再用「清空舊key＋Object.assign新內容」的方式原地更新既有物件本身——
 // 這樣所有讀取LIVE_TRACK_CC等變數的既有程式碼(_liveTrack26Color等)完全不用改，抓到的都是
 // 同一個物件、只是內容變新了
+// 示範模式（2026-10-26）：網址帶?demo=1時改讀data_live2026_demo2022.js（2022年真實開票數字的
+// 彩排資料），讓開票前也能看到「開票中」的版面；正式開票夜不帶參數，行為完全不變。
+const _LIVE26_DEMO = /[?&]demo=1(&|$)/.test(location.search);
 function _liveTrack26Poll() {
-  fetch('data_live2026.js?_=' + Date.now(), { cache: 'no-store' })
+  fetch((_LIVE26_DEMO ? 'data_live2026_demo2022.js' : 'data_live2026.js') + '?_=' + Date.now(), { cache: 'no-store' })
     .then(r => r.text())
     .then(text => {
       const fresh = new Function(text + '\nreturn {LIVE_TRACK_CC, LIVE_TRACK_TC, LIVE_TRACK_ED};')();
@@ -362949,6 +363014,10 @@ function _liveTrack26Poll() {
       if (typeof isLiveTrack26 !== 'undefined' && isLiveTrack26) {
         if (window._live2026CurrentSub === 'council') _applyLiveTrack26CouncilColors();
         else _applyLiveTrack26MapColors();
+        // 還停在全台總覽（沒選任何縣市）時，總覽面板（進度＋各縣市清單）跟著新數字重畫——
+        // 原本只重新染地圖，面板上的「已讀到數字」要重新整理頁面才會更新
+        const _icN = document.getElementById('ic');
+        if (_icN && typeof level !== 'undefined' && level === 'ed' && !curED) _icN.innerHTML = _liveTrack26NationalIntroHtml(window._live2026CurrentSub);
       }
     })
     .catch(() => {}); // 開票夜網路不穩時安靜跳過這一輪，下一輪再試，不要跳錯誤訊息嚇到使用者
@@ -362956,6 +363025,7 @@ function _liveTrack26Poll() {
 let _liveTrack26PollTimer = null;
 function _startLiveTrack26Poll() {
   if (_liveTrack26PollTimer) return;
+  if (_LIVE26_DEMO) _liveTrack26Poll(); // 示範模式：一進入就先讀一次彩排資料，不等30秒
   _liveTrack26PollTimer = setInterval(_liveTrack26Poll, 30000);
 }
 function _stopLiveTrack26Poll() {
@@ -363215,6 +363285,40 @@ function _liveTrack26ReportedProgress(subMode) {
   const reported = keys.filter(k => table[k] && table[k].sources && Object.keys(table[k].sources).length > 0).length;
   return { reported, total };
 }
+// 全台總覽：22縣市開票清單（2026-10-26）——開票中不用一個一個滑過地圖，一打開就看得到每個縣市
+// 目前讀到的領先者與差距；各來源取最大值合併（同_liveTrack26ConsensusCands，跟地圖染色一致）。
+// 點一列＝進入該縣市鄉鎮層（同點地圖）。縣市議員（160選區）太多，先不列。
+const _LIVE26_CC_ORDER = ['63','65','68','66','67','64','10017','10018','10004','10005','10007','10008','10009','10020','10010','10013','10002','10015','10014','10016','09020','09007'];
+function _liveTrack26CountyListHtml() {
+  if (typeof LIVE_TRACK_CC === 'undefined') return '';
+  const nameOf = cc => (currentLang === 'en' ? (_CC_NAME_EN[cc] || cc) : (_CC_NAME_ZH[cc] || cc));
+  const rows = _LIVE26_CC_ORDER.map(cc => {
+    const entry = LIVE_TRACK_CC[cc];
+    const cands = _liveTrack26ConsensusCands(entry);
+    if (!cands) {
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 2px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px">
+        <span style="color:rgba(255,255,255,0.75)">${nameOf(cc)}</span><span style="color:rgba(255,255,255,0.35);font-size:10px">${T('尚無來源','No source yet')}</span></div>`;
+    }
+    const sorted = cands.slice().sort((a, b) => b.v - a.v);
+    const tot = sorted.reduce((s, c) => s + c.v, 0) || 1;
+    const nSrc = Object.keys(entry.sources).length;
+    const elected = Object.values(entry.sources).map(s => s.elected).find(Boolean);
+    const pc = c => COUNCIL_CLR[_liveCandParty(cc, c.n)] || '#9ca3af';
+    const bar = sorted.slice(0, 3).map(c => `<div style="height:100%;width:${(c.v / tot * 100).toFixed(1)}%;background:${pc(c)}"></div>`).join('');
+    const a = sorted[0], b = sorted[1];
+    return `<button type="button" onclick="goTC('${cc}')" style="display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid rgba(255,255,255,0.06);padding:5px 2px;cursor:pointer;font:inherit;color:inherit">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:11px">
+          <span style="color:rgba(255,255,255,0.85);flex-shrink:0">${nameOf(cc)}</span>
+          <span style="color:${pc(a)};font-weight:700;white-space:nowrap">${elected === a.n ? '✓ ' : ''}${_dispCandName(a.n)} ${(a.v / tot * 100).toFixed(1)}%</span>
+        </div>
+        <div style="display:flex;height:5px;border-radius:2px;overflow:hidden;background:rgba(255,255,255,0.08);margin-top:3px">${bar}</div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:rgba(255,255,255,0.45);margin-top:2px">
+          <span>${b ? `${_dispCandName(b.n)} ${(b.v / tot * 100).toFixed(1)}%` : ''}</span><span>${T(`${nSrc}個來源`, `${nSrc} source${nSrc > 1 ? 's' : ''}`)}</span>
+        </div>
+      </button>`;
+  }).join('');
+  return `<div style="margin-top:8px"><div style="font-size:10px;color:rgba(255,255,255,0.5);margin-bottom:2px">${T('各縣市目前讀到的數字（點一下進入該縣市）','Latest numbers by county (click to open)')}</div>${rows}</div>`;
+}
 function _liveTrack26NationalIntroHtml(subMode) {
   const _subLabel = subMode === 'council' ? T('縣市議員','County/City Council') : T('縣市長','Mayor');
   const _prog = _liveTrack26ReportedProgress(subMode);
@@ -363223,9 +363327,14 @@ function _liveTrack26NationalIntroHtml(subMode) {
     ? `<div style="margin-top:6px;font-size:11px;color:rgba(252,165,165,0.85)">${T('目前已讀到數字','Currently reporting data for')}：<b style="color:#fca5a5">${_prog.reported}</b> / ${_prog.total} ${_progUnit}`
       + `<div style="height:4px;border-radius:2px;background:rgba(220,38,38,0.15);margin-top:3px;overflow:hidden"><div style="height:100%;width:${_prog.total ? (_prog.reported/_prog.total*100).toFixed(1) : 0}%;background:#dc2626"></div></div></div>`
     : '';
+  const _demoHtml = _LIVE26_DEMO
+    ? `<div style="margin-top:6px;font-size:10.5px;line-height:1.5;color:#fde68a;border:1px solid rgba(251,191,36,0.45);border-radius:6px;padding:6px 8px;background:rgba(251,191,36,0.08)">${T('示範模式：顯示的是2022年縣市長選舉的真實開票數字（彩排資料），不是2026年的結果。','Demo mode: showing real 2022 mayoral results (rehearsal data), not 2026 results.')}</div>`
+    : '';
   return `<div class="t1" style="color:#fca5a5">${T('2026 即時開票 — 非官方多來源比對','2026 Live Election Night — Unofficial Multi-Source Tracking')}</div>`
     + `<div style="font-size:10px;color:#fca5a5;margin-top:2px;margin-bottom:5px">${_subLabel}</div>`
+    + _demoHtml
     + _progHtml
+    + (subMode === 'council' ? '' : _liveTrack26CountyListHtml())
     + '<div style="color:rgba(252,165,165,0.9);font-size:11px;margin-top:6px;line-height:1.6;border:1px solid rgba(220,38,38,0.35);border-radius:6px;padding:8px;background:rgba(220,38,38,0.08)">'
     + T('🔴 縣市長層跟鄉鎮市區層(含縣市議員，以整個選區為單位)都優先用新聞網站自己的開票總覽/選區頁面互相比對；少數縣市(新北市/基隆市/高雄市/彰化縣)另外疊加電視台YouTube開票直播當作多來源示範——不使用中選會官方API。同一縣市/鄉鎮如果各來源數字差很多，代表報導本身有落差或誤報，不代表真的作票。「已讀到數字」只代表目前有抓到資料的縣市/選區數量，不是投開票所層級的計票進度，也不代表還沒讀到的地方票數多寡。移到地圖查看各縣市/鄉鎮目前讀到的數字。',
         '🔴 Both county/mayor and township level (incl. city council, tracked per multi-town district) are primarily cross-checked via news-site results pages; a few counties (New Taipei, Keelung, Kaohsiung, Changhua) additionally layer in TV stations\' YouTube livestreams as a multi-source demo — no official CEC API is used. If sources diverge for the same county/township, that reflects reporting lag or error, not necessarily vote tampering. "Currently reporting" only counts how many counties/districts we have any data for — it is not polling-station-level count progress and says nothing about how many votes remain in areas without data yet. Hover the map for each county/township\'s currently-tracked numbers.')
@@ -363494,15 +363603,19 @@ function _mayor2026PredictPanelHtml(cc, m) {
           const leanInfo = (typeof POLL_HOUSE_LEAN !== 'undefined' && POLL_HOUSE_LEAN[p.pollster]) ? POLL_HOUSE_LEAN[p.pollster] : {lean:'unknown'};
           const leanClr = {blue:'#60a5fa', green:'#4ade80', neutral:'#aaa', unknown:'#888'}[leanInfo.lean] || '#888';
           const isInternal = p.sponsor && p.sponsor !== 'unknown' && /黨/.test(p.sponsor);
+          const sponsorTag = isInternal ? T('政黨內部民調','Party-internal poll')
+            : POLL_SKEWED_SAMPLE_SPONSORS.has(p.sponsor) ? T('委託方樣本失衡，降權','Skewed-sample sponsor, discounted')
+            : _pollIsSelfCommissioned(p.sponsor) ? T('陣營委託','Campaign-commissioned') : null;
+          const pubNote = p.public_note ? `<div style="color:rgba(251,191,36,0.75);font-size:9px;margin-top:2px;line-height:1.5">${T(p.public_note, p.public_note_en || p.public_note)}</div>` : '';
           const w = _pollTotalWeight(p);
           const candsStr = (p.candidates||[]).map(c => `${_dispCandName(c.name)} ${c.pct}%`).join(' ／ ');
           return `<div style="border-top:1px solid rgba(255,255,255,0.06);padding:5px 0;font-size:10px">
             <div style="display:flex;justify-content:space-between;color:rgba(255,255,255,0.7)">
-              <span>${p.pollster} <span style="color:${leanClr}">（${isInternal ? T('政黨內部民調','Party-internal poll') : LEAN_LABEL[leanInfo.lean]}）</span></span>
+              <span>${p.pollster} <span style="color:${leanClr}">（${sponsorTag || LEAN_LABEL[leanInfo.lean]}）</span></span>
               <span style="color:rgba(255,255,255,0.4)">${_dispPollDate(p.date)}</span>
             </div>
             <div style="color:rgba(255,255,255,0.55);margin-top:2px">${candsStr}</div>
-            <div style="color:rgba(196,181,253,0.6);font-size:9px;margin-top:2px">${T('加權權重','Weight')}：${w.toFixed(2)}${leanInfo.note ? ` · ${T(leanInfo.note, leanInfo.note_en || leanInfo.note)}` : ''}</div>
+            <div style="color:rgba(196,181,253,0.6);font-size:9px;margin-top:2px">${T('加權權重','Weight')}：${w.toFixed(2)}${leanInfo.note ? ` · ${T(leanInfo.note, leanInfo.note_en || leanInfo.note)}` : ''}</div>${pubNote}
           </div>`;
         }).join('');
   const pollCount = polls ? polls.length : 0;

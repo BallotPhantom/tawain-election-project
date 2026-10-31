@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>政黨基本盤 · V2</title>
+<link rel="stylesheet" href="v2-shell.css?v=20261022b">
+</head>
+<body>
+<div id="v2-bar">
+  <a class="v2-home" href="methodology.html#base" data-zh="← 方法論" data-en="← Methodology">← 方法論</a>
+  <a class="v2-home" href="index.html" data-zh="首頁" data-en="Home">首頁</a>
+  <span class="v2-title"><span data-zh="政黨基本盤 2008–2024" data-en="Party base votes 2008–2024">政黨基本盤 2008–2024</span><span class="v2-badge">V2</span></span>
+  <span id="v2-status"></span>
+  <span class="v2-spacer"></span>
+  <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+</div>
+<div id="v2-stage">
+  <iframe id="v2-engine" title="政黨基本盤（V1 test.html 引擎）"></iframe>
+  <div id="v2-veil" data-zh="載入五屆政黨票資料…" data-en="Loading five elections of party-list votes…">載入五屆政黨票資料…</div>
+</div>
+<script src="legbars.js?v=20261027f"></script>
+<script src="tcborder.js?v=20261029a"></script>
+<script src="i18n.js?v=20261029c"></script>
+<script src="toolbtns.js?v=20261031a"></script>
+<script src="navbar.js?v=20261030a"></script>
+<script src="disclaimer.js?v=20261031c"></script>
+<script src="v2-shell.js?v=20261031a"></script>
+<script>
+  // Party base votes only (reached from the methodology page): V1
+  // setMode('baselean'). The voter-adjusted version (選舉人數校正) is the
+  // method, not an option (user, 2026-10-22): the raw version mistakes
+  // population growth or decline for political change, so it is switched
+  // on before the map is drawn and V1's switch stays hidden.
+  V2Shell.boot({
+    engine: '../test.html',
+    needs: ['setMode', 'setEligCorrected'],
+    title: { zh: '政黨基本盤 2008–2024', en: 'Party base votes 2008–2024' },
+    onReady: function (win) {
+      win.setEligCorrected(true);
+      if (win.eval('mode') !== 'baselean') win.setMode('baselean');
+    }
+  });
+</script>
+</body>
+</html>
