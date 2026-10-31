@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile v2/data_legind.js (build_v2_legind.py) — 平地 / 山地原住民立委 2016/2020/2024 — independently of its reader.
+"""Reconcile v2/data_legind.js (build_v2_legind.py) — 平地 / 山地原住民立委 2008/2012/2016/2020/2024 — independently of its reader.
 
     python3 tests/reconcile_v2_legind.py
 
@@ -9,6 +9,8 @@
   N3 the counties add up to the nationwide row, and each county's townships add up to the county
   N4 2024: every township's votes equal the engine's own IND_LEG_P / IND_LEG_M (test.html), matched by candidate name
   N5 villages: every kept village row equals its own elctks / elprof row; joint-station pointers name a kept joint row
+  N6 2008 / 2012 (old county codes; added 2026-10-31): the nationwide row's elig / cast / valid and every candidate's votes
+     equal elprof / elctks read straight from the csv files; elected = elcand's column; the counties add up to it
 Prints one line per failure and a final "N FAIL(s)" like the other reconcile_* tests.
 """
 import collections, json, os, re, sys
@@ -17,6 +19,8 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from cec_lib import read, VD  # noqa: E402
 
+OLD = {'2008': {'p': '2008立委/平原', 'm': '2008立委/山原'},
+       '2012': {'p': '20120114-總統及立委/平地立委', 'm': '20120114-總統及立委/山地立委'}}
 RACES = {'2016': {'p': ('2016總統立委/平地立委', '_T2'), 'm': ('2016總統立委/山地立委', '_T3')},
          '2020': {'p': ('2020總統立委/平地立委', ''), 'm': ('2020總統立委/山地立委', '')},
          '2024': {'p': ('2024總統立委/平地立委', ''), 'm': ('2024總統立委/山地立委', '')}}
@@ -89,6 +93,25 @@ def main():
                 if jid not in got['jr']: fails.append(f'{y}{kind} {vc}: joint pointer {jid} missing')
                 if vc in got['vc']: fails.append(f'{y}{kind} {vc}: has its own row and a joint pointer')
             print(f'{y}{kind}: nationwide + {len(got["cc"])} counties + {len(got["tc"])} townships + {len(got["vc"])} villages checked')
+    for y, kinds in OLD.items():
+        for kind, d in kinds.items():
+            out = data.get(y, {}).get(kind)
+            if not out: fails.append(f'{y}{kind}: missing'); continue
+            f = lambda n: os.path.join(VD, d, n + '.csv')
+            nat = [r for r in read(f('elprof')) if r[0] == '00' and r[3] == '000' and r[4] == '0000' and r[5] in ('0', '0000')]
+            if len(nat) != 1: fails.append(f'{y}{kind}: N6 nationwide elprof rows {len(nat)}'); continue
+            nat = nat[0]
+            cname = {r[5]: r[6] for r in read(f('elcand')) if len(r) > 7}
+            elected = {r[6] for r in read(f('elcand')) if len(r) > 14 and r[14] in ('*', '!')}
+            votes = collections.Counter()
+            for r in read(f('elctks')):
+                if r[0] == '00' and r[3] == '000' and r[4] == '0000' and r[5] in ('0', '0000'): votes[cname[r[6]]] += int(r[7])
+            names = [c[0] for c in out['cands']]
+            exp = [int(nat[9]), int(nat[8]), sum(votes.values())] + [votes[n] for n in names]
+            if out['nat'] != exp: fails.append(f'{y}{kind}: N6 nationwide row {out["nat"][:5]} vs {exp[:5]}')
+            if {c[0] for c in out['cands'] if c[2]} != elected or len(elected) != 3: fails.append(f'{y}{kind}: N6 elected {elected}')
+            if [sum(r[i] for r in out['cc'].values()) for i in range(len(out['nat']))] != out['nat']: fails.append(f'{y}{kind}: N6 county sum')
+            print(f'{y}{kind}: nationwide + {len(out["cc"])} counties + {len(out["tc"])} townships + {len(out["vc"])} villages (old codes → today\'s) checked')
     for x in fails[:30]: print('FAIL', x)
     print(f'{len(fails)} FAIL(s)')
 

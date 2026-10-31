@@ -639,7 +639,7 @@
   function hookEngine(win) {
     if (typeof win.updateHemicycle === 'function' && !win.updateHemicycle.v2LegDist) {
       var oh = win.updateHemicycle;
-      var wh = function () { var r = oh.apply(this, arguments); var c = win.__v2LegDistCtx; if (c) seatCards(c); return r; };
+      var wh = function () { var r = oh.apply(this, arguments); var c = win.__v2LegDistCtx || win.__v2LegCardsCtx; if (c) seatCards(c); return r; };
       wh.v2LegDist = true; win.updateHemicycle = wh;
     }
     // 2016 / 2020 / 2024 (the engine's own map): its 全台 view gets the same 全台 panel (user 2026-10-28: 「這個在2016,2020,
@@ -851,10 +851,22 @@
     if (was) { var gp = G(win, 'gPop'), gs = G(win, 'gSw'); if (gp) gp.selectAll('*').remove(); if (gs) gs.selectAll('*').remove(); }
     win.__v2LegDistKey = null;
     win.__v2LegDistCtx = null;
+    win.__v2LegCardsCtx = null;
     win.__v2LegDistNatYear = null;
     win.__v2Flip16 = null;
     if (was && typeof win.updateHemicycle === 'function') { try { win.updateHemicycle(0); } catch (e) {} }   // the engine's own seat cards back
     return was;   // true: V2's map is still on screen, the caller must have the engine redraw (2008 → 2016 changes no engine state)
   }
-  window.V2LegDist = { draw: draw, clear: clear, setNationalYear: setNationalYear };
+  // 2008 / 2012 seat cards under the 不分區 / 原住民 maps (user 2026-10-31: 「四張圖要按照年的不同更新」): the engine only
+  // knows 2016–2024, so its cards would stay on its own year — fill them from LEGDIST and keep them on re-render
+  function cards(win, year) {
+    var d = dataFor(year);
+    win.__v2LegCardsCtx = null;
+    if (!d || !d.ind) return false;
+    hookEngine(win);
+    win.__v2LegCardsCtx = { win: win, year: year, d: d };
+    seatCards(win.__v2LegCardsCtx);
+    return true;
+  }
+  window.V2LegDist = { draw: draw, clear: clear, setNationalYear: setNationalYear, cards: cards };
 })();

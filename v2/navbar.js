@@ -17,7 +17,9 @@
     box.style.cssText = 'display:inline-flex;gap:6px;align-items:center;margin-right:8px;min-width:0';
     bar.insertBefore(box, before || null);
     var hooked = null;
-    function run(win, code) { try { win.eval(code); } catch (e) {} }
+    // __v2NavClick: a page layer that wraps goED / goTCAllNational / goVillAllNational (history-legind.js) tells a click
+    // here from the engine's own redraws, which call the same functions
+    function run(win, code) { win.__v2NavClick = true; try { win.eval(code); } catch (e) {} finally { win.__v2NavClick = false; } }
     function refresh() {
       var win = getWin(), doc = win && win.document, nw = doc && doc.getElementById('nav-wrap');
       if (!nw) { box.style.display = 'none'; return; }
@@ -35,12 +37,17 @@
         var t = (n.textContent || '').replace(/\s+/g, ' ');
         if (!t.trim()) return;
         var oc = n.getAttribute && n.getAttribute('onclick');
-        var el = document.createElement(oc ? 'button' : 'span');
+        // V2 page layers (history-legind.js, history-plnat.js) set the crumb's handler in script, not as an attribute
+        var fn = !oc && n.nodeType === 1 && typeof n.onclick === 'function';
+        var el = document.createElement(oc || fn ? 'button' : 'span');
         el.textContent = t.trim();
-        if (oc) {
+        if (oc || fn) {
           el.type = 'button';
           el.style.cssText = 'font:inherit;color:#7dd3fc;background:none;border:0;padding:0;cursor:pointer';
-          el.addEventListener('click', function () { run(getWin(), oc); });
+          el.addEventListener('click', function () {
+            if (oc) { run(getWin(), oc); return; }
+            var w = getWin(); w.__v2NavClick = true; try { n.click(); } finally { w.__v2NavClick = false; }
+          });
         } else el.style.color = 'rgba(231,234,240,.55)';
         cbox.appendChild(el);
       });

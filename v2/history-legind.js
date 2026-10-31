@@ -131,6 +131,7 @@
   function begin(c, view) {
     fresh(c);
     c.view = view;
+    if (typeof navActive === 'function') navActive(c, null);
     c.win.eval("level = 'tc'; villAllMode = false; curED = null; curTC = null; curVC = null;");
     G(c.win, 'clearAll')();
     c.win.document.getElementById('mp').style.background = c.win.mapBgColor();
@@ -263,9 +264,54 @@
     crumb(c, [[T('全台', 'All'), function () { national(c); }], [T('22 縣市', '22 counties'), function () { counties(c); }], [ccName(c, cc), function () { county(c, cc); }], [T('全選區村里', 'All villages'), null]]);
     G(c.win, 'fitFeats')(feats);
   }
+  // 全台鄉鎮市區 / 全台村里 (the bar's buttons; user 2026-10-31: 「全台底線那個也不能用（至少原住民有bug）」 — the engine's own
+  // views there are its 2024 原住民 layer, blank for 2008 / 2012): every township / village of Taiwan, same colouring
+  function navActive(c, id) {
+    ['btn-tc-nat', 'btn-vill-nat'].forEach(function (b) { var el = c.win.document.getElementById(b); if (el) el.classList.toggle('active', b === id); });
+  }
+  function allTowns(c) {
+    begin(c, ['alltc']);
+    var T = c.win.T, seen = {}, feats = [];
+    c.win.getTCGJ().features.forEach(function (f) { var tc = f.properties.tc; if (seen[tc]) return; seen[tc] = 1; feats.push(f); });
+    blocks(c, feats, function (d) { return fill(c, c.d.tc[d.properties.tc]); },
+      function (e, d) { var tc = d.properties.tc; ic(c, areaPanel(c, ccName(c, tc.slice(0, 5)) + ' ' + tcName(c, tc), c.d.tc[tc])); },
+      function (e, d) { township(c, d.properties.tc); });
+    border(c, 'v2-li-tcb', feats, 'tc');
+    border(c, 'v2-li-ccb', [c.win.topojson.mesh(c.CD, c.CD.objects.counties, function (a, b) { return a !== b; })], 'outline');
+    ic(c, nationalPanel(c));
+    crumb(c, [[T('全台', 'All'), function () { national(c); }], [T('全台鄉鎮市區', 'All townships'), null]]);
+    navActive(c, 'btn-tc-nat');
+    zoomAll(c);
+  }
+  function allVillages(c) {
+    begin(c, ['allvill']);
+    var T = c.win.T;
+    villageLayer(c, villFeats(c, ''), function (vc) { return ccName(c, vc.slice(0, 5)) + ' ' + tcName(c, vc.slice(0, 8)) + ' ' + vcName(c, vc); });
+    border(c, 'v2-li-ccb', [c.win.topojson.mesh(c.CD, c.CD.objects.counties, function (a, b) { return a !== b; })], 'outline');
+    ic(c, nationalPanel(c));
+    crumb(c, [[T('全台', 'All'), function () { national(c); }], [T('全台村里', 'All villages'), null]]);
+    navActive(c, 'btn-vill-nat');
+    zoomAll(c);
+  }
+  // the engine calls goED / goTCAllNational / goVillAllNational for its own redraws too (resize, setMode…): only a click
+  // in the bar (v2/navbar.js sets __v2NavClick) opens V2's view; any other call keeps V2's current view on screen
+  function hookNav(win) {
+    var to = { goED: national, goTCAllNational: allTowns, goVillAllNational: allVillages };
+    Object.keys(to).forEach(function (n) {
+      var o = win[n]; if (typeof o !== 'function' || o.v2LegInd) return;
+      var w = function () {
+        var c = win.__v2LegIndCtx;
+        if (!c || win.__v2LegIndKey !== c.key) return o.apply(this, arguments);
+        if (win.__v2NavClick) to[n](c); else redraw(c);
+      };
+      w.v2LegInd = true; win[n] = w;
+    });
+  }
   function redraw(c) {
     var v = c.view || ['nat'];
-    if (v[0] === 'cc') counties(c);
+    if (v[0] === 'alltc') allTowns(c);
+    else if (v[0] === 'allvill') allVillages(c);
+    else if (v[0] === 'cc') counties(c);
     else if (v[0] === 'county') county(c, v[1]);
     else if (v[0] === 'tc') township(c, v[1]);
     else if (v[0] === 'ccvill') villagesOfCounty(c, v[1]);
@@ -321,6 +367,7 @@
     win.__v2LegIndKey = c.key;
     win.__v2LegIndCtx = c;
     hookLegend(win);
+    hookNav(win);
     national(c);
     chrome(c);
     schedule(c);

@@ -78,6 +78,15 @@
     text-overflow: ellipsis;
   }
   #v2-status.warn { color: #fbbf24; }
+  /* one row (user 2026-10-31: 「Mayors 2022 這個 hist mode 的小 title 刪掉…年數變成折疊…地方選舉分成民意代表跟行政首長…按鈕只能
+     維持一行」): the status line shows only warnings, group labels and the V1 compare link go, years are a select (as in
+     V1), local types sit behind 行政首長 / 民意代表; the bar's right side (crumb, ⚠, 色盲友善, zh/EN) is pushed right */
+  #v2-nav { flex-wrap: nowrap; gap: 10px; }
+  #v2-status:not(.warn) { display: none; }
+  .v2-group-label, #v2-compare-link, #v2-year-group .btn { display: none !important; }
+  #v2-nav > .v2-nav { margin-left: auto; }
+  #v2-year-select { font: inherit; font-size: 12px; font-weight: 600; color: #e7eaf0; background: rgba(18,24,38,.9); border: 1px solid rgba(255,255,255,.18); border-radius: 7px; padding: 4px 6px; cursor: pointer; }
+  #v2-cat-group .btn { white-space: nowrap; }
   #v2-frame-wrap { flex: 1; position: relative; }
   /* Both engines are persistent, permanently-mounted iframes stacked exactly
      on top of each other; only the active one is visible. visibility:hidden
@@ -143,6 +152,11 @@
 
     <span class="v2-crumb-sep">/</span>
 
+    <div class="v2-group" id="v2-cat-group">
+      <button class="btn" data-cat="exec" data-zh="行政首長" data-en="Executives">行政首長</button>
+      <button class="btn" data-cat="rep" data-zh="民意代表" data-en="Representatives">民意代表</button>
+    </div>
+
     <div class="v2-group" id="v2-type-group">
       <span class="v2-group-label" data-zh="選舉類型" data-en="Election">選舉類型</span>
       <button class="btn active" data-type="mayor" data-type-scope="local" data-zh="縣市長" data-en="Mayor">縣市長</button>
@@ -157,6 +171,7 @@
 
     <div class="v2-group" id="v2-year-group">
       <span class="v2-group-label" data-zh="年份" data-en="Year">年份</span>
+      <select id="v2-year-select" aria-label="Year"></select>
       <button class="btn" data-year="2014" data-year-scope="local">2014</button>
       <button class="btn" data-year="2018" data-year-scope="local">2018</button>
       <button class="btn active" data-year="2022" data-year-scope="local">2022</button>
@@ -195,18 +210,18 @@
   </div>
 
 <script src="i18n.js?v=20261029c"></script>
-<script src="navbar.js?v=20261030a"></script>
+<script src="navbar.js?v=20261031a"></script>
 <script src="disclaimer.js?v=20261031d"></script>
 <script src="toolbtns.js?v=20261031c"></script>
 <script src="legbars.js?v=20261027f"></script>
 <script src="noglow.js?v=20261029f"></script>
-<script src="data_legind.js?v=20261027a"></script>
+<script src="data_legind.js?v=20261031a"></script>
 <script src="tcborder.js?v=20261031a"></script>
-<script src="history-legind.js?v=20261028g"></script>
+<script src="history-legind.js?v=20261031a"></script>
 <script src="data_legdist.js?v=20261028d"></script>
 <script src="data_career.js?v=20261029a"></script>
 <script src="career.js?v=20261029a"></script>
-<script src="history-legdist.js?v=20261028o"></script>
+<script src="history-legdist.js?v=20261031a"></script>
 <script src="data_pl_national.js?v=20261028c"></script>
 <script src="history-plnat.js?v=20261028i"></script>
 <script src="data_township_head.js?v=20261026c"></script>
@@ -260,6 +275,11 @@
   var typeBtns = Array.prototype.slice.call(document.querySelectorAll('#v2-type-group [data-type]'));
   var typeBtnsAll = Array.prototype.slice.call(document.querySelectorAll('#v2-type-group .btn'));
   var yearBtns = Array.prototype.slice.call(document.querySelectorAll('#v2-year-group [data-year]'));
+  var yearSel = document.getElementById('v2-year-select');
+  var catGroup = document.getElementById('v2-cat-group');
+  var catBtns = Array.prototype.slice.call(document.querySelectorAll('#v2-cat-group [data-cat]'));
+  var TYPE_CAT = { mayor: 'exec', township: 'exec', villchief: 'exec', councilor: 'rep', townrep: 'rep' };
+  var CAT_FIRST = { exec: 'mayor', rep: 'councilor' };
   var submodeGroup = document.getElementById('v2-submode-group');
   var submodeSep = document.getElementById('v2-submode-sep');
   // Selects by data-submode-scope, not data-submode, so it also picks up the
@@ -288,8 +308,8 @@
   // belongs to a future Forecast/Simulation area, not History.
   var LEG_YEARS_BY_SUBMODE = {
     geo: ['2008', '2012', '2016', '2020', '2024'],   // 2008 / 2012: V2 on the 2016 district map (history-legdist.js)
-    'ind-p': ['2016', '2020', '2024'],   // V2 draws these from CEC files (history-legind.js); the engine only has 2024
-    'ind-m': ['2016', '2020', '2024'],
+    'ind-p': ['2008', '2012', '2016', '2020', '2024'],   // V2 draws these from CEC files (history-legind.js); the engine only has 2024 (2008 / 2012 added 2026-10-31)
+    'ind-m': ['2008', '2012', '2016', '2020', '2024'],
     pl: ['2008', '2012', '2016', '2020', '2024'],
     // (縣市席次點 seat dots removed 2026-10-27, user: 「把席次原點功能刪掉」; history-seatdots.js kept in backup/)
   };
@@ -304,8 +324,12 @@
       b.classList.toggle('active', b.getAttribute('data-scope') === state.scope);
     });
 
+    // 行政首長 / 民意代表 (local only): only the chosen group's types show
+    var cat = TYPE_CAT[state.type] || 'exec';
+    catBtns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-cat') === cat); });
+    catGroup.style.display = state.scope === 'local' ? '' : 'none';
     typeBtnsAll.forEach(function (b) {
-      var show = b.getAttribute('data-type-scope') === state.scope;
+      var show = b.getAttribute('data-type-scope') === state.scope && (state.scope !== 'local' || TYPE_CAT[b.getAttribute('data-type')] === cat);
       b.style.display = show ? '' : 'none';
       if (b.hasAttribute('data-type')) {
         b.classList.toggle('active', b.getAttribute('data-type') === state.type);
@@ -327,16 +351,31 @@
       var activeYr = state.scope === 'national' ? state.legYear : state.localYear;
       b.classList.toggle('active', yr === activeYr);
     });
+    // the year select mirrors the (hidden) year buttons: same options, same active one
+    var opts = yearBtns.filter(function (b) { return b.style.display !== 'none'; });
+    yearSel.innerHTML = opts.map(function (b) {
+      var y = b.getAttribute('data-year');
+      return '<option value="' + y + '"' + (b.classList.contains('active') ? ' selected' : '') + '>' + y + '</option>';
+    }).join('');
 
-    var showSubmode = (state.scope === 'local' && state.type === 'councilor') ||
-                       (state.scope === 'national' && state.type === 'legislative');
+    // 立委 sub-modes are the seat cards on the map's left now (see stripBase5); the bar keeps 縣市議員's pair only
+    var showSubmode = state.scope === 'local' && state.type === 'councilor';
+    try {
+      var nd = document.getElementById('v2-frame-national').contentDocument, cards = nd && nd.querySelectorAll('#v2-leg-left .stats-card');
+      if (cards) [].forEach.call(cards, function (c) {
+        var t = c.textContent, sm = state.legSubmode;
+        var on = (sm === 'geo' && /區域立委|District/.test(t) && !c.classList.contains('ind-card')) || (sm === 'pl' && /不分區|Party/.test(t) && !c.classList.contains('total-card')) || ((sm === 'ind-p' || sm === 'ind-m') && c.classList.contains('ind-card'));
+        c.classList.toggle('v2-on', !!on);
+      });
+      if (nd) [].forEach.call(nd.querySelectorAll('#v2-leg-left .v2-ind-row'), function (r) { r.classList.toggle('v2-on', r.getAttribute('data-sub') === state.legSubmode); });
+    } catch (e) {}
     submodeGroup.style.display = showSubmode ? '' : 'none';
     submodeSep.style.display = showSubmode ? '' : 'none';
     submodeBtns.forEach(function (b) {
       var grp = b.getAttribute('data-submode-scope');
       var relevant = (grp === 'councilor' && state.scope === 'local' && state.type === 'councilor') ||
                      (grp === 'legislative' && state.scope === 'national' && state.type === 'legislative');
-      b.style.display = relevant ? '' : 'none';
+      b.style.display = relevant && grp === 'councilor' ? '' : 'none';   // 立委's are clicked from the seat cards
       if (!relevant) return;
       var sm = grp === 'councilor' ? state.councilSubmode : state.legSubmode;
       b.classList.toggle('active', b.getAttribute('data-submode') === sm);
@@ -491,10 +530,75 @@
         // 更新都套用在其他模式中」) — top-left corner cleared, ＋／− gone; crumb, national-view buttons and ⚠ sit in the bar
         // #seat-summary-float (Local engine only): the 「直轄市長 6・縣市長 16・合計 22」 fold card, the 中央選舉 seat card's
         // layout reused for local races (user 2026-10-31: 「hist mode的地方選舉得原本中央選舉的折疊卡都隱藏 就是直下市長6....那個」)
+        // #btn-council-party / #btn-council-candidate (Local engine): the map's own 政黨比例 / 最高候選人 pair, a duplicate of
+        // the bar's (user 2026-10-31: 「市議員的要把頁面重複的v1最高候選人跟政黨分類按鈕關掉」); 平地 / 山地原住民 stay, their 「｜」
+        // divider goes (「把｜這個刪掉（所有版本）」 — also in v2-shell.js's ALWAYS_HIDE)
         var local = /council\.html/.test(win.location.pathname);
         st.textContent = '#toolbar, #btn-pvi3, #btn-plcounty-jump-wrap, #camp-toggle-btn, #party-heatmap-row, #party-heatmap-select-row, #elig-correct-toggle, #council-base5-toggle-row, #ccp-base5-compare, #roads-toggle-btn, .ind-leg-btn, div:has(> .ind-leg-btn), #lang-toggle, ' +
-          '#left-rail, #map-title, #sidebar-toggle, .zbts' + (local ? ', #seat-summary-float' : '') + ' { display: none !important; }';   // #lang-toggle: the engine's own zh/EN switch — the V2 bar has one (2026-10-29)
+          '#left-rail, #map-title, #sidebar-toggle, .zbts, #seat-summary-float' + (local ? ', #btn-council-party, #btn-council-candidate, #council-ticker-toolbar > span' : '') + ' { display: none !important; }';   // #lang-toggle: the engine's own zh/EN switch — the V2 bar has one (2026-10-29)
         doc.head.appendChild(st);
+      }
+      // 立委 (National engine): the four seat cards (#hemi-row: 區域 / 不分區 / 原住民 / 總席次), which sat in the top-right
+      // 「區域 73 · 不分區 34 …」 fold card, stand on the map's left, top to bottom, and switch the map (user 2026-10-31:
+      // 「立委右邊區域73…那個四張卡折疊關掉，把四張卡移到左邊由上而下排列，然後這個圖就是一個按鈕…切換地圖，然後把上面的立委分類
+      // 按鈕關掉」): 區域 → 區域選區, 不分區 → 不分區, the 原住民 card's 平地 / 山地 halves → 平地 / 山地原住民 (a click elsewhere on
+      // that card → 平地); 總席次 is no map. A click runs the bar's (now hidden) sub-mode button, so its year rules hold.
+      if (/test\.html/.test(win.location.pathname)) {
+        var hr = doc.getElementById('hemi-row'), mainN = doc.getElementById('main');
+        if (hr && mainN && !doc.getElementById('v2-leg-left')) {
+          var ll = doc.createElement('div'); ll.id = 'v2-leg-left';
+          mainN.appendChild(ll); ll.appendChild(hr);
+          var lcss = doc.createElement('style'); lcss.id = 'v2-leg-left-css';
+          lcss.textContent = '#v2-leg-left{position:absolute;top:24px;left:16px;bottom:16px;width:242px;padding-right:12px;box-sizing:border-box;overflow-y:auto;z-index:10;scrollbar-width:none}' +
+            // the four share the column's height — all on one screen, no scrolling (user: 「不要這麼大」「一頁可以分好四張圖就好」)
+            '#v2-leg-left{overflow:hidden!important}' +
+            '#v2-leg-left svg{max-height:72px;width:auto;max-width:100%;display:block;margin:0 auto}' +
+            '#v2-leg-left::-webkit-scrollbar{display:none}' +
+            '#v2-leg-left #hemi-row{display:flex!important;flex-direction:column!important;gap:8px!important;width:auto!important;height:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;margin:0!important;background:none!important;border:0!important;box-shadow:none!important}' +
+            '#v2-leg-left .stats-card{width:auto!important;max-width:none!important;flex:1 1 0!important;min-height:0!important;height:auto!important;overflow:hidden;display:flex!important;flex-direction:column;justify-content:center;padding:6px 8px!important;margin:0!important;cursor:pointer;border:1px solid rgba(255,255,255,.08);border-radius:8px;transition:transform .18s ease,border-color .18s ease}' +
+            '#v2-leg-left .stats-card.total-card{cursor:default}' +
+            '#v2-leg-left .v2-ind-row{cursor:pointer;border-radius:4px;padding:1px 3px}#v2-leg-left .v2-ind-row:hover{background:rgba(255,255,255,.1)}' +
+            '#v2-leg-left .v2-ind-row.v2-on{background:rgba(40,200,200,.22)}' +
+            '#v2-leg-left .stats-card.v2-on{border-color:rgba(40,200,200,.75);box-shadow:0 0 0 1px rgba(40,200,200,.35);transform:translateX(12px)}';
+          doc.head.appendChild(lcss);
+          var markInd = function () {   // the 原住民 card's two .ind-row rows (平地 / 山地) become its two buttons
+            [].forEach.call(ll.querySelectorAll('.stats-card.ind-card .ind-row'), function (r) {
+              var t = (r.textContent || '').trim(), sub = /^(平地|Lowland|Plains)/i.test(t) ? 'ind-p' : /^(山地|Highland|Mountain)/i.test(t) ? 'ind-m' : null;
+              if (sub && r.getAttribute('data-sub') !== sub) { r.classList.add('v2-ind-row'); r.setAttribute('data-sub', sub); }
+            });
+          };
+          markInd();
+          new win.MutationObserver(markInd).observe(hr, { childList: true, subtree: true });
+          ll.addEventListener('click', function (e) {
+            var card = e.target.closest && e.target.closest('.stats-card'); if (!card || card.classList.contains('total-card')) return;
+            var sub = null, txt = card.textContent;
+            if (card.classList.contains('ind-card')) {
+              // the 平地 / 山地 half: the nearest block under the card whose text starts with that label
+              // the 平地 / 山地 row clicked (marked .v2-ind-row by markInd); elsewhere on the card: the row nearer the pointer
+              // (user 2026-10-31: 「原住民還是要按照分類可以點，山地跟平地，而不是只有平地」)
+              var row = e.target.closest && e.target.closest('.v2-ind-row');
+              if (row) sub = row.getAttribute('data-sub');
+              else {
+                var rows = card.querySelectorAll('.v2-ind-row'), best = null, bd = 1e9;
+                [].forEach.call(rows, function (r) { var b = r.getBoundingClientRect(), dy = Math.abs(e.clientY - (b.top + b.height / 2)); if (dy < bd) { bd = dy; best = r; } });
+                sub = best ? best.getAttribute('data-sub') : 'ind-p';
+              }
+            } else if (/區域立委|District/.test(txt)) sub = 'geo';
+            else if (/不分區|Party/.test(txt)) sub = 'pl';
+            var b = sub && document.querySelector('#v2-submode-group [data-submode="' + sub + '"]');
+            if (b) b.click();
+          });
+        }
+      }
+      // the 縣市議會 seat hemicycle (#county-council-panel, Local engine) on the map's left instead of atop the info panel
+      // (user 2026-10-31: 「把半圓形圖（市議員）移到左邊」) — the node itself moves, so the engine keeps updating it by id
+      if (/council\.html/.test(win.location.pathname)) {
+        var ccp = doc.getElementById('county-council-panel'), mainEl = doc.getElementById('main');
+        if (ccp && mainEl && !doc.getElementById('v2-hemi-left')) {
+          var hl = doc.createElement('div'); hl.id = 'v2-hemi-left';
+          hl.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);left:16px;width:300px;z-index:10';   // vertically centred (user: 「在下面一點剛好上下各一半」)
+          mainEl.appendChild(hl); hl.appendChild(ccp);
+        }
       }
       // hover outline = the 2027 補選預測 page's (#f5c518, 2.2 px, no glow) in every mode — same rule as v2-shell.js's
       // HOVER27_CSS (user 2026-10-28: 「歷屆頁各模式的黃框…要改」)
@@ -677,7 +781,8 @@
       } else {
         if (window.V2LegInd) window.V2LegInd.clear(win);
         var wasLegDist = window.V2LegDist ? window.V2LegDist.clear(win) : false;
-        var legDist = desired.submode === 'geo' && (desired.year === '2008' || desired.year === '2012');
+        var oldYear = desired.year === '2008' || desired.year === '2012';
+        var legDist = desired.submode === 'geo' && oldYear;
         // 政黨輪替分析 fold: 區域立委 only (user 2026-10-28: 「把政黨輪替分析折疊隱藏」「不分區裡的…也要」「只保留區域立委」).
         // The engine shows / hides #flip-analysis-box itself, so a class on its root wins over its inline display.
         // 不分區: its 跑馬燈 (#ticker) hidden too (user: 「把跑馬燈（不分區的）隱藏」); 原住民: 圓餅 / 激戰區域 buttons hidden
@@ -704,12 +809,15 @@
         rootCls.toggle('v2-ind', desired.submode === 'ind-p' || desired.submode === 'ind-m');
         win.setMode('winner');
         if (desired.submode === 'pl') {
+          // the seat cards follow the engine's year (2008 / 2012: 2016 underneath, cards from V2LegDist.cards below)
+          win.setWinnerYear(oldYear ? '2016' : desired.year);
           win.setPLCountyMode(desired.year);
           // 不分區 is one nationwide district: V2 starts at a 全台 block + 34-seat hemicycle, click → the engine's 22 縣市
           window.V2PLNat.draw(win, desired.year);
+          if (oldYear) window.V2LegDist.cards(win, desired.year);
           setStatus(T('不分區 ' + desired.year, 'Party list ' + desired.year));
         } else {
-          win.setWinnerYear(legDist ? '2016' : desired.year);
+          win.setWinnerYear(oldYear ? '2016' : desired.year);
           if (legDist) {
             // 2008 / 2012 were fought on the 2016 districts: the engine draws its 2016 map state, V2 the year's results
             window.V2LegDist.draw(win, desired.year);
@@ -720,6 +828,7 @@
             // 原住民立委 is one nationwide district: V2 redraws it as 全台 → 22 縣市 → 鄉鎮 → 村里 from CEC files
             // (history-legind.js; all three years — the engine's own IND_LEG_* is 2024 only)
             window.V2LegInd.draw(win, desired.year, t);
+            if (oldYear) window.V2LegDist.cards(win, desired.year);
             setStatus(T('原住民立委 ' + desired.year, 'Indigenous legislators ' + desired.year));
           } else {
             if (wasLegDist) win.goED();   // 2008 / 2012 → 2016: the engine was already on 2016 and would not redraw
@@ -851,6 +960,23 @@
       state.type = t;
       applyCurrent();
     });
+  });
+
+  // 行政首長 / 民意代表: back to the type last used in that group (first one the first time)
+  var lastByCat = { exec: 'mayor', rep: 'councilor' };
+  catBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var c = b.getAttribute('data-cat');
+      if (TYPE_CAT[state.type] === c) return;
+      if (TYPE_CAT[state.type]) lastByCat[TYPE_CAT[state.type]] = state.type;
+      state.type = lastByCat[c] || CAT_FIRST[c];
+      applyCurrent();
+    });
+  });
+  // the year select runs the (hidden) year button's own handler
+  yearSel.addEventListener('change', function () {
+    var b = yearBtns.filter(function (x) { return x.getAttribute('data-year') === yearSel.value && x.style.display !== 'none'; })[0];
+    if (b) b.click();
   });
 
   yearBtns.forEach(function (b) {
