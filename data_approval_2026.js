@@ -242,7 +242,25 @@ const PRESIDENT_APPROVAL_2025 = [
 
   // ---- 2026-09-10新增：美麗島電子報8/24-26、TVBS民調中心8/31-9/2 ----
   { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-08-24", period: "2026/8/24-26", approve_pct: 46.4, disapprove_pct: 43.9, undecided_pct: 9.7, sample_size: 1632, source_url: "https://zh.wikipedia.org/wiki/對賴清德政府的民意調查", note: "undecided_pct為反推值（100-46.4-43.9）；資料來源為維基百科彙整頁面轉引，非該次報告原始連結，樣本數1632明顯大於本系列其他月份（約1075-1200），不確定是否為擴大樣本或不同題組，供之後查證" },
-  { pollster: "TVBS民調中心", sponsor: "TVBS", date: "2026-08-31", period: "2026/8/31-9/2", approve_pct: 39, disapprove_pct: 38, undecided_pct: 22, sample_size: 1127, source_url: "https://www.chinatimes.com/realtimenews/20260904003992-260407?chdtv", note: "與同機構5月調查相比，滿意度38%→39%持平，不滿意度45%→38%明顯下降，沒意見17%→22%上升，報導解讀為不滿意度下降主要轉為觀望而非轉為肯定；市話+手機雙底冊，95%信心水準抽樣誤差±2.9個百分點" }
+  { pollster: "TVBS民調中心", sponsor: "TVBS", date: "2026-08-31", period: "2026/8/31-9/2", approve_pct: 39, disapprove_pct: 38, undecided_pct: 22, sample_size: 1127, source_url: "https://www.chinatimes.com/realtimenews/20260904003992-260407?chdtv", note: "與同機構5月調查相比，滿意度38%→39%持平，不滿意度45%→38%明顯下降，沒意見17%→22%上升，報導解讀為不滿意度下降主要轉為觀望而非轉為肯定；市話+手機雙底冊，95%信心水準抽樣誤差±2.9個百分點" },
+
+  // ---- 2026-10-26新增：Wikipedia「對賴清德政府的民意調查」2026年全國民調中本檔缺的筆數，逐筆回原始報導核對 ----
+  // 未收：只訪單一縣市的4筆（中華亞太交流菁英交流協會高雄、震傳媒台北／新北、新台灣國策智庫桃園）；
+  // 民進黨5/11-13（報導只有滿意56.4%、未報不滿意）。台灣民意基金會官網最新發布停在2025/12/23，2026年無月報可補。
+  { pollster: "台灣勵志協會", sponsor: "台灣勵志協會", date: "2026-01-07", period: "2026/1/7-11", approve_pct: 55.9, disapprove_pct: 42.7, undecided_pct: null, sample_size: 1200, source_url: "https://newtalk.tw/news/view/2026-01-21/1016047", note: "故鄉市場調查執行，市話＋手機各半。問的是「賴政府／政府目前施政表現」，不是總統個人，題目跟其他機構不完全相同；未表態近乎0（兩項合計約98.5%），比較接近強迫選擇。" },
+  { pollster: "TVBS民調中心", sponsor: "國民黨", date: "2026-02-05", period: "2026/2/5-8", approve_pct: 38, disapprove_pct: 47, undecided_pct: null, sample_size: 1090, source_url: "https://www.ctinews.com/news/items/1vWReRvEnJ", note: "國民黨委託TVBS民調中心、2/13由國民黨公布（非TVBS自辦），比照政黨委託降權；報導未標示無意見比例。" },
+  { pollster: "震傳媒", sponsor: "震傳媒", date: "2026-02-07", period: "2026/2/7-9", approve_pct: 45.5, disapprove_pct: 41.5, undecided_pct: null, sample_size: 1069, source_url: "https://www.zmedia.com.tw/Document/PoolDetail/40607", note: "震傳媒出資、山水民意研究執行，全國市話535＋手機534。" },
+  { pollster: "台灣勵志協會", sponsor: "台灣勵志協會", date: "2026-03-13", period: "2026/3/13-17", approve_pct: 57.6, disapprove_pct: 41.1, undecided_pct: null, sample_size: 1203, source_url: "https://newtalk.tw/news/view/2026-03-24/1026009", note: "故鄉市場調查執行。問的是「賴政府／政府目前施政表現」，不是總統個人，題目跟其他機構不完全相同；未表態近乎0（兩項合計約98.5%），比較接近強迫選擇。" },
+  { pollster: "震傳媒", sponsor: "震傳媒", date: "2026-03-27", period: "2026/3/27-28", approve_pct: 43.8, disapprove_pct: 44.0, undecided_pct: null, sample_size: 1088, source_url: "https://www.zmedia.com.tw/Document/PoolDetail/41390", note: "震傳媒出資、山水民意研究執行，全國。" },
+  { pollster: "草根影響力文教基金會", sponsor: "草根影響力文教基金會", date: "2026-04-09", period: "2026/4/9-15", approve_pct: 41, disapprove_pct: 44, undecided_pct: 15, sample_size: 1070, source_url: "https://grinews.com/news/wp-content/uploads/2026/04/1150424%E3%80%90%E8%AA%BF%E6%9F%A5%E5%A0%B1%E5%91%8A%E3%80%91%E5%85%AC%E8%A9%95%E8%B3%B4%E6%94%BF%E5%BA%9C%E6%96%BD%E6%94%BF%E6%BB%BF%E6%84%8F%E5%BA%A6%E6%9C%80%E6%96%B0%E6%B0%91%E8%AA%BF%E7%99%BC%E8%A1%A8%E6%9C%83.pdf", note: "基金會調查研究中心自辦，僅市話RDD，18歲以上；題目為「賴清德政府的施政表現」。報告自列樣本政黨傾向民進黨31%／國民黨25%／民眾黨7%。" },
+  { pollster: "震傳媒", sponsor: "震傳媒", date: "2026-04-19", period: "2026/4/19-20", approve_pct: 45.3, disapprove_pct: 43.8, undecided_pct: null, sample_size: 1071, source_url: "https://www.zmedia.com.tw/Document/PoolDetail/41742", note: "震傳媒出資、山水民意研究執行，全國。" },
+  { pollster: "TVBS民調中心", sponsor: "TVBS", date: "2026-05-04", period: "2026/5/4-10", approve_pct: 38, disapprove_pct: 45, undecided_pct: 17, sample_size: 1138, source_url: "https://news.tvbs.com.tw/politics/3203919", note: "執政兩週年調查，市話575＋手機563。" },
+  { pollster: "聯合報", sponsor: "聯合報", date: "2026-05-22", period: "2026/5/22-27", approve_pct: 41, disapprove_pct: 50, undecided_pct: null, sample_size: 1068, source_url: "https://udn.com/news/story/124901/9537237", note: "聯合報系民意調查中心，市話＋手機；報導未標示無意見比例。" },
+  { pollster: "震傳媒", sponsor: "震傳媒", date: "2026-05-24", period: "2026/5/24-25", approve_pct: 47.7, disapprove_pct: 40.0, undecided_pct: null, sample_size: 1088, source_url: "https://www.zmedia.com.tw/Document/PoolDetail/42360", note: "震傳媒出資、山水民意研究執行，全國。" },
+  { pollster: "台灣勵志協會", sponsor: "台灣勵志協會", date: "2026-07-15", period: "2026/7/15-19", approve_pct: 56, disapprove_pct: 42, undecided_pct: null, sample_size: 1200, source_url: "https://www.ettoday.net/news/20260727/3208440.htm", note: "故鄉市場調查執行。問的是「賴政府／政府目前施政表現」，不是總統個人，題目跟其他機構不完全相同；未表態近乎0（兩項合計約98.5%），比較接近強迫選擇。" },
+  { pollster: "台灣勵志協會", sponsor: "台灣勵志協會", date: "2026-09-10", period: "2026/9/10-15", approve_pct: 62.1, disapprove_pct: 36.6, undecided_pct: null, sample_size: 1201, source_url: "https://www.cmmedia.com.tw/home/articles/62994", note: "故鄉市場調查執行。問的是「賴政府／政府目前施政表現」，不是總統個人，題目跟其他機構不完全相同；未表態近乎0（兩項合計約98.5%），比較接近強迫選擇。" },
+  { pollster: "台灣民心調查", sponsor: "台灣民心調查", date: "2026-09-21", period: "2026/9/21-23", approve_pct: 51.4, disapprove_pct: 41.1, undecided_pct: null, sample_size: 1075, source_url: "https://news.ltn.com.tw/news/politics/breakingnews/5588997", note: "戴立安自辦（經費與委託皆為戴立安本人，與信民協會委託案無關），市話698＋手機377；報導未標示無意見比例。" },
+  { pollster: "美麗島電子報", sponsor: "美麗島電子報", date: "2026-09-29", period: "2026/9/29-10/2", approve_pct: 47.9, disapprove_pct: 41.4, undecided_pct: 10.7, sample_size: 1201, source_url: "https://m.my-formosa.com.tw/DOC_229724.htm", note: "市話721＋手機480。" }
 ];
 
 const PREMIER_APPROVAL_2025 = [
@@ -273,5 +291,11 @@ const PREMIER_APPROVAL_2025 = [
   { pollster: "台灣民心調查", premier_name: "卓榮泰", sponsor: "台灣民心調查", date: "2026-08-19", period: "2026/8/19-21", approve_pct: 43.2, disapprove_pct: 40.6, undecided_pct: 16.2, sample_size: 1076, source_url: "https://www.businesstoday.com.tw/article/category/183027/post/202608250012/", note: "戴立安脫離美麗島電子報後首篇「台灣民心調查」；本檔案查找期間找不到2026-08卓榮泰個人施政滿意度的獨立TPOF報告，這筆是唯一同期可用的來源" },
 
   // ---- 2026-09-10新增：TVBS民調中心8/31-9/2（與PRESIDENT_APPROVAL_2025同一篇報導同時公布） ----
-  { pollster: "TVBS民調中心", premier_name: "卓榮泰", sponsor: "TVBS", date: "2026-08-31", period: "2026/8/31-9/2", approve_pct: 37, disapprove_pct: 38, undecided_pct: 25, sample_size: 1127, source_url: "https://www.chinatimes.com/realtimenews/20260904003992-260407?chdtv", note: "與同機構同篇報導的總統滿意度調查同時段執行；沒意見比例上升至25%，報導指整體內閣施政表現仍未獲過半數民眾肯定" }
+  { pollster: "TVBS民調中心", premier_name: "卓榮泰", sponsor: "TVBS", date: "2026-08-31", period: "2026/8/31-9/2", approve_pct: 37, disapprove_pct: 38, undecided_pct: 25, sample_size: 1127, source_url: "https://www.chinatimes.com/realtimenews/20260904003992-260407?chdtv", note: "與同機構同篇報導的總統滿意度調查同時段執行；沒意見比例上升至25%，報導指整體內閣施政表現仍未獲過半數民眾肯定" },
+
+  // ---- 2026-10-26新增：Wikipedia「對賴清德政府的民意調查」2026年全國民調中本檔缺的筆數，逐筆回原始報導核對 ----
+  // 未收：只訪單一縣市的4筆（中華亞太交流菁英交流協會高雄、震傳媒台北／新北、新台灣國策智庫桃園）；
+  // 民進黨5/11-13（報導只有滿意56.4%、未報不滿意）。台灣民意基金會官網最新發布停在2025/12/23，2026年無月報可補。
+  { pollster: "TVBS民調中心", premier_name: "卓榮泰", sponsor: "TVBS", date: "2026-05-04", period: "2026/5/4-10", approve_pct: 37, disapprove_pct: 46, undecided_pct: null, sample_size: 1138, source_url: "https://news.tvbs.com.tw/politics/3203919", note: "與同篇總統滿意度同一調查；報導未標示無意見比例。" },
+  { pollster: "美麗島電子報", premier_name: "卓榮泰", sponsor: "美麗島電子報", date: "2026-09-29", period: "2026/9/29-10/2", approve_pct: 42.4, disapprove_pct: 39.8, undecided_pct: 17.8, sample_size: 1201, source_url: "https://m.my-formosa.com.tw/DOC_229724.htm", note: "與同篇總統滿意度同一調查。" }
 ];

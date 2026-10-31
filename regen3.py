@@ -30,7 +30,7 @@ BASE_MODEL_FALLBACK_WEIGHT = 0.6  # 民調稀疏時，base model佔的權重(0~1
 BASE_MODEL_FALLBACK_EXCLUDE = {'雲林縣'}
 BASE_MODEL_SPARSE_THRESHOLD = 2   # 民調筆數<=這個數字才算「稀疏」，才觸發備援
 
-REF_DATE = datetime(2026, 9, 2)
+REF_DATE = datetime(2026, 10, 31)
 METHOD_K = 0.025
 
 # 新竹縣2026-08-23移出排除名單：查證後發現徐欣瑩2022根本沒參選新竹縣長（2022贏家楊文科不在
@@ -76,10 +76,25 @@ def is_self_commissioned(sponsor):
     # 不該因為sponsor字串裡沒有「黨」字就漏網。2026-09-01發現：宜蘭縣林國漳競選總部委託的
     # 山水民調(37.8% vs 28%，領先9.8pt)只因為sponsor沒有'黨'字，原本只吃山水民調本身的
     # green house lean折扣(0.7x)，沒吃到自己委託的額外折扣——這裡補上。
-    return bool(sponsor) and sponsor != 'unknown' and ('競選總部' in sponsor or '團隊' in sponsor or '後援會' in sponsor)
+    # 2026-10-26補：「競選辦公室」（基隆謝國樑競選辦公室公布的雨晴民調）、「之友會」（台中市信賴台灣之友會，
+    # 賴清德支持者團體委託的循證民調——使用者決定視為綠營陣營委託）同屬利害關係人出資，比照降權。
+    return bool(sponsor) and sponsor != 'unknown' and ('競選總部' in sponsor or '競選辦公室' in sponsor or '團隊' in sponsor or '後援會' in sponsor or '之友會' in sponsor)
+
+# 委託方本身抽樣結構明顯失衡、不能當中立看的民調，比照陣營委託0.4降權、不計入neutral_frac。
+# 信民協會（台北市信民兩岸研究協會）：2026-10-26查證10/14~16台北民調報告自己的交叉表，樣本
+# 政黨傾向泛綠42.2%/泛藍26.6%/民眾黨4.0%，同報告引用的TVBS台北10/3~7為綠28%/藍32%/白7%，
+# 綠減藍差距差了近20pt。使用者決定：戴立安（問卷設計）本人沒問題，不等於委託方信民沒問題，
+# 信民委託的台北/新北4份民調全部改0.4（原本當中立1.0，曾因此讓台北縣市層翻盤成沈伯洋領先）。
+# 背景查證（2026-10-26，只採新聞報導）：理事長黃清龍上周玉蔻節目公開稱讚沈伯洋（放言10/16、10/23），
+# 2022、2026兩度出書質疑蔣萬安家族血緣；自承與曹興誠私交密切、幫曹辦過記者會，但否認曹與協會有關，
+# 被問經費來源答「我沒有必要去講」（風傳媒10/21）。「曹興誠金援」只有藍營評論（陳朝平專欄）的指控、
+# 無證據；「曹的秘書擔任發布窗口」「震央與震源」說法查無新聞出處。降權的主要依據仍是樣本結構。
+SKEWED_SAMPLE_SPONSORS = {'信民協會'}
 
 def house_weight(pollster, sponsor):
     if sponsor and sponsor != 'unknown' and '黨' in sponsor:
+        return 0.4
+    if sponsor in SKEWED_SAMPLE_SPONSORS:
         return 0.4
     if is_self_commissioned(sponsor):
         return 0.4
@@ -97,6 +112,8 @@ def recency_weight(d):
 
 def is_neutral(pollster, sponsor):
     if sponsor and sponsor != 'unknown' and '黨' in sponsor:
+        return False
+    if sponsor in SKEWED_SAMPLE_SPONSORS:
         return False
     if is_self_commissioned(sponsor):
         return False
@@ -136,6 +153,30 @@ CC_MAP = {
     '花蓮縣':'10015','苗栗縣':'10005','金門縣':'09020','連江縣':'09007','雲林縣':'10009','高雄市':'64',
 }
 
+# 未表態平分給主要候選人（2026-10-31，使用者決定「先採用『未表態平分給主要候選人』」）。原本每份民調只在名冊候選人之間按比例正規化，等於把未表態
+# 按目前支持比例分掉（60對15→80對20）。backtest_undecided_south.py用2018（231筆）/2022（213筆）選前180天民調對照
+# 開票盲測：民調高估綠營的幅度在高雄/台南/屏東跟未表態比例正相關（相關係數+0.36/+0.46，其他縣市約0），改成未表態
+# 平分給主要候選人後，縣市兩黨得票比平均誤差2018 7.16→5.10、2022 6.25→5.22（兩屆都改善、沒有用到另一屆答案）。
+# 主要候選人＝該份民調的前兩名。backtest_undecided_multi.py比較多人選舉的分法（所有列名候選人得票率的平均絕對誤差）：
+# 按比例（原做法）2018 6.75／2022 6.10、平分給前兩名 5.46／4.81、平分給≥10%者 5.34／5.02、≥20%者 5.47／4.82——
+# 前兩名兩屆都穩定，三強縣市（台北/新竹市/台南/苗栗等）也最好或接近最好。未表態用undecided_pct，沒有就用100－各候選人合計。
+SUBMATCHUP_MIN_PCT = 10
+# 三強縣市（名冊上有3位以上候選人在任一份民調達到10%）改成平分給這幾位（2026-10-31使用者決定：「三強縣市改成平分給
+# 所有10%」）——花蓮的第二、三名在各份民調輪流，只給前兩名會讓每份都第一的游淑貞固定多拿一半。回測上兩種分法在真正
+# 三強的選舉打平（2018新竹縣/新竹市、2022台北/苗栗/新竹市/澎湖：前兩名2.57、≥10%者2.73，按比例3.07）。
+def poll_shares(p, valid_names, three_way=None):
+    c = {x['name']: x['pct'] for x in p['candidates'] if x['name'] in valid_names and x['pct'] is not None}
+    sum_pct = sum(c.values())
+    if sum_pct <= 0:
+        return {}
+    U = p.get('undecided_pct')
+    if U is None:
+        U = max(0.0, 100 - sum(x['pct'] for x in p['candidates'] if x['pct'] is not None))
+    majors = [n for n in three_way if n in c] if three_way else []
+    if len(majors) < 2:
+        majors = sorted(c, key=lambda n: -c[n])[:2]
+    return {n: (v + (U / len(majors) if n in majors else 0)) / (sum_pct + U) * 100 for n, v in c.items()}
+
 def compute_county(county, use_method_weight=True):
     roster = FULL_ROSTER[county]
     polls = POLLS_2026.get(county, [])
@@ -161,6 +202,15 @@ def compute_county(county, use_method_weight=True):
         if n_valid_present >= 2:
             per_poll.append((p, w, d))
 
+    # 少了主要候選人的民調不算（2026-10-31使用者決定：「民調裡少了一位支持度曾達10%以上的名冊候選人，就不算進平均」）。
+    # 起因：花蓮包打聽9/1~3同波的兩組一對一假想對決（游vs魏、游vs張）被當成獨立民調混進三強選舉的平均。同規則也排除
+    # 新竹市鉅聞天下1月（莊競程尚未提名）、彰化鉅聞天下4~5月與匯流5月（邱建富尚未投入）。
+    top_pct = {n: max([c['pct'] for p, _, _ in per_poll for c in p['candidates'] if c['name'] == n and c['pct'] is not None] or [0]) for n in valid_names}
+    per_poll = [(p, w, d) for p, w, d in per_poll
+                if not any(top_pct[n] >= SUBMATCHUP_MIN_PCT and n not in {c['name'] for c in p['candidates']} for n in valid_names)]
+    three_way = [n for n in valid_names if top_pct[n] >= SUBMATCHUP_MIN_PCT]
+    three_way = three_way if len(three_way) >= 3 else None
+
     if not per_poll:
         return None  # no usable polls -- caller preserves old value (covers 南投縣/屏東縣 automatically)
 
@@ -172,22 +222,18 @@ def compute_county(county, use_method_weight=True):
     for name, party, has_anchor in roster:
         wsum, wvalsum, n_polls = 0, 0, 0
         for p, w, d in per_poll:
-            sum_pct = sum(c['pct'] for c in p['candidates'] if c['name'] in valid_names and c['pct'] is not None)
-            for c in p['candidates']:
-                if c['name'] == name and sum_pct > 0:
-                    normpct = c['pct'] / sum_pct * 100
-                    wsum += w; wvalsum += w * normpct; n_polls += 1
+            sh = poll_shares(p, valid_names, three_way)
+            if name in sh:
+                wsum += w; wvalsum += w * sh[name]; n_polls += 1
         poll_avg = wvalsum / wsum if wsum > 0 else None
         cand_stats[name] = {'party': party, 'has_anchor': has_anchor, 'poll_avg': poll_avg, 'n_polls': n_polls}
 
     leading_name = max(cand_stats, key=lambda n: (cand_stats[n]['poll_avg'] if cand_stats[n]['poll_avg'] is not None else -1))
     wsum, wvalsum, vals = 0, 0, []
     for p, w, d in per_poll:
-        sum_pct = sum(c['pct'] for c in p['candidates'] if c['name'] in valid_names and c['pct'] is not None)
-        for c in p['candidates']:
-            if c['name'] == leading_name and sum_pct > 0:
-                normpct = c['pct'] / sum_pct * 100
-                wsum += w; wvalsum += w*normpct; vals.append((normpct, w))
+        sh = poll_shares(p, valid_names, three_way)
+        if leading_name in sh:
+            wsum += w; wvalsum += w*sh[leading_name]; vals.append((sh[leading_name], w))
     avg_stdev = 0
     if wsum > 0:
         avg = wvalsum / wsum
