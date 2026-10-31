@@ -7,7 +7,7 @@
  *  - every block is filled by its leading candidate's party (user: 「得票最高的候選人所屬政黨上色」) via the engine's
  *    winMarginFill / PARTY_COLOR_MAP, deeper = bigger lead of the first candidate over the second;
  *  - the 全台 block's panel (user: 「全台那一塊的面板 可以試試」): the nationwide result with the 3 elected ticked and a
- *    3-seat hemicycle in the county-council box's dot style (test.html has no generateHemiPoints, so the 3 dots are
+ *    3-seat hemicycle (dropped 2026-10-31 — the left seat cards show it) in the county-council box's dot style (test.html has no generateHemiPoints, so the 3 dots were
  *    placed on the same arc by hand);
  *  - candidate rows in test.html's own legislative row markup (.bar-row / .blb / .bbg / .bpct / .bvote), so legbars.js
  *    gives them the same bar length as the other legislative panels;
@@ -60,31 +60,22 @@
         '<div class="bpct" style="' + ns + '">' + pct.toFixed(1) + '%</div><div class="bvote" style="' + ns + '">' + x.v.toLocaleString() + '</div></div>';
     }).join('');
   }
+  // the engine's own turnout pills (turnoutBadgeHtml): the same 紅綠燈 dots as every other panel (user 2026-10-31:
+  // 「原住民的投票率跟有效票率tag沒有紅綠燈」)
   function turnoutLine(win, vec) {
-    var T = win.T;
     if (!vec[0] || !vec[1]) return '';
-    var pill = function (lbl, val) { return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#999;padding:1px 6px 1px 4px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)">' + lbl + val + '%</span>'; };
-    return '<div style="display:flex;gap:6px;margin-top:4px;margin-bottom:6px;flex-wrap:wrap;opacity:0.8">' +
-      pill(T('投票率：', 'Turnout: '), (vec[1] / vec[0] * 100).toFixed(2)) + pill(T('有效票比率：', 'Valid: '), (vec[2] / vec[1] * 100).toFixed(2)) + '</div>';
+    return '<div style="margin-bottom:6px">' + win.turnoutBadgeHtml(vec[1] / vec[0] * 100, (vec[1] - vec[2]) / vec[1] * 100) + '</div>';
   }
+
   function raceName(c) { return c.year + ' ' + (c.kind === 'p' ? c.win.T('平地原住民立委', 'Lowland Indigenous Legislator') : c.win.T('山地原住民立委', 'Highland Indigenous Legislator')); }
-  // 3 seats on the county-council box's arc (drawCountyHemiForED: cx 92, cy 90, outer radius 84), its dot style
-  function hemiHtml(c) {
-    // seats in camp order, left → right (council.html's COUNCIL_CAMP_ORDER: 綠 … 無黨籍 … 藍)
-    var ORDER = { dpp: 1, tsr: 2, gp: 3, sdp: 4, npp: 5, tsu: 6, ind: 7, other: 8, npa: 9, tpp: 10, pfp: 11, np: 12, kmt: 13 };
-    var el = c.d.cands.filter(function (x) { return x[2]; }).sort(function (a, b) { return (ORDER[a[1]] || 8) - (ORDER[b[1]] || 8); });
-    var pos = [[22, 78], [92, 20], [162, 78]];
-    var dots = el.map(function (x, i) {
-      return '<circle cx="' + pos[i][0] + '" cy="' + pos[i][1] + '" r="11" fill="' + partyClr(c.win, x[1]) + '" stroke="#fff" stroke-width="1.3"></circle>';
-    }).join('');
-    return '<div style="position:relative;height:95px;margin:6px 0 4px"><svg width="185" height="95" style="display:block;margin:0 auto;overflow:visible">' + dots + '</svg>' +
-      '<div style="position:absolute;left:50%;bottom:4px;transform:translateX(-50%);font-size:16px;color:rgba(255,255,255,0.85);font-weight:700">3</div></div>';
-  }
+
   function nationalPanel(c) {
+    // 全台 panel: no hemicycle — the seat cards on the map's left show it all the time (user 2026-10-31: 「把hist mode的右邊全台總覽的半圓形圖都刪掉（左邊有常駐顯示了）」)
+
     var T = c.win.T;
     return '<div class="t1">' + T('全台', 'All Taiwan') + '</div>' +
       '<div style="font-size:10px;color:#888;margin-top:2px">' + raceName(c) + T('・全國一個選區，應選 3 席', ' · one nationwide district, 3 seats') + '</div>' +
-      hemiHtml(c) + turnoutLine(c.win, c.d.nat) +
+      turnoutLine(c.win, c.d.nat) +
       '<div class="sec-title" style="margin-bottom:5px">' + T('候選人得票', 'Candidate Votes') + '</div>' +
       '<div style="max-height:320px;overflow-y:auto">' + rowsHtml(c, c.d.nat) + '</div>' +
       '<div class="hint" style="text-align:center;opacity:0.5;margin-top:8px">' + T('點擊地圖進入 22 縣市 ▶', 'Click the map to enter the 22 counties ▶') + '</div>';

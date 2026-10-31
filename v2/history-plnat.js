@@ -1,8 +1,8 @@
 /* History → 全國 → 立委 → 不分區: a 全台 level first (user 2026-10-28: 「不分區立委也要改成跟山地原住民一樣，一開始是台灣一大塊
  * 然後立委的34半圓形，點開才是22縣市」). Inside History's own iframe copy of test.html (V1 untouched):
  *  - level 0 (V2): all of Taiwan as one block, filled by the party with the most party-list votes (winMarginFill,
- *    deeper = bigger lead over the runner-up); its panel has the 34-seat hemicycle (the engine's own PL_SEATS
- *    positions, seats in camp order left → right), turnout, and every party's national vote with its seats;
+ *    deeper = bigger lead over the runner-up); its panel has turnout and every party's national vote with its seats
+ *    (the 34-seat hemicycle was dropped 2026-10-31 — the left seat cards show it);
  *    the yellow hover outline is the block's own stroke;
  *  - click → the engine's own 22-county layer (_addPLCountyLayer), unchanged from there down; the crumb's 「全台」 —
  *    which the engine points at goED(), i.e. back to the county layer — is pointed at the V2 block instead;
@@ -19,8 +19,6 @@
  */
 (function () {
   var HOVER = '#f5c518';   // = the 2027 補選預測 page (user 2026-10-28)
-  // seats in camp order, left → right (same order as history-legind.js / council.html's COUNCIL_CAMP_ORDER)
-  var ORDER = { dpp: 1, tsr: 2, gp: 3, gsdp: 3, sdp: 4, npp: 5, tsu: 6, other: 8, tpp: 10, pfp: 11, np: 12, kmt: 13 };
 
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
   function dataFor(year) { return (typeof PL_NATIONAL_V2 !== 'undefined' ? PL_NATIONAL_V2 : {})[year] || null; }
@@ -32,18 +30,7 @@
   }
   function votesTxt(win, v) { return v >= 10000 ? (v / 10000).toFixed(1) + win.T('萬', 'w') : v.toLocaleString(); }
 
-  function hemiHtml(c) {
-    var seats = (G(c.win, 'PL_SEATS') || []).slice().sort(function (a, b) { return b.ang - a.ang; });
-    var list = [];
-    c.d.parties.filter(function (p) { return p[3] > 0; })
-      .sort(function (a, b) { return (ORDER[a[1]] || 8) - (ORDER[b[1]] || 8); })
-      .forEach(function (p) { for (var i = 0; i < p[3]; i++) list.push(p[1]); });
-    var dots = seats.map(function (s, i) {
-      return '<circle cx="' + s.cx.toFixed(2) + '" cy="' + s.cy.toFixed(2) + '" r="4.4" fill="' + clr(c.win, list[i]) + '" stroke="#fff" stroke-width="0.5"></circle>';
-    }).join('');
-    return '<div style="position:relative;height:95px;margin:6px 0 4px"><svg width="185" height="92" viewBox="0 0 160 80" style="display:block;margin:0 auto;overflow:visible">' + dots + '</svg>' +
-      '<div style="position:absolute;left:50%;bottom:4px;transform:translateX(-50%);font-size:16px;color:rgba(255,255,255,0.85);font-weight:700">34</div></div>';
-  }
+
   // test.html's legislative row markup (.bar-row / .blb / .bbg …), so legbars.js gives it the shared bar length
   // 全台 list: one red dashed line across it between the last party at or above 5% and the first below (2024: 台灣民眾黨
   // / 時代力量) — user 2026-10-28: 「按照過門檻的政黨來只畫一條…台灣民眾黨<虛線<時代力量」. Only here: the threshold is a
@@ -73,10 +60,11 @@
     }).join('');
   }
   function panel(c) {
+    // 全台 panel: no hemicycle — the seat cards on the map's left show it all the time (user 2026-10-31: 「把hist mode的右邊全台總覽的半圓形圖都刪掉（左邊有常駐顯示了）」)
+
     var T = c.win.T, d = c.d;
     return '<div class="t1">' + T('全台', 'All Taiwan') + '</div>' +
       '<div style="font-size:10px;color:#888;margin-top:2px">' + c.year + T(' 不分區政黨票・全國一個選區，應選 34 席（5% 門檻）', ' party list · one nationwide district, 34 seats (5% threshold)') + '</div>' +
-      hemiHtml(c) + seatLine(c) +
       c.win.turnoutBadgeHtml(+(d.cast / d.elig * 100).toFixed(2), +((d.cast - d.valid) / d.cast * 100).toFixed(2)) +
       sectionHtml(c.win, T('政黨得票', 'Party Votes')) +
       '<div style="max-height:320px;overflow-y:auto">' + rowsHtml(c) + '</div>' +
@@ -124,14 +112,7 @@
       win.__v2OrigPLPanels = null;
     }
   }
-  function seatLine(c) {
-    var win = c.win;
-    return '<div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;font-size:11px;margin-bottom:4px">' +
-      c.d.parties.filter(function (p) { return p[3] > 0; }).map(function (p) {
-        return '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:' + clr(win, p[1]) + '"></span>' +
-          '<span style="color:#ccc">' + partyName(win, p) + '</span><b style="color:#e8eaed">' + p[3] + '</b></span>';
-      }).join('') + '</div>';
-  }
+
   function fill(c) {
     var p = c.d.parties, M = G(c.win, 'PARTY_COLOR_MAP') || {};
     return c.win.winMarginFill(p[0][1], (p[0][2] - p[1][2]) / c.d.valid, M[p[0][1]]);
