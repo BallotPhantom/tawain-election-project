@@ -49,6 +49,7 @@
   .chip { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px dashed rgba(40,200,200,.45); color: var(--cyan); }
   .scale { display: flex; height: 10px; border-radius: 5px; overflow: hidden; max-width: 420px; }
   .scale span { flex: 1; }
+  h3 { margin: 6px 0 0; font-size: 14.5px; color: var(--fg); }
   .dash { display: inline-block; width: 28px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: 6px; }
   :is(.home, .go, nav.toc a, .lang button):focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 </style>
@@ -72,18 +73,91 @@
 
   <section id="forecast">
     <h2><span lang="zh-Hant">2026 縣市長預測模型</span><span lang="en">2026 mayoral forecast</span></h2>
+    <p lang="zh-Hant">模型分五步：每份民調算權重 → 處理未表態 → 加權平均並與歷史錨點混合 → 蒙地卡羅模擬勝率 → 推到鄉鎮市區。程式在 regen3.py（縣市層）與 council.html 的 _runMC2026（模擬）。</p>
+    <p lang="en">Five steps: weight each poll → handle the undecided → average and blend with a historical anchor → simulate win probabilities → carry the result down to townships. Code: regen3.py (county level) and _runMC2026 in council.html (simulation).</p>
+
+    <h3 lang="zh-Hant">1. 每份民調的權重</h3>
+    <h3 lang="en">1. Weight of each poll</h3>
+    <pre>w = h × r × m</pre>
     <ul lang="zh-Hant">
-      <li><b>民調彙整</b>：目前收錄 190 筆民調、39 家民調機構。每家機構依其過往偏差（house effect）降權，政黨、候選人陣營委託的民調也降權，越舊的民調權重越低，換算成各縣市的預估得票率。</li>
-      <li><b>未表態</b>：每份民調的未表態平分給該份民調的前兩名；三強縣市（三位以上候選人曾在民調達 10%）平分給這幾位。2018、2022 回測顯示，原本按支持比例分配會高估領先者，在高雄、台南、屏東尤其明顯；改成平分後，兩屆的縣市平均誤差都下降（7.2→5.1、6.3→5.2 個百分點）。少了主要候選人的民調（例如一對一假想對決）不列入。</li>
-      <li><b>勝選機率</b>：用蒙地卡羅模擬，誤差分成全國、區域、縣市三層。2026-08-19 用 2018、2022 兩屆「民調 vs 實際結果」回測後，把三層標準差放寬為 2.94／3.24／4.41 個百分點（合計約 6.2），預估得票率不變，只是勝率更貼近不確定性。</li>
-      <li><b>信任度</b>：民調越少、越舊，信任度越低。地圖顏色只代表預估差距；信任度用縣市外框的虛線表示：</li>
+      <li><b>h（委託方與機構）</b>：政黨或候選人陣營委託（競選總部、辦公室、後援會、之友會等）、樣本結構明顯失衡的委託方 = 0.4；過往結果偏藍或偏綠的民調機構（house effect）= 0.7；其他 = 1.0。</li>
+      <li><b>r（新舊）</b>：r = e<sup>−d/120</sup>，d = 民調結束日到今天的天數（約 83 天權重減半）；沒有日期 = 0.5。</li>
+      <li><b>m（調查方式 × 縣市年齡結構）</b>：m = 限制在 0.6–1.2 之間的 1 + a·c。網路民調 a = −0.025·Δ，電話民調 a = 0.025·min(0, Δ)；Δ = 該縣市 65 歲以上人口比例 − 全國平均；c = 對該機構調查方式資訊的把握（高 1、中 0.6、低 0.3）。高齡縣市的網路民調因此降權。</li>
+      <li><b>不列入</b>：初選期間的民調、非正式街頭民調，以及少了任何一位曾在某份民調達 10% 的候選人的民調（例如一對一假想對決）。</li>
     </ul>
     <ul lang="en">
-      <li><b>Poll aggregation</b>: 190 polls from 39 pollsters so far, each pollster down-weighted by its past bias (house effect), party- and campaign-commissioned polls down-weighted too, and older polls weighted less, giving an estimated vote share per county.</li>
-      <li><b>Undecided</b>: each poll's undecided are split evenly between its top two candidates (in three-way races — three or more candidates who reached 10% in some poll — among those candidates). Backtests on 2018 and 2022 showed that reallocating them in proportion to current support overstates the leader, most of all in Kaohsiung, Tainan and Pingtung; the even split lowered the average county error in both cycles (7.2→5.1 and 6.3→5.2 points). Polls missing a major candidate (e.g. one-on-one hypotheticals) are left out.</li>
-      <li><b>Win probability</b>: Monte Carlo simulation with national, regional and county error. After back-testing polls against the 2018 and 2022 results (2026-08-19), the three standard deviations were widened to 2.94 / 3.24 / 4.41 points (≈ 6.2 combined); vote-share estimates did not change, only how certain the win probabilities are.</li>
-      <li><b>Trust</b>: fewer and older polls mean lower trust. Map colour shows only the expected margin; trust is drawn as a dashed county outline:</li>
+      <li><b>h (sponsor and pollster)</b>: commissioned by a party or a campaign (headquarters, office, support or friends' group), or by a sponsor whose samples are clearly unbalanced = 0.4; pollsters whose past results lean blue or green (house effect) = 0.7; otherwise 1.0.</li>
+      <li><b>r (age of the poll)</b>: r = e<sup>−d/120</sup>, d = days from the poll's last fieldwork day to today (weight halves in about 83 days); no date = 0.5.</li>
+      <li><b>m (survey mode × county age profile)</b>: m = 1 + a·c, clipped to 0.6–1.2. Online polls a = −0.025·Δ, phone polls a = 0.025·min(0, Δ); Δ = the county's share of residents aged 65+ minus the national average; c = confidence in what we know about the pollster's method (high 1, medium 0.6, low 0.3). Online polls in older counties are therefore down-weighted.</li>
+      <li><b>Left out</b>: polls taken during a party primary, informal street polls, and any poll missing a candidate who reached 10% in some poll (e.g. one-on-one hypotheticals).</li>
     </ul>
+
+    <h3 lang="zh-Hant">2. 未表態</h3>
+    <h3 lang="en">2. The undecided</h3>
+    <pre>s<sub>i</sub> = ( p<sub>i</sub> + U/k · [i 是主要候選人] ) ÷ ( Σp + U ) × 100</pre>
+    <ul lang="zh-Hant">
+      <li>p<sub>i</sub> = 該份民調中候選人 i 的支持度；U = 未表態（民調沒寫就用 100 − Σp）；k = 主要候選人人數。</li>
+      <li><b>主要候選人</b> = 該份民調的前兩名；三強縣市（三位以上候選人曾在某份民調達 10%）改為這幾位。</li>
+      <li>依據：2018、2022 兩屆回測，原本按目前支持比例分配會高估領先者，在高雄、台南、屏東尤其明顯；改成平分後，兩屆的縣市平均誤差都下降（7.2→5.1、6.3→5.2 個百分點）。</li>
+    </ul>
+    <ul lang="en">
+      <li>p<sub>i</sub> = candidate i's support in that poll; U = undecided (100 − Σp when the poll doesn't say); k = number of main candidates.</li>
+      <li><b>Main candidates</b> = the poll's top two; in three-way races (three or more candidates who reached 10% in some poll), those candidates.</li>
+      <li>Why: backtests on 2018 and 2022 showed that reallocating in proportion to current support overstates the leader, most of all in Kaohsiung, Tainan and Pingtung; the even split lowered the average county error in both cycles (7.2→5.1 and 6.3→5.2 points).</li>
+    </ul>
+
+    <h3 lang="zh-Hant">3. 縣市預估得票率</h3>
+    <h3 lang="en">3. County vote-share estimate</h3>
+    <pre>P<sub>i</sub> = Σ w·s<sub>i</sub> ÷ Σ w
+T  = M/(M + 2.5) × (0.5 + 0.5·N)
+E<sub>i</sub> = T·P<sub>i</sub> + (1 − T)·A<sub>i</sub>      → 各候選人再正規化成合計 100%</pre>
+    <ul lang="zh-Hant">
+      <li>P<sub>i</sub> = 加權民調平均；M = 該縣市所有民調的權重總和；N = 其中中立機構所占的權重比例。</li>
+      <li><b>T（信任度）</b>：民調越多、越新、越中立，T 越接近 1。</li>
+      <li><b>A<sub>i</sub>（歷史錨點）</b> = 候選人本人 2022 年同一選舉的實際得票率。本人沒有可比的紀錄時不用錨點，直接 E<sub>i</sub> = P<sub>i</sub>；但民調只有 1–2 筆時，以 0.4·P<sub>i</sub> + 0.6·B 估計，B = 該政黨陣營在此縣市的政黨基本盤得票比（無黨籍候選人、雲林縣除外）。</li>
+      <li><b>沒有任何可用民調的縣市</b>（目前是南投縣、嘉義縣、屏東縣、苗栗縣、連江縣）不做民調預測，地圖顯示灰色；面板上的數字是歷屆縣市長選舉結果的加權估計，僅供參考。</li>
+    </ul>
+    <ul lang="en">
+      <li>P<sub>i</sub> = weighted poll average; M = the county's total poll weight; N = the share of that weight from neutral pollsters.</li>
+      <li><b>T (trust)</b>: more, newer and more neutral polls push T toward 1.</li>
+      <li><b>A<sub>i</sub> (historical anchor)</b> = the candidate's own actual share in the same race in 2022. Without a comparable record there is no anchor and E<sub>i</sub> = P<sub>i</sub>; but with only 1–2 polls the estimate is 0.4·P<sub>i</sub> + 0.6·B, B = the party camp's base-vote share in the county (not for independents, nor in Yunlin).</li>
+      <li><b>Counties with no usable poll</b> (now Nantou, Chiayi County, Pingtung, Miaoli, Lienchiang) get no poll-based forecast and are grey on the map; the panel's figures are a weighted estimate from past mayoral results, for reference only.</li>
+    </ul>
+
+    <h3 lang="zh-Hant">4. 勝選機率（蒙地卡羅）</h3>
+    <h3 lang="en">4. Win probability (Monte Carlo)</h3>
+    <pre>δ = ε<sub>全國</sub> + ε<sub>區域</sub> + ε<sub>縣市</sub>,   ε ~ N(0, σ²),   σ = 2.94 / 3.24 / 4.41
+民進黨候選人：E + δ　　國民黨候選人：E − δ　　其他候選人不變（下限 0.5%），再正規化
+勝率 = 得票最高的次數 ÷ 20,000</pre>
+    <ul lang="zh-Hant">
+      <li>共模擬 20,000 次。同一次模擬裡全國誤差所有縣市共用，區域誤差同一區共用（北北基、桃竹苗、中彰投、雲嘉南、高屏、宜花東、離島），縣市誤差各自獨立；合計標準差約 6.2 個百分點。</li>
+      <li>三層標準差是 2026-08-19 用 2018、2022 兩屆「民調 vs 實際結果」回測後放寬的；這只影響勝率有多確定，不改預估得票率。</li>
+      <li>面板上的得票區間是模擬結果的第 10、50、90 百分位。</li>
+      <li>高雄、台南的虛線刻度是「南部修正」對照情境（民進黨 −3.6、國民黨 +3.6 後重跑同一組模擬），只供對照，沒有放進預測。</li>
+    </ul>
+    <ul lang="en">
+      <li>20,000 runs. Within one run the national error is shared by every county, the regional error by the counties of one region (Taipei–New Taipei–Keelung, Taoyuan–Hsinchu–Miaoli, Taichung–Changhua–Nantou, Yunlin–Chiayi–Tainan, Kaohsiung–Pingtung, Yilan–Hualien–Taitung, outlying islands), and the county error is independent; about 6.2 points combined.</li>
+      <li>The three standard deviations were widened on 2026-08-19 after back-testing polls against the 2018 and 2022 results; this changes only how certain the win probabilities are, not the vote-share estimates.</li>
+      <li>The ranges in the panels are the 10th, 50th and 90th percentiles of the simulation.</li>
+      <li>The dashed ticks in Kaohsiung and Tainan are a "south-adjusted" comparison scenario (DPP −3.6, KMT +3.6, the same simulation re-run); shown for comparison only, not part of the forecast.</li>
+    </ul>
+
+    <h3 lang="zh-Hant">5. 鄉鎮市區層：估算，不是鄉鎮民調</h3>
+    <h3 lang="en">5. Townships: an estimate, not a township poll</h3>
+    <pre>鄉鎮 2026 估計<sub>i</sub> = 鄉鎮 2022 實際得票率<sub>i</sub> + ( 縣市 2026 估計<sub>i</sub> − 縣市 2022 實際<sub>i</sub> )   → 負值截為 0，再正規化</pre>
+    <ul lang="zh-Hant">
+      <li>沒有任何鄉鎮層級的民調。鄉鎮的數字是把整個縣市的變動量，平均加到每個鄉鎮 2022 年的實際結果上：候選人本人 2022 有參選就用他自己的變動，沒有就用同黨候選人的變動。</li>
+      <li>所以鄉鎮之間的高低差異全部來自 2022 年的實際結果，鄉鎮地圖只是示意「縣市預測放到各地大概的樣子」，不能當成某個鄉鎮的預測或民調來看。</li>
+    </ul>
+    <ul lang="en">
+      <li>There are no township polls. Each township's figure is its actual 2022 result plus the county's overall change, applied evenly: the candidate's own change if they ran in 2022, otherwise the change for their party's candidate.</li>
+      <li>So every difference between townships comes from the 2022 results; the township map only illustrates roughly how the county forecast spreads across the county, and must not be read as a forecast or poll for any one township.</li>
+    </ul>
+
+    <h3 lang="zh-Hant">信任度外框</h3>
+    <h3 lang="en">Trust outline</h3>
+    <p lang="zh-Hant">地圖顏色只代表預估差距；信任度 T 用縣市外框的虛線表示：</p>
+    <p lang="en">Map colour shows only the expected margin; trust T is drawn as a dashed county outline:</p>
     <p><span class="dash" style="color:#ef4444"></span><span lang="zh-Hant">信任度 &lt; 15％</span><span lang="en">trust &lt; 15%</span>　<span class="dash" style="color:#f97316"></span>15–30％　<span class="dash" style="color:#facc15"></span>30–50％　<span lang="zh-Hant">無外框：≥ 50％</span><span lang="en">no outline: ≥ 50%</span></p>
     <a class="go" href="predict.html"><span lang="zh-Hant">打開 2026 預測 →</span><span lang="en">Open the 2026 forecast →</span></a>
   </section>

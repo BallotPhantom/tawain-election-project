@@ -28,7 +28,7 @@
   };
   var PARTY = {
     '民主進步黨': 'DPP', '民進黨': 'DPP', '中國國民黨': 'KMT', '國民黨': 'KMT', '台灣民眾黨': 'TPP', '民眾黨': 'TPP', '時代力量': 'NPP', '親民黨': 'PFP',
-    '新黨': 'New Party', '台灣團結聯盟': 'TSU', '台聯': 'TSU', '無黨團結聯盟': 'NPSU', '無黨籍': 'Independent', '綠黨': 'Green Party', '社會民主黨': 'SDP',
+    '新黨': 'New Party', '台灣團結聯盟': 'TSU', '台聯': 'TSU', '無黨團結聯盟': 'NPSU', '無盟': 'NPSU', '時力': 'NPP', '基進': 'TSR', '無黨籍': 'Independent', '綠黨': 'Green Party', '社會民主黨': 'SDP',
     '台灣基進': 'TSR', '民主聯盟': 'Democratic Alliance', '（未載）': '(not recorded)'
   };
   // the 16 recognised peoples and the Pingpu groups, by their own names (CIP usage)
@@ -51,7 +51,17 @@
     '谷辣斯．尤達卡': 'Kolas Yotaka', '馬文君': 'Ma Wen-chun', '林明溱': 'Lin Ming-chen', '許淑華': 'Hsu Shu-hua'
   };
   var UI = {
-    '人': ' people', '兄': 'elder brother', '夫': 'husband', '妻': 'wife', '弟': 'younger brother', '無': 'none', '父': 'father', '代表': 'representative',
+    '人': ' people', '人口': 'Pop.', '市議員選舉': 'City council election', '縣議員選舉': 'County council election', '市議員': 'city councilor',
+    '前屆無此候選人': 'No such candidate last time', '直轄市山地原住民區長': 'Indigenous district head', '直轄市山地原住民區長選舉': 'Indigenous district head election',
+    '直轄市山地原住民區': 'indigenous districts', '區民代表會': 'District council', '區民代表會主席': 'District council chair', '區民代表會副主席': 'District council vice-chair', '鄉鎮底色＝核定部落族別（多族斜紋）': 'Township fill = people of its recognised communities (stripes: several)',
+    '村里底色＝核定部落族別（多族斜紋）': 'Village fill = people of its recognised communities (stripes: several)', '核定部落（顏色＝族別）': 'Recognised community (colour = people)',
+    '西拉雅族已核定、尚無核定部落：依聚落所在鄉鎮上色': 'Siraya: recognised, no recognised community yet — townships with its settlements filled',
+    '西拉雅族已核定、尚無核定部落：依聚落所在村里上色': 'Siraya: recognised, no recognised community yet — villages with its settlements filled',
+    '族人聚落（不在核定名單）': 'Settlement (not on the recognised list)', '平埔族群（': 'Pingpu groups (', '位置不準確': 'location approximate', '）': ')',
+    '今日聚落・有祭儀': 'Settlement today, with rites', '今日後裔聚落': 'Descendant settlement today', '祭祀地': 'Place of worship',
+    '淡色／細斜線＝今日聚落所在鄉鎮': 'Light fill / thin stripes = township with a settlement today', '淡色／細斜線＝今日聚落所在村里': 'Light fill / thin stripes = village with a settlement today',
+    '虛線圈＝位置示意（村里不在官方界圖上）': 'Dashed ring = approximate (village not on the official boundary map)', '部落數': 'Comm.', '鄉鎮數': 'Twps', '只看': 'Show', '族人聚落': 'Settlements',
+    '部落＝原民會核定部落（原民會「原住民族部落位置GIS點位表」，data.gov.tw，2022-07 版）；族人聚落＝原民會族群介紹列出、但不在核定部落名單；平埔族群的狀態依原民會 2026-10，位置只到鄉鎮或里（新聞、維基百科、論文整理）。點一列只看該族，再點一次取消。': "Communities = the CIP's recognised communities (CIP 'Indigenous community GIS points', data.gov.tw, 2022-07); Settlements = listed in the CIP's peoples pages but not among the recognised communities; Pingpu status as of CIP 2026-10, located to township or village only (news, Wikipedia, papers). Click a row to show only that people; click again to clear.", '兄': 'elder brother', '夫': 'husband', '妻': 'wife', '弟': 'younger brother', '無': 'none', '父': 'father', '代表': 'representative',
     '兒子': 'son', '全部': 'All', '國代': 'National Assembly', '女兒': 'daughter', '姊夫': 'brother-in-law', '姪孫': 'grandnephew', '展開': 'Expand',
     '市長': 'mayor', '族別': 'People', '概況': 'Overview', '狀態': 'Status', '立委': 'legislator', '翻盤': 'Flip', '補選': 'By-election', '議員': 'councilor',
     '議長': 'Speaker', '遺孀': 'widow', '部落': 'Community', '鄉鎮': 'Township', '長子': 'eldest son', '來源：': 'Sources: ', '副議長': 'Deputy Speaker',
@@ -92,7 +102,7 @@
     '個，分布在': ' communities, in ', '個鄉鎮市區': ' townships', '・17–18 世紀社址': ' · 17th–18th-century site',
     '代夫出征（2009 縣議員）': 'Wives standing in (2009 county council)', '曾任臺東縣長（第六、七任）・據報導': 'Former Taitung County magistrate (6th and 7th terms) · reportedly',
     '本專案目前無該年度資料（2022年鄉鎮市民代表資料尚未取得，非2018年資料内插）': 'No data for this year yet (2022 township-representative data not obtained; not interpolated from 2018)',
-    '移到／點擊新竹縣、彰化縣、南投縣、雲林縣、屏東縣、臺東縣、花蓮縣、基隆市、臺北市、高雄市、新北市、臺中市、臺南市、桃園市查看 Profile 原型': 'Hover / click Hsinchu County, Changhua, Nantou, Yunlin, Pingtung, Taitung, Hualien, Keelung, Taipei, Kaohsiung, New Taipei, Taichung, Tainan or Taoyuan for a profile'
+    '移到／點擊新竹縣、彰化縣、南投縣、雲林縣、屏東縣、臺東縣、花蓮縣、基隆市、臺北市、高雄市、新北市、臺中市、臺南市、桃園市查看縣市概覽': 'Hover / click Hsinchu County, Changhua, Nantou, Yunlin, Pingtung, Taitung, Hualien, Keelung, Taipei, Kaohsiung, New Taipei, Taichung, Tainan or Taoyuan for a profile'
   };
   // 「所有實心球加起來的面積＝選舉人數。只比較本X各屆…」 legend notes
   var BALL = { '縣': 'county', '村里': 'village', '選區': 'district', '鄉鎮市': 'township' };
@@ -117,17 +127,19 @@
   var SUF = { '市': 'City', '鎮': 'Town', '鄉': 'Township', '區': 'District', '村': 'Village', '里': 'Village' };
   // official forms that are not plain pinyin: a township sharing its county's name keeps the county's spelling
   // (花蓮市 → Hualien City, not 「Hualian」), plus the long-established Lukang / Tamsui
-  var TOWN_OFFICIAL = { '鹿港鎮': 'Lukang Township', '淡水區': 'Tamsui District' };
+  var TOWN_OFFICIAL = { '鹿港鎮': 'Lukang Township', '淡水區': 'Tamsui' };
   function place(s, vc) {
     if (COUNTY[s]) return COUNTY[s];
     if (TOWN_OFFICIAL[s]) return TOWN_OFFICIAL[s];
     var cm = s.match(/^([㐀-鿿]{2})([市鎮鄉區])$/);
-    if (cm) { var cy = COUNTY[cm[1] + '縣'] || COUNTY[cm[1] + '市']; if (cy) return cy.replace(/ (County|City)$/, '') + ' ' + SUF[cm[2]]; }
+    if (cm) { var cy = COUNTY[cm[1] + '縣'] || COUNTY[cm[1] + '市']; if (cy) return cy.replace(/ (County|City)$/, '') + (cm[2] === '區' ? '' : ' ' + SUF[cm[2]]); }
     if (vc && typeof PLACE_EN !== 'undefined' && PLACE_EN.village[vc]) return PLACE_EN.village[vc];
     var m = s.match(/^([㐀-鿿]{1,5})([鄉鎮市區村里])$/); if (!m) return null;
     var y = syl(m[1]); if (!y) return null;
     // pinyin spelling rule: an a / e / o syllable after another takes an apostrophe (吉安 → Ji'an, not 「Jian」)
-    return cap(y.map(function (x, i) { return i && /^[aeo]/.test(x) ? "'" + x : x; }).join('')) + ' ' + SUF[m[2]];
+    // a 區 is the name alone — no 「District」 (user 2026-10-31: 「英文的區的district應該要刪掉」)
+    var nm = cap(y.map(function (x, i) { return i && /^[aeo]/.test(x) ? "'" + x : x; }).join(''));
+    return m[2] === '區' ? nm : nm + ' ' + SUF[m[2]];
   }
   // an office, with or without its place: 「南投縣議員」「信義鄉長」「立委」「花蓮市民代表」
   function office(t) {
@@ -165,6 +177,8 @@
     if ((t = tribe(s))) return t;
     var vc = el && el.closest && el.closest('[data-vc]'); vc = vc && vc.getAttribute('data-vc');
     if ((t = place(s, vc))) return t;
+    // 縣市議員 sheet note: 「第3選區・應選 6 席・仁武區自己的得票（✓＝當選）」
+    if ((m = s.match(/^第(\d+)選區・應選 (\d+) 席・(.+)自己的得票（✓＝當選）$/))) return 'District ' + m[1] + ' · ' + m[2] + ' seats · votes in ' + (place(m[3], null) || m[3]) + ' (✓ = elected)';
     if ((m = s.match(/^(\d{4}) (.+)$/)) && (t = office(m[2]) || (m[2] === '立委' ? 'legislator' : null) || (m[2] === '補選' ? 'by-election' : null))) return m[1] + ' ' + t;
     if ((m = s.match(/^(\d{4}) 年：(.+)$/)) && (t = joinMap(m[2], '、', ', ', function (x) { var q = x.match(/^(.+?) (\d+) 席$/); return q && KIND[q[1]] ? KIND[q[1]] + ' ' + q[2] : null; }))) return m[1] + ': ' + t;
     if ((m = s.match(/^、(.+)$/)) && (t = tr(m[1], el))) return ', ' + t;
@@ -289,7 +303,7 @@
   }
   function toggle() {
     var box = document.createElement('div');
-    box.id = 'v2-lang';
+    box.id = 'v2-lang'; box.className = 'v2-lang';   // .v2-lang: disclaimer.js reads the language from it
     box.setAttribute('role', 'group'); box.setAttribute('aria-label', 'Language');
     box.style.cssText = 'display:inline-flex;border:1px solid rgba(255,255,255,.09);border-radius:8px;overflow:hidden;margin-right:8px;background:rgba(5,5,10,.6)';
     box.innerHTML = ['zh', 'en'].map(function (l) {
@@ -304,7 +318,7 @@
       applyAll();
     });
     var host = document.getElementById('top-right-controls');
-    if (host) { host.style.display = 'flex'; host.style.alignItems = 'center'; host.insertBefore(box, host.firstChild); }
+    if (host) { host.style.display = 'flex'; host.style.alignItems = 'center'; host.appendChild(box); }   // last: 色盲友善 (profile.html) sits left of it
     else document.body.appendChild(box);
   }
   function boot() {
