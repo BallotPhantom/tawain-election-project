@@ -196,12 +196,12 @@
 
 <script src="i18n.js?v=20261029c"></script>
 <script src="navbar.js?v=20261030a"></script>
-<script src="disclaimer.js?v=20261031c"></script>
-<script src="toolbtns.js?v=20261031a"></script>
+<script src="disclaimer.js?v=20261031d"></script>
+<script src="toolbtns.js?v=20261031c"></script>
 <script src="legbars.js?v=20261027f"></script>
 <script src="noglow.js?v=20261029f"></script>
 <script src="data_legind.js?v=20261027a"></script>
-<script src="tcborder.js?v=20261029a"></script>
+<script src="tcborder.js?v=20261031a"></script>
 <script src="history-legind.js?v=20261028g"></script>
 <script src="data_legdist.js?v=20261028d"></script>
 <script src="data_career.js?v=20261029a"></script>
@@ -469,6 +469,17 @@
       var doc = win.document;
       watchTitle(win);
       if (window.V2I18n) window.V2I18n.attach(win);   // English safety net (v2/i18n.js)
+      // drill-downs centre the map where the first view sits (user 2026-10-31: 「點進縣市…偏左」): the engines centre
+      // between #left-rail (hidden here, width 0) and the info panel — same fix as v2-shell.js's centerFix
+      if (typeof win.mapVisibleCenterX === 'function' && !win.mapVisibleCenterX.v2) {
+        var vcx = function (W) {
+          var ip = doc.getElementById('ip');
+          var ipW = ip && win.getComputedStyle(ip).display !== 'none' ? ip.getBoundingClientRect().width : 0;
+          return W / 2 + (ipW - ipW) / 2;   // no V2 left panel on this page: the middle of the map, where the first view sits
+        };
+        vcx.v2 = true;
+        win.mapVisibleCenterX = vcx;
+      }
       if (!doc.getElementById('v2-strip-base5')) {
         var st = doc.createElement('style');
         st.id = 'v2-strip-base5';

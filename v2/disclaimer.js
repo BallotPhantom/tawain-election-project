@@ -3,7 +3,7 @@
  *
  * The bar gets a ⚠ button; a click drops the same red note under it. The note's text is read from the engine's own
  * #disclaimer-note at each opening, so 中文 / EN follows the engine's setLang. The button shows only while the engine
- * itself would show its ⚠ (#disclaimer-wrap's inline display, set per mode). The engine's own is hidden — V1 untouched.
+ * itself would show its ⚠ — changed 2026-10-31: the ⚠ shows on every page and mode. The engine's own is hidden — V1 untouched.
  * extra(win) (optional): HTML shown above the disclaimer, in orange — the 2026 預測 page's research note (user 2026-10-31).
  *   V2Disclaimer.mount(barEl, beforeEl, getWin, extra) → { refresh() }
  */
@@ -46,7 +46,9 @@
         hooked = wrap; new w.MutationObserver(refresh).observe(wrap, { attributes: true, attributeFilter: ['style'] });
         d.addEventListener('mousedown', close, true);   // a click on the map (the engine's own document) closes the note too
       }
-      var on = wrap.style.display !== 'none';
+      // always shown (user 2026-10-31: 「警示三角形要常駐顯示」) — the engine turns its own ⚠ off in some modes (e.g. 政黨基本盤);
+      // the note text is the same in every mode
+      var on = true;
       btn.style.display = on ? 'inline-flex' : 'none';
       if (!on) close();
       var lb = document.querySelector('.v2-lang button[data-lang="en"]'), en = !!lb && lb.getAttribute('aria-pressed') === 'true';
