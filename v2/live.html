@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2026 即時開票 · V2</title>
+<link rel="stylesheet" href="v2-shell.css?v=20261022b">
+</head>
+<body>
+<div id="v2-bar">
+  <a class="v2-home" href="index.html" data-zh="← 首頁" data-en="← Home">← 首頁</a>
+  <span class="v2-title"><span data-zh="2026 即時開票" data-en="2026 Election Night">2026 即時開票</span><span class="v2-badge">V2</span></span>
+  <div class="v2-controls">
+    <div class="v2-seg" role="group" aria-label="選舉 Race">
+      <button type="button" data-sub="mayor" aria-pressed="true" data-zh="縣市長" data-en="Mayors">縣市長</button>
+      <button type="button" data-sub="council" aria-pressed="false" data-zh="縣市議員" data-en="Councils">縣市議員</button>
+    </div>
+  </div>
+  <span id="v2-status"></span>
+  <span class="v2-spacer"></span>
+  <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+</div>
+<div id="v2-stage">
+  <iframe id="v2-engine" title="2026 即時開票（V1 live2026.html 引擎）"></iframe>
+  <div id="v2-veil" data-zh="載入開票頁…" data-en="Loading election night…">載入開票頁…</div>
+</div>
+<script src="tcborder.js?v=20261029a"></script>
+<script src="noglow.js?v=20261029f"></script>
+<script src="i18n.js?v=20261029c"></script>
+<script src="toolbtns.js?v=20261031a"></script>
+<script src="navbar.js?v=20261030a"></script>
+<script src="disclaimer.js?v=20261031c"></script>
+<script src="v2-shell.js?v=20261031a"></script>
+<script>
+  // Election night only: V1's setLiveTrack2026Mode('mayor' | 'council').
+  var subButtons = document.querySelectorAll('[data-sub]');
+  function setSub(win, sub) {
+    win.setLiveTrack2026Mode(sub);
+    subButtons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.sub === sub)); });
+  }
+  V2Shell.boot({
+    // ?demo=1 → 引擎改讀2022彩排資料，開票前預覽「開票中」版面（見live2026.html的_LIVE26_DEMO）
+    engine: '../live2026.html' + (/[?&]demo=1(&|$)/.test(location.search) ? '?demo=1' : ''),
+    needs: ['setLiveTrack2026Mode'],
+    title: { zh: '2026 即時開票', en: '2026 Election Night' },
+    onReady: function (win) {
+      setSub(win, 'mayor');
+      // population glow hidden, colour on the blocks — as History and the 2026 forecast (noglow.js; user 2026-10-29:
+      // 「把開票的系統把人口光暈隱藏」)
+      if (window.V2NoGlow) window.V2NoGlow.attach(win);
+      subButtons.forEach(function (b) { b.addEventListener('click', function () { setSub(win, b.dataset.sub); }); });
+    }
+  });
+</script>
+</body>
+</html>

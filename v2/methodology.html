@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>方法論 · V2</title>
+<style>
+  :root {
+    --bg0: #05070c; --bg1: #0a0d16; --bg2: #141b2b; --fg: #e7eaf0; --muted: rgba(231,234,240,.66); --faint: rgba(231,234,240,.4);
+    --line: rgba(255,255,255,.09); --card: rgba(255,255,255,.035); --cyan: #28c8c8; --dpp: #1b9e4b; --kmt: #1555b4;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; color: var(--fg); padding: 24px 16px 48px;
+    background: radial-gradient(ellipse at 40% 10%, var(--bg2) 0%, var(--bg1) 55%, var(--bg0) 100%) fixed;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif;
+  }
+  html[lang="en"] [lang="zh-Hant"], html[lang="zh-Hant"] [lang="en"] { display: none !important; }
+  .wrap { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+  .home { color: var(--muted); text-decoration: none; font-size: 12.5px; font-weight: 600; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .home:hover { color: var(--fg); }
+  .spacer { flex: 1; }
+  .lang { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .lang button { font: inherit; font-size: 11.5px; font-weight: 600; color: var(--fg); background: transparent; border: 0; padding: 5px 10px; cursor: pointer; }
+  .lang button[aria-pressed="true"] { background: rgba(40,200,200,.22); }
+  h1 { margin: 6px 0 0; font-size: clamp(22px, 3.4vw, 28px); letter-spacing: .02em; text-wrap: balance; }
+  .lede { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.75; max-width: 65ch; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+  nav.toc a { font-size: 12px; color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); }
+  section { padding: 18px 20px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+  h2 { margin: 0; font-size: 18px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+  h2 small { font-size: 11px; font-weight: 600; letter-spacing: .1em; color: var(--faint); }
+  p, li { color: var(--muted); font-size: 13.5px; line-height: 1.8; max-width: 70ch; margin: 0; }
+  ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  b { color: var(--fg); font-weight: 600; }
+  pre {
+    margin: 0; padding: 12px 14px; border-radius: 10px; background: rgba(0,0,0,.35); border: 1px solid var(--line);
+    color: #cbd5e1; font: 12.5px/1.7 ui-monospace, "SF Mono", Menlo, monospace; overflow-x: auto;
+  }
+  .go {
+    align-self: flex-start; text-decoration: none; font-size: 13px; font-weight: 700; color: #fff;
+    padding: 8px 14px; border-radius: 10px; background: rgba(40,200,200,.18); border: 1px solid rgba(40,200,200,.5);
+  }
+  .go:hover { background: rgba(40,200,200,.28); }
+  .chip { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px dashed rgba(40,200,200,.45); color: var(--cyan); }
+  .scale { display: flex; height: 10px; border-radius: 5px; overflow: hidden; max-width: 420px; }
+  .scale span { flex: 1; }
+  .dash { display: inline-block; width: 28px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: 6px; }
+  :is(.home, .go, nav.toc a, .lang button):focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="home" href="index.html"><span lang="zh-Hant">← 首頁</span><span lang="en">← Home</span></a>
+    <span class="spacer"></span>
+    <div class="lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+  </div>
+
+  <h1><span lang="zh-Hant">方法論</span><span lang="en">Methodology</span></h1>
+  <p class="lede" lang="zh-Hant">這個網站上的數字怎麼算出來：2026 縣市長預測模型、政黨基本盤，以及資料來源。歷史與預測頁面只呈現結果；政黨基本盤只在這裡說明與呈現。</p>
+  <p class="lede" lang="en">How the numbers on this site are made: the 2026 mayoral forecast, party base votes, and the data sources. The history and forecast pages show results only; party base votes live here.</p>
+  <nav class="toc">
+    <a href="#forecast"><span lang="zh-Hant">預測模型</span><span lang="en">Forecast model</span></a>
+    <a href="#base"><span lang="zh-Hant">政黨基本盤</span><span lang="en">Party base votes</span></a>
+    <a href="#sources"><span lang="zh-Hant">資料來源</span><span lang="en">Sources</span></a>
+  </nav>
+
+  <section id="forecast">
+    <h2><span lang="zh-Hant">2026 縣市長預測模型</span><span lang="en">2026 mayoral forecast</span></h2>
+    <ul lang="zh-Hant">
+      <li><b>民調彙整</b>：目前收錄 190 筆民調、39 家民調機構。每家機構依其過往偏差（house effect）降權，政黨、候選人陣營委託的民調也降權，越舊的民調權重越低，換算成各縣市的預估得票率。</li>
+      <li><b>未表態</b>：每份民調的未表態平分給該份民調的前兩名；三強縣市（三位以上候選人曾在民調達 10%）平分給這幾位。2018、2022 回測顯示，原本按支持比例分配會高估領先者，在高雄、台南、屏東尤其明顯；改成平分後，兩屆的縣市平均誤差都下降（7.2→5.1、6.3→5.2 個百分點）。少了主要候選人的民調（例如一對一假想對決）不列入。</li>
+      <li><b>勝選機率</b>：用蒙地卡羅模擬，誤差分成全國、區域、縣市三層。2026-08-19 用 2018、2022 兩屆「民調 vs 實際結果」回測後，把三層標準差放寬為 2.94／3.24／4.41 個百分點（合計約 6.2），預估得票率不變，只是勝率更貼近不確定性。</li>
+      <li><b>信任度</b>：民調越少、越舊，信任度越低。地圖顏色只代表預估差距；信任度用縣市外框的虛線表示：</li>
+    </ul>
+    <ul lang="en">
+      <li><b>Poll aggregation</b>: 190 polls from 39 pollsters so far, each pollster down-weighted by its past bias (house effect), party- and campaign-commissioned polls down-weighted too, and older polls weighted less, giving an estimated vote share per county.</li>
+      <li><b>Undecided</b>: each poll's undecided are split evenly between its top two candidates (in three-way races — three or more candidates who reached 10% in some poll — among those candidates). Backtests on 2018 and 2022 showed that reallocating them in proportion to current support overstates the leader, most of all in Kaohsiung, Tainan and Pingtung; the even split lowered the average county error in both cycles (7.2→5.1 and 6.3→5.2 points). Polls missing a major candidate (e.g. one-on-one hypotheticals) are left out.</li>
+      <li><b>Win probability</b>: Monte Carlo simulation with national, regional and county error. After back-testing polls against the 2018 and 2022 results (2026-08-19), the three standard deviations were widened to 2.94 / 3.24 / 4.41 points (≈ 6.2 combined); vote-share estimates did not change, only how certain the win probabilities are.</li>
+      <li><b>Trust</b>: fewer and older polls mean lower trust. Map colour shows only the expected margin; trust is drawn as a dashed county outline:</li>
+    </ul>
+    <p><span class="dash" style="color:#ef4444"></span><span lang="zh-Hant">信任度 &lt; 15％</span><span lang="en">trust &lt; 15%</span>　<span class="dash" style="color:#f97316"></span>15–30％　<span class="dash" style="color:#facc15"></span>30–50％　<span lang="zh-Hant">無外框：≥ 50％</span><span lang="en">no outline: ≥ 50%</span></p>
+    <a class="go" href="predict.html"><span lang="zh-Hant">打開 2026 預測 →</span><span lang="en">Open the 2026 forecast →</span></a>
+  </section>
+
+  <section id="base">
+    <h2><span lang="zh-Hant">政黨基本盤</span><span lang="en">Party base votes</span></h2>
+    <p lang="zh-Hant">用 2008、2012、2016、2020、2024 五屆不分區政黨票，估計每個政黨在每個縣市、鄉鎮、村里「無論如何都會投」與「看情況才投」的票有多少。看的是<b>實際票數</b>，不是得票率：例如國民黨 2008 年政黨票率 51.23% 比 2012 年的 44.54% 高，但 2012 年實際得票 586 萬比 2008 年的 501 萬多，所以天花板是 2012 年。</p>
+    <p lang="en">Five party-list elections (2008, 2012, 2016, 2020, 2024) estimate how many votes each party gets in every county, township and village no matter what, and how many only sometimes. It works on <b>vote counts</b>, not shares: the KMT's 2008 share (51.23%) beat 2012 (44.54%), but 2012 had more actual votes (5.86 m vs 5.01 m), so 2012 is its ceiling.</p>
+    <ul lang="zh-Hant">
+      <li><b>地板年／天花板年</b>：每個地區、每個政黨各自找出五屆中票數最少與最多的那一年（例如持續成長的高雄楠梓，民進黨天花板是 2024，不是全國的 2016）。</li>
+      <li><b>鐵票</b> ＝ 地板年票數</li>
+      <li><b>中間票</b> ＝ 近兩屆（2020、2024）平均 − 地板</li>
+      <li><b>淺票</b> ＝ 天花板 − 近兩屆平均。三段加起來就是天花板。</li>
+      <li>例外：民眾黨、台灣基進只有 2020、2024 兩屆，只分鐵票（較少那年）與淺票（兩年差距）；台聯、歐巴桑聯盟、綠黨票數太小，只看 2024 一個數字；其餘小黨合併為「其他（游離）」，用 2024 票數。</li>
+      <li><b>選舉人數校正（本站一律採用）</b>：地板、天花板與近兩屆平均都在「每千位選舉人的票數」上計算，再換算回票數。這樣快速成長或人口流失地區的票數變化，不會被誤當成政治立場的移動。唯一例外：2008、2012 年的村里代碼與現行不同、對不上選舉人數，該部分自動以實際票數計算。</li>
+    </ul>
+    <ul lang="en">
+      <li><b>Floor / ceiling year</b>: each area and party gets its own lowest and highest of the five years (in fast-growing Nanzih, Kaohsiung, the DPP's ceiling is 2024, not the national 2016).</li>
+      <li><b>Core</b> = floor-year votes</li>
+      <li><b>Middle</b> = average of the last two elections (2020, 2024) − floor</li>
+      <li><b>Soft</b> = ceiling − that average. The three add up to the ceiling.</li>
+      <li>Exceptions: the TPP and the Taiwan Statebuilding Party have only 2020 and 2024, so core (lower year) and soft (the difference); the Taiwan Solidarity Union, the Obasang Coalition and the Green Party are too small and use 2024 alone; every other small party is pooled as "other (floating)" at its 2024 count.</li>
+      <li><b>Voter-adjusted (always used here)</b>: floors, ceilings and the two-election average are computed on votes per 1,000 eligible voters and converted back, so growth or decline in population is not mistaken for a political shift. Only exception: 2008 and 2012 village codes don't match today's, so those parts use raw votes.</li>
+    </ul>
+    <p lang="zh-Hant">地圖的選區顏色另用 2016–2024 三屆的「區域立委」與「政黨票」得票率：兩邊領先的黨不同，標為<b>分裂投票</b>；相同時取兩者平均的領先差距，≥ 20 個百分點為深、10–20 中、5–10 淺、2–5 搖擺、&lt; 2 平手。</p>
+    <p lang="en">District colours on the map use the 2016–2024 district-race and party-list shares: different leaders on the two ballots mark a <b>split</b> district; otherwise the blended lead decides — ≥ 20 points deep, 10–20 middle, 5–10 soft, 2–5 swing, &lt; 2 tied.</p>
+    <a class="go" href="baselean.html"><span lang="zh-Hant">打開政黨基本盤地圖 →</span><span lang="en">Open the base-vote map →</span></a>
+  </section>
+
+  <section id="sources">
+    <h2><span lang="zh-Hant">資料來源</span><span lang="en">Sources</span></h2>
+    <ul lang="zh-Hant">
+      <li>選舉結果、選舉人數：中央選舉委員會（選舉資料庫原始檔）</li>
+      <li>原住民族部落位置：原住民族委員會；平埔族群聚落另參考原民會 2025 民族認定期末報告與葉高華〈西拉雅、大武壠、馬卡道聚居地〉</li>
+      <li>村里人口：內政部戶政司（115 年 9 月）</li>
+      <li>2026 民調：各民調機構公開發布的結果</li>
+    </ul>
+    <ul lang="en">
+      <li>Results and eligible voters: Central Election Commission (raw election database files)</li>
+      <li>Indigenous community locations: Council of Indigenous Peoples; Pingpu settlements also from the CIP 2025 recognition report and Kao-Hua Yeh's map of Siraya, Taivoan and Makatao settlements</li>
+      <li>Village population: Ministry of the Interior, Department of Household Registration (Sept 2026)</li>
+      <li>2026 polls: results published by each polling organisation</li>
+    </ul>
+  </section>
+</div>
+<script>
+(function () {
+  var lang = 'zh';
+  try { var s = localStorage.getItem('v2_lang'); if (s === 'en' || s === 'zh') lang = s; } catch (e) {}
+  function apply() {
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+    document.title = lang === 'en' ? 'Methodology · V2' : '方法論 · V2';
+    document.querySelectorAll('.lang button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.lang === lang)); });
+  }
+  document.querySelectorAll('.lang button').forEach(function (b) {
+    b.addEventListener('click', function () { lang = b.dataset.lang; try { localStorage.setItem('v2_lang', lang); } catch (e) {} apply(); });
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

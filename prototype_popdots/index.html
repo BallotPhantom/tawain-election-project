@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>人口光點試作</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  :root { --bg: #07090f; --panel: #0b0e16; --line: rgba(255,255,255,0.10); --text: rgba(255,255,255,0.86); --dim: rgba(255,255,255,0.5); --accent: #ffd59a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; }
+  .grp { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .grp > span { color: var(--dim); margin-right: 2px; }
+  button { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px; font: inherit; cursor: pointer; }
+  button.on { background: rgba(255,213,154,0.18); border-color: rgba(255,213,154,0.55); color: var(--accent); }
+  label { color: var(--dim); display: inline-flex; gap: 4px; align-items: center; }
+  #panels { display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); gap: 1px; background: var(--line); height: calc(100vh - 150px); min-height: 360px; }
+  .panel { position: relative; background: var(--panel); overflow: hidden; }
+  .panel canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .cap { position: absolute; left: 10px; top: 8px; right: 10px; pointer-events: none; text-shadow: 0 1px 3px #000; }
+  .cap b { color: var(--accent); }
+  .cap small { display: block; color: var(--dim); }
+  footer { padding: 8px 16px; color: var(--dim); font-size: 11px; border-top: 1px solid var(--line); }
+  #status { color: var(--accent); }
+  @media (max-width: 760px) {
+    #panels { grid-template-columns: 1fr; grid-template-rows: repeat(var(--n, 3), minmax(300px, 1fr)); height: auto; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>人口光點試作</h1>
+  <div class="grp" id="regions"><span>地區</span></div>
+  <div class="grp" id="variants"><span>版本</span></div>
+  <div class="grp" id="presets"><span>視角</span></div>
+  <div class="grp">
+    <label><input type="checkbox" id="borders" checked>村里界</label>
+    <label><input type="checkbox" id="tone" checked>高密度亮度壓縮</label>
+    <label>曝光 <input type="range" id="exposure" min="0.25" max="3" step="0.05" value="1"></label>
+  </div>
+  <div id="status">載入中…</div>
+</header>
+<div id="panels"></div>
+<footer id="foot"></footer>
+<script>
+(function () {
+  var VARIANTS = {
+    A: ['A 人口網格', '官方村里人口 → 依 WorldPop 100m 網格落點'],
+    B: ['B 建物位置', '全區人口依建物面積分配，不受村里人口約束'],
+    C: ['C 混合模型', '官方村里人口 → 落在該村里的建物上（無建物才用網格）'],
+    D: ['C+ 逐格混合', '官方村里人口 → 先分到 100m 網格；格內有建物就落在建物上，沒有就在格內']
+  };
+  var REGIONS = {
+    hualien: { label: '花蓮', presets: [['全縣', null], ['縱谷 花蓮市→玉里', ['10015010', '10015050', '10015060', '10015020', '10015070', '10015090', '10015030']], ['花蓮市＋吉安', ['10015010', '10015050']], ['玉里鎮', ['10015030']], ['山區 卓溪鄉', ['10015130']]],
+      towns: { '10015010': '花蓮市', '10015020': '鳳林鎮', '10015030': '玉里鎮', '10015040': '新城鄉', '10015050': '吉安鄉', '10015060': '壽豐鄉', '10015070': '光復鄉', '10015080': '豐濱鄉', '10015090': '瑞穗鄉', '10015100': '富里鄉', '10015110': '秀林鄉', '10015120': '萬榮鄉', '10015130': '卓溪鄉' } },
+    taipei: { label: '台北都會區', presets: [['全區', null], ['台北市', ['63000']], ['大安＋信義', ['63000030', '63000020']], ['板橋＋中永和', ['65000010', '65000030', '65000040']], ['士林＋北投（山區對照）', ['63000110', '63000120']]],
+      towns: { '63000010': '松山', '63000020': '信義', '63000030': '大安', '63000040': '中山', '63000050': '中正', '63000060': '大同', '63000070': '萬華', '63000080': '文山', '63000090': '南港', '63000100': '內湖', '63000110': '士林', '63000120': '北投', '65000010': '板橋', '65000020': '三重', '65000030': '中和', '65000040': '永和', '65000050': '新莊', '65000060': '新店', '65000130': '土城', '65000140': '蘆洲' } },
+    taichung: { label: '台中', presets: [['全區', null], ['舊市區 中東南西北', ['66000010', '66000020', '66000030', '66000040', '66000050']], ['西屯＋南屯', ['66000060', '66000070']], ['大里＋太平', ['66000280', '66000270']]],
+      towns: { '66000010': '中區', '66000020': '東區', '66000030': '南區', '66000040': '西區', '66000050': '北區', '66000060': '西屯', '66000070': '南屯', '66000080': '北屯', '66000270': '太平', '66000280': '大里' } }
+  };
+  // Tone curve on GROUND density (not screen density): above DREF people/km², luminance grows as
+  // density^GAMMA instead of linearly, so city cores keep structure. Zoom- and region-independent.
+  var DREF = 2000, GAMMA = 0.45, tone = true;
+  var dpr = Math.min(2, window.devicePixelRatio || 1);
+  var showing = ['A', 'C', 'D'], exposure = 1, borders = true;
+  var cache = {}, D = null, G = null, regionKey = 'hualien';
+
+  // one glow sprite (warm white core, soft halo), drawn additively
+  var SPR = 16, sprite = document.createElement('canvas'); sprite.width = sprite.height = SPR * 2;
+  (function () {
+    var g = sprite.getContext('2d'), gr = g.createRadialGradient(SPR, SPR, 0, SPR, SPR, SPR);
+    gr.addColorStop(0, 'rgba(255,244,220,1)'); gr.addColorStop(0.18, 'rgba(255,214,150,0.85)');
+    gr.addColorStop(0.45, 'rgba(255,170,90,0.22)'); gr.addColorStop(1, 'rgba(255,140,60,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, SPR * 2, SPR * 2);
+  })();
+
+  function decode(b64, bbox) {   // uint16 pairs over the region bbox → Float32 local coordinates
+    var bin = atob(b64), n = bin.length / 4, out = new Float32Array(n * 2), sx = (bbox[2] - bbox[0]) / 65535, sy = (bbox[3] - bbox[1]) / 65535;
+    for (var i = 0; i < n; i++) {
+      var o = i * 4, x = bin.charCodeAt(o) | (bin.charCodeAt(o + 1) << 8), y = bin.charCodeAt(o + 2) | (bin.charCodeAt(o + 3) << 8);
+      out[2 * i] = bbox[0] + x * sx; out[2 * i + 1] = bbox[1] + y * sy;
+    }
+    return out;
+  }
+  async function loadRegion(key) {
+    if (cache[key]) return cache[key];
+    document.getElementById('status').textContent = '載入中…';
+    var d = await (await fetch('data/' + key + '_dots.json')).json();
+    var g = { X0: Infinity, Y0: Infinity, X1: -Infinity, Y1: -Infinity, path: new Path2D(), townC: {}, vb: {} };
+    Object.keys(d.villages).forEach(function (vc) {
+      var b = g.vb[vc] = [Infinity, Infinity, -Infinity, -Infinity], sx = 0, sy = 0, n = 0;
+      d.villages[vc].geom.forEach(function (ring) {
+        ring.forEach(function (p, i) {
+          if (i) g.path.lineTo(p[0], p[1]); else g.path.moveTo(p[0], p[1]);
+          b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]); b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]);
+          sx += p[0]; sy += p[1]; n++;
+        });
+        g.path.closePath();
+      });
+      g.X0 = Math.min(g.X0, b[0]); g.Y0 = Math.min(g.Y0, b[1]); g.X1 = Math.max(g.X1, b[2]); g.Y1 = Math.max(g.Y1, b[3]);
+      var t = vc.slice(0, 8), c = g.townC[t] || (g.townC[t] = [0, 0, 0]); c[0] += sx; c[1] += sy; c[2] += n;
+    });
+    g.dots = {}; g.dens = {};
+    Object.keys(d.variants).forEach(function (v) {
+      g.dots[v] = d.variants[v].map(function (b) { return decode(b, d.bbox); });
+      // per-dot ground density (people/km² = 2^(byte/15) - 1) → tone weight min(1, (D/DREF)^(GAMMA-1))
+      g.dens[v] = d.density[v].map(function (b) { var bin = atob(b), w = new Float32Array(bin.length);
+        for (var i = 0; i < bin.length; i++) { var D = Math.pow(2, bin.charCodeAt(i) / 15) - 1; w[i] = Math.min(1, Math.pow(Math.max(D, 1) / DREF, GAMMA - 1)); } return w; });
+    });
+    document.getElementById('status').textContent = '';
+    return (cache[key] = { D: d, G: g });
+  }
+
+  // ---- panels ----
+  var panels = [], T = d3.zoomIdentity, syncing = false, base = { s: 1, ox: 0, oy: 0, W: 0, H: 0 };
+  function buildPanels() {
+    var host = document.getElementById('panels'); host.innerHTML = ''; host.style.setProperty('--n', showing.length);
+    panels = showing.map(function (v) {
+      var div = document.createElement('div'); div.className = 'panel';
+      div.innerHTML = '<canvas></canvas><div class="cap"><b>' + VARIANTS[v][0] + '</b><small>' + VARIANTS[v][1] + '</small><small class="tier"></small></div>';
+      host.appendChild(div);
+      var p = { v: v, div: div, cv: div.querySelector('canvas'), tier: div.querySelector('.tier') };
+      p.ctx = p.cv.getContext('2d');
+      p.zoom = d3.zoom().scaleExtent([0.6, 80]).on('zoom', function (e) {
+        T = e.transform;
+        if (!syncing) { syncing = true; panels.forEach(function (q) { if (q !== p) d3.select(q.cv).call(q.zoom.transform, T); }); syncing = false; }
+        drawAll();
+      });
+      d3.select(p.cv).call(p.zoom);
+      return p;
+    });
+    resize();
+  }
+  function resize() {
+    if (!panels.length || !G) return;
+    var r = panels[0].div.getBoundingClientRect(); base.W = r.width; base.H = r.height;
+    base.s = Math.min((base.W - 24) / (G.X1 - G.X0), (base.H - 24) / (G.Y1 - G.Y0));
+    base.ox = (base.W - base.s * (G.X1 - G.X0)) / 2 - base.s * G.X0; base.oy = (base.H - base.s * (G.Y1 - G.Y0)) / 2 - base.s * G.Y0;
+    panels.forEach(function (p) { p.cv.width = Math.round(base.W * dpr); p.cv.height = Math.round(base.H * dpr); });
+    drawAll();
+  }
+
+  // Brightness: energy per dot e = C · P · (px per local unit)², so light per screen area ∝ people per
+  // ground area — the same density looks equally bright in every region and at every zoom. The tier
+  // shown is the coarsest one whose dots stay at alpha ≤ 1; past the finest tier the sprite grows
+  // (energy ∝ alpha·r²) up to 1.6×; beyond that (metro cores past the finest tier) brightness saturates —
+  // the one place the per-area rule is knowingly given up, to avoid oversized blobs.
+  var C = 9.5e-5, R0 = 2.4;
+  function draw(p) {
+    var ctx = p.ctx, k = T.k, sc = base.s * k, tx = T.x + k * base.ox, ty = T.y + k * base.oy;
+    var ti = D.tiers.length - 1;
+    for (var i = 0; i < D.tiers.length; i++) { if (C * exposure * D.tiers[i] * sc * sc <= 1) { ti = i; break; } }
+    var P = D.tiers[ti], arr = G.dots[p.v][ti], e = C * exposure * P * sc * sc;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0b0e16'; ctx.fillRect(0, 0, p.cv.width, p.cv.height);
+    if (borders) {
+      ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * tx, dpr * ty);
+      ctx.lineWidth = 0.7 / sc; ctx.strokeStyle = 'rgba(140,170,220,0.16)'; ctx.stroke(G.path);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    var alpha = Math.min(1, e), r = R0 * Math.sqrt(Math.min(2.56, Math.max(1, e))) * dpr;   // sprite grows at most 1.6×; past that the finest tier saturates instead of blobbing
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = alpha;
+    var W = p.cv.width, H = p.cv.height, n = 0, wt = G.dens[p.v][ti];
+    for (var j = 0; j < arr.length; j += 2) {
+      var x = (arr[j] * sc + tx) * dpr, y = (arr[j + 1] * sc + ty) * dpr;
+      if (x < -r || y < -r || x > W + r || y > H + r) continue;
+      if (tone) ctx.globalAlpha = alpha * wt[j >> 1];
+      ctx.drawImage(sprite, x - r, y - r, 2 * r, 2 * r); n++;
+    }
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    var names = REGIONS[regionKey].towns;
+    ctx.font = (11 * dpr) + 'px -apple-system, "PingFang TC", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(160,200,255,0.55)';
+    Object.keys(G.townC).forEach(function (t) {
+      var c = G.townC[t]; ctx.fillText(names[t] || t, (c[0] / c[2] * sc + tx) * dpr, (c[1] / c[2] * sc + ty) * dpr);
+    });
+    p.tier.textContent = '每點約 ' + P + ' 人 · 畫面上 ' + n.toLocaleString() + ' 點' + (e > 1 ? (e > 2.56 ? ' · 已超過最細層級，亮度飽和' : ' · 已達最細層級，光點放大') : '');
+  }
+  var raf = 0;
+  function drawAll() { if (raf || !G) return; raf = requestAnimationFrame(function () { raf = 0; panels.forEach(draw); }); }
+
+  function zoomTo(prefixes) {
+    var b = [G.X0, G.Y0, G.X1, G.Y1];
+    if (prefixes) {
+      b = [Infinity, Infinity, -Infinity, -Infinity];
+      Object.keys(G.vb).forEach(function (vc) { if (!prefixes.some(function (p) { return vc.indexOf(p) === 0; })) return; var q = G.vb[vc]; b = [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.max(b[2], q[2]), Math.max(b[3], q[3])]; });
+    }
+    var k = Math.min(80, 0.9 / Math.max((b[2] - b[0]) * base.s / base.W, (b[3] - b[1]) * base.s / base.H));
+    var cx = base.s * (b[0] + b[2]) / 2 + base.ox, cy = base.s * (b[1] + b[3]) / 2 + base.oy;
+    d3.select(panels[0].cv).call(panels[0].zoom.transform, d3.zoomIdentity.translate(base.W / 2 - k * cx, base.H / 2 - k * cy).scale(k));
+  }
+  function renderPresets() {
+    var pg = document.getElementById('presets'); pg.querySelectorAll('button').forEach(function (b) { b.remove(); });
+    REGIONS[regionKey].presets.forEach(function (o, i) {
+      var b = document.createElement('button'); b.textContent = o[0];
+      b.onclick = function () { pg.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); zoomTo(o[1]); };
+      if (!i) b.classList.add('on');
+      pg.appendChild(b);
+    });
+  }
+  function renderFoot() {
+    var nd = (D.notDrawn || []).map(function (x) { return x.vc + '（' + x.pop.toLocaleString() + ' 人）'; }).join('、');
+    var st = D.stats.D && D.stats.D.buildingShare != null ? ' · C+ 中落在建物上的人口比例 ' + Math.round(D.stats.D.buildingShare * 100) + '%' : '';
+    document.getElementById('foot').innerHTML = D.name + ' 總人口 ' + D.totalPop.toLocaleString() + ' 人（戶籍）' + st +
+      ' · 光點位置是依資料推估的示意，不是實際住址 · 亮度依「人數÷面積」換算，各地區、各縮放層級一致' +
+      (nd ? ' · 未畫入：' + nd + '，地圖村里界尚無此村里' : '') +
+      '<br>資料：' + D.source.population + '；' + D.source.grid + '；' + D.source.buildings + '。原型僅供本機比較，未公開發布。';
+  }
+  async function setRegion(key) {
+    regionKey = key; var r = await loadRegion(key); D = r.D; G = r.G;
+    document.querySelectorAll('#regions button').forEach(function (b) { b.classList.toggle('on', b.dataset.k === key); });
+    renderPresets(); renderFoot(); buildPanels(); zoomTo(null);
+  }
+
+  // ---- controls ----
+  var rg = document.getElementById('regions');
+  Object.keys(REGIONS).forEach(function (k) {
+    var b = document.createElement('button'); b.textContent = REGIONS[k].label; b.dataset.k = k; b.onclick = function () { setRegion(k); }; rg.appendChild(b);
+  });
+  var vg = document.getElementById('variants');
+  [['ACD', 'A·C·C+ 並排'], ['ABC', 'A·B·C 並排'], ['A', 'A'], ['B', 'B'], ['C', 'C'], ['D', 'C+']].forEach(function (o) {
+    var b = document.createElement('button'); b.textContent = o[1];
+    b.onclick = function () { showing = o[0].split(''); vg.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); var t = T; buildPanels(); d3.select(panels[0].cv).call(panels[0].zoom.transform, t); };
+    if (o[0] === 'ACD') b.classList.add('on');
+    vg.appendChild(b);
+  });
+  document.getElementById('tone').onchange = function (e) { tone = e.target.checked; drawAll(); };
+  document.getElementById('borders').onchange = function (e) { borders = e.target.checked; drawAll(); };
+  document.getElementById('exposure').oninput = function (e) { exposure = +e.target.value; drawAll(); };
+  window.addEventListener('resize', function () { var t = T; resize(); if (panels.length) d3.select(panels[0].cv).call(panels[0].zoom.transform, t); });
+  var q = (location.hash || '').replace('#', '');
+  setRegion(REGIONS[q] ? q : 'hualien');
+})();
+</script>
+</body>
+</html>

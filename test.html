@@ -359206,11 +359206,24 @@ showVCPanel = function(vc) {
         .on('mouseover.torchscale', function () { setTorchScaleForEl(this); })
         .on('mouseout.torchscale', () => { const mpEl = document.getElementById('mp'); if (mpEl) mpEl.style.setProperty('--torch-scale', '1'); });
       // 鄉鎮人口密度發光點
+      // .glow-core跟.ft-popglow這兩層畫的是同一份TC_GJ.features、同樣順序，pathFn(d)對同一個
+      // feature物件一定算出同一個d字串——用_natGlowPathFn共用其中一層算好的結果給另一層用，
+      // 省掉重複的座標轉換。cache只活在這次goED()呼叫裡（每次都是全新的Map，畫完就丟），
+      // 用feature物件本身當key，不是用tc代碼——同一個tc代碼在別的圖層(updateGlowAndBaseED)
+      // 或下鑽之後可能對應到不同的geometry物件(例如同一個鄉鎮橫跨兩個選區時)，用代碼當key
+      // 會讓那些地方悄悄套用錯的形狀。這裡只共用這兩層，其他任何地方都不會受影響。
+      const _natGlowPathCache = new Map();
+      function _natGlowPathFn(d) {
+        if (_natGlowPathCache.has(d)) return _natGlowPathCache.get(d);
+        const s = pathFn(d);
+        _natGlowPathCache.set(d, s);
+        return s;
+      }
       gGlow.selectAll('.glow-core').data(window.isHeatmap ? [] : TC_GJ.features).join('path').attr('class', 'glow-core')
-        .attr('d', pathFn).attr('pointer-events', 'none').attr('filter', 'url(#glow-blur)')
+        .attr('d', _natGlowPathFn).attr('pointer-events', 'none').attr('filter', 'url(#glow-blur)')
         .attr('fill', d => { const _e16 = (winnerYear==='2016' && typeof TC_TO_ED_2016!=='undefined' && TC_TO_ED_2016[d.properties.tc] && d.properties.tc !== '66000280') ? TC_TO_ED_2016[d.properties.tc] : d.properties.ed; return edColor(_e16); });
       gBase.selectAll('.ft-popglow').data(window.isHeatmap ? [] : TC_GJ.features).join('path').attr('class', 'ft-popglow')
-        .attr('d', pathFn).attr('pointer-events', 'none')
+        .attr('d', _natGlowPathFn).attr('pointer-events', 'none')
         .attr('fill', d => { const _e16 = (winnerYear==='2016' && typeof TC_TO_ED_2016!=='undefined' && TC_TO_ED_2016[d.properties.tc] && d.properties.tc !== '66000280') ? TC_TO_ED_2016[d.properties.tc] : d.properties.ed; return edColor(_e16); });
       svg.call(zm.transform, d3.zoomIdentity); curK = 1;
       updateGlowAndBaseED();

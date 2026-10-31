@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2026 縣市長預測 · V2</title>
+<link rel="stylesheet" href="v2-shell.css?v=20261022b">
+<style>a[data-local-only]{display:none!important}</style>
+</head>
+<body>
+<div id="v2-bar">
+  <a class="v2-home" href="index.html" data-zh="← 首頁" data-en="← Home">← 首頁</a>
+  <span class="v2-title"><span data-zh="2026 縣市長預測" data-en="2026 Mayoral Forecast">2026 縣市長預測</span><span class="v2-badge">V2</span></span>
+  <a class="v2-btn" href="rallies.html" data-local-only style="text-decoration:none" data-zh="造勢地圖 →" data-en="Campaign rallies →">造勢地圖 →</a>
+  <span id="v2-status"></span>
+  <span class="v2-spacer"></span>
+  <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+</div>
+<div id="v2-stage">
+  <iframe id="v2-engine" title="2026 縣市長預測（V1 council.html 引擎）"></iframe>
+  <div id="v2-veil" data-zh="載入預測模型…" data-en="Loading the forecast…">載入預測模型…</div>
+</div>
+<script src="tcborder.js?v=20261029a"></script>
+<script src="noglow.js?v=20261029f"></script>
+<script src="ratings26.js?v=20261031h"></script>
+<script src="pollclr26.js?v=20261029a"></script>
+<script src="i18n.js?v=20261029c"></script>
+<script src="toolbtns.js?v=20261031a"></script>
+<script src="navbar.js?v=20261030a"></script>
+<script src="disclaimer.js?v=20261031c"></script>
+<script src="south26.js?v=20261031b"></script>
+<script src="v2-shell.js?v=20261031a"></script>
+<script>
+  // 2026 mayoral forecast only. No 政黨基本盤 comparison here either (user,
+  // 2026-10-22): the info-panel switch is hidden and the builders are emptied.
+  // council.html loads the poll / forecast / snapshot data with bare <script src> (no version), so after a data update
+  // the browser kept the old files (2026-10-31: 190 polls on disk, 188 in the page). Refresh their cached copies before the
+  // engine loads (~180 KB; V1 untouched). A failed fetch does not block the page.
+  Promise.all(['data_polls_2026.js', 'data_mayor2026_predict.js', 'data_mc2026_snapshot_log.js'].map(function (f) {
+    return fetch('../' + f, { cache: 'reload' }).catch(function () {});
+  })).then(function () {
+  V2Shell.boot({
+    // &v=: the engine page carries the township forecast (MAYOR_2026_PREDICT_TC) inline, and browsers kept serving a
+    // cached copy after a poll update (2026-10-29: transferSize 0 even on a hard reload) — bump it with every data update
+    engine: '../council.html?goto=2026predict&v=20261031d',
+    needs: ['setMayor2026PredictMode'],
+    title: { zh: '2026 縣市長預測', en: '2026 Mayoral Forecast' },
+    // #county-council-panel: the 縣市議會席次 card — empty here (mayors only); the engine hides it only on the first
+    // county hover, so it sat as a blank box on load (user 2026-10-29: 「議會席次那一大塊要隱藏」)
+    // #map-legend .ml-swing: the 激戰區域 legend row — the rated map's Toss-up already says it, and the overlay itself is off
+    // (user 2026-10-29: 「圖例的激戰區域.....應該刪掉」)
+    // (#left-rail / #map-title / #sidebar-toggle / .zbts: v2-shell.js's ALWAYS_HIDE since 2026-10-31 — first done here)
+    hide: ['#council-base5-toggle-row', '#ccp-base5-compare', '#county-council-panel', '#map-legend .ml-swing'],
+    stripBase5: true,
+    // the bar's ⚠ (mounted by v2-shell.js) also carries the research note (ratings26.js; user 2026-10-31)
+    disclaimerExtra: function (w) { return window.V2Rate26 && window.V2Rate26.noteText ? window.V2Rate26.noteText(w) : ''; },
+    onReady: function (win) {
+      if (!win.eval('typeof is2026Predict !== "undefined" && is2026Predict')) win.setMayor2026PredictMode();
+      // population glow hidden, colour on the county blocks — the History pages' look (noglow.js; user 2026-10-29:
+      // 「2026的縣市長預測也把人口光暈層關掉，然後滑鼠黃匡跟其他模式一模一樣」)
+      if (window.V2NoGlow) window.V2NoGlow.attach(win);
+      // the engine's 全台鄉鎮市區 view labels itself with mayorDisplayYear (「2022 縣市長選舉」) even in predict mode — its data
+      // there is the 2026 forecast (MAYOR_2022_TC → MAYOR_2026_PREDICT_TC). Relabel the crumb and the info-panel title
+      // (V1 untouched; found 2026-10-30 when the crumb moved to the bar)
+      (function () {
+        var d = win.document;
+        var fix = function (root) {
+          if (!root || !win.eval('typeof is2026Predict !== "undefined" && is2026Predict')) return;
+          var tw = d.createTreeWalker(root, 4), n, list = [];
+          while ((n = tw.nextNode())) if (/2022\s*縣市長選舉|2022 Mayor Election/.test(n.nodeValue)) list.push(n);
+          list.forEach(function (t) { t.nodeValue = t.nodeValue.replace(/2022\s*縣市長選舉/, '2026 縣市長預測').replace('2022 Mayor Election', '2026 Mayor Prediction'); });
+        };
+        ['crumb', 'ip'].forEach(function (id) {
+          var el = d.getElementById(id); if (!el) return;
+          fix(el);
+          new win.MutationObserver(function () { fix(el); }).observe(el, { childList: true, subtree: true, characterData: true });
+        });
+      })();
+      // the 10px 「2026 縣市長預測」 subtitle under the county / township / village name in the info panel: dropped — the bar
+      // names the page (user 2026-10-31: 「右邊資訊面板的2026 縣市長預測副標題刪掉」). The engine writes it in three panel
+      // builders (_mayor2026PredictPanelHtml and two township ones); a township panel's 「2022 縣市長選舉」 is the same line
+      (function () {
+        var ic = win.document.getElementById('ic'); if (!ic) return;
+        var SUB = /^(2026 縣市長預測|2026 Mayor Prediction|2022\s*縣市長選舉|2022 Mayor Election)$/;
+        var strip = function () {
+          if (!win.eval('typeof is2026Predict !== "undefined" && is2026Predict')) return;
+          [].forEach.call(ic.querySelectorAll('div'), function (el) {
+            if (!el.children.length && el.style.fontSize === '10px' && SUB.test(el.textContent.trim())) el.remove();
+          });
+        };
+        strip();
+        new win.MutationObserver(strip).observe(ic, { childList: true, subtree: true });
+      })();
+      // 全台 overview — 22 seats by predicted leader + US-style ratings — in its own left panel (ratings26.js; user 2026-10-29
+      // 「加入2026的預測裡」, moved left 2026-10-31)
+      if (window.V2Rate26) window.V2Rate26.attach(win);
+      // 高雄 / 台南 / 屏東 panels: the 「南部修正」 scenario as dashed ticks, for comparison only (south26.js; user 2026-10-31)
+      if (window.V2South26) window.V2South26.attach(win);
+      // poll-trend chart: candidates in their forecast party's colour (pollclr26.js; 張啓楷 民眾黨, 高虹安 無黨)
+      if (window.V2PollClr26) window.V2PollClr26.attach(win);
+      // county white lines / trust dashes above the coloured blocks + the overlay hover outline: in noglow.js (shared
+      // with History's 縣市長)
+      // hover outline = the 2027 補選預測 page's: injected by v2-shell.js (injectHover27) on every engine page
+    }
+  });
+  });
+</script>
+<script>
+  // Pages kept on this computer only (user 2026-10-31: 2027/2028 forecasts and the rally map are not published — 「local
+  // host不要移掉」): their links start hidden and show only when the page is actually there, so the public site (which
+  // doesn't carry those files) shows no dead link while localhost keeps them.
+  document.querySelectorAll('a[data-local-only]').forEach(function (a) {
+    fetch(a.getAttribute('href'), { method: 'HEAD', cache: 'no-store' })
+      .then(function (r) { if (r.ok) a.removeAttribute('data-local-only'); }).catch(function () {});
+  });
+</script>
+</body>
+</html>

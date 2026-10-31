@@ -1,0 +1,293 @@
+{
+ "note": "原民會 2025《西拉雅族、大武壠族、馬卡道族民族認定》期末報告（0815修）各鄉鎮「（二）其他」所列小聚落，1935 年人口皆 <50（葉高華地圖收錄門檻），2026-10-22 使用者決定：不畫在地圖上，只保留此紀錄。族群 = 報告所在章節；名稱為報告原文（pymupdf 抽取，少數可能截字）。",
+ "items": [
+  {
+   "name": "頂秀祐",
+   "group": "西拉雅",
+   "township": "臺南市白河區",
+   "pop1915": 0,
+   "pop1935": 20,
+   "report_page": 24
+  },
+  {
+   "name": "埤仔頭",
+   "group": "西拉雅",
+   "township": "臺南市白河區",
+   "pop1915": 10,
+   "pop1935": 7,
+   "report_page": 24
+  },
+  {
+   "name": "崁仔頭",
+   "group": "西拉雅",
+   "township": "臺南市白河區",
+   "pop1915": 26,
+   "pop1935": 11,
+   "report_page": 25
+  },
+  {
+   "name": "果毅後",
+   "group": "西拉雅",
+   "township": "臺南市柳營區",
+   "pop1915": 36,
+   "pop1935": 25,
+   "report_page": 25
+  },
+  {
+   "name": "山仔腳",
+   "group": "西拉雅",
+   "township": "臺南市柳營區",
+   "pop1915": 18,
+   "pop1935": 0,
+   "report_page": 25
+  },
+  {
+   "name": "田尾",
+   "group": "西拉雅",
+   "township": "臺南市東山區",
+   "pop1915": 10,
+   "pop1935": 16,
+   "report_page": 26
+  },
+  {
+   "name": "大客",
+   "group": "西拉雅",
+   "township": "臺南市東山區",
+   "pop1915": 25,
+   "pop1935": 19,
+   "report_page": 26
+  },
+  {
+   "name": "番仔嶺",
+   "group": "西拉雅",
+   "township": "臺南市東山區",
+   "pop1915": 12,
+   "pop1935": 13,
+   "report_page": 26
+  },
+  {
+   "name": "二重溪",
+   "group": "西拉雅",
+   "township": "臺南市東山區",
+   "pop1915": 36,
+   "pop1935": 44,
+   "report_page": 26
+  },
+  {
+   "name": "牛肉崎",
+   "group": "西拉雅",
+   "township": "臺南市東山區",
+   "pop1915": 13,
+   "pop1935": 17,
+   "report_page": 26
+  },
+  {
+   "name": "三塊厝",
+   "group": "西拉雅",
+   "township": "臺南市官田區",
+   "pop1915": 33,
+   "pop1935": 21,
+   "report_page": 26
+  },
+  {
+   "name": "三舍",
+   "group": "西拉雅",
+   "township": "臺南市新市區",
+   "pop1915": 15,
+   "pop1935": 0,
+   "report_page": 28
+  },
+  {
+   "name": "深坑仔",
+   "group": "西拉雅",
+   "township": "臺南市關廟區",
+   "pop1915": 0,
+   "pop1935": 20,
+   "report_page": 33
+  },
+  {
+   "name": "埤仔頭",
+   "group": "西拉雅",
+   "township": "臺南市關廟區",
+   "pop1915": 18,
+   "pop1935": 46,
+   "report_page": 33
+  },
+  {
+   "name": "林仔邊",
+   "group": "馬卡道",
+   "township": "高雄市大社區",
+   "pop1915": 0,
+   "pop1935": 40,
+   "report_page": 83
+  },
+  {
+   "name": "中坛",
+   "group": "馬卡道",
+   "township": "高雄市美濃區",
+   "pop1915": 1,
+   "pop1935": 14,
+   "report_page": 84
+  },
+  {
+   "name": "吉洋",
+   "group": "馬卡道",
+   "township": "高雄市美濃區",
+   "pop1915": 0,
+   "pop1935": 29,
+   "report_page": 85
+  },
+  {
+   "name": "竹頭角",
+   "group": "馬卡道",
+   "township": "高雄市美濃區",
+   "pop1915": 0,
+   "pop1935": 25,
+   "report_page": 85
+  },
+  {
+   "name": "頭前溪",
+   "group": "馬卡道",
+   "township": "屏東縣屏東市",
+   "pop1915": 1,
+   "pop1935": 22,
+   "report_page": 86
+  },
+  {
+   "name": "五魁寮",
+   "group": "馬卡道",
+   "township": "屏東縣潮州鎮",
+   "pop1915": 25,
+   "pop1935": 41,
+   "report_page": 87
+  },
+  {
+   "name": "內關帝",
+   "group": "馬卡道",
+   "township": "屏東縣東港鎮",
+   "pop1915": 0,
+   "pop1935": 49,
+   "report_page": 87
+  },
+  {
+   "name": "濫庄",
+   "group": "馬卡道",
+   "township": "屏東縣萬丹鄉",
+   "pop1915": 16,
+   "pop1935": 38,
+   "report_page": 87
+  },
+  {
+   "name": "麟洛",
+   "group": "馬卡道",
+   "township": "屏東縣麟洛鄉",
+   "pop1915": 4,
+   "pop1935": 12,
+   "report_page": 88
+  },
+  {
+   "name": "瀰力肚",
+   "group": "馬卡道",
+   "township": "屏東縣里港鄉",
+   "pop1915": 8,
+   "pop1935": 10,
+   "report_page": 88
+  },
+  {
+   "name": "新圍",
+   "group": "馬卡道",
+   "township": "屏東縣鹽埔鄉",
+   "pop1915": 1,
+   "pop1935": 26,
+   "report_page": 89
+  },
+  {
+   "name": "東振新",
+   "group": "馬卡道",
+   "township": "屏東縣高樹鄉",
+   "pop1915": 5,
+   "pop1935": 18,
+   "report_page": 90
+  },
+  {
+   "name": "佳佐",
+   "group": "馬卡道",
+   "township": "屏東縣萬巒鄉",
+   "pop1915": 7,
+   "pop1935": 41,
+   "report_page": 90
+  },
+  {
+   "name": "新北勢",
+   "group": "馬卡道",
+   "township": "屏東縣內埔鄉",
+   "pop1915": 1,
+   "pop1935": 11,
+   "report_page": 91
+  },
+  {
+   "name": "建功",
+   "group": "馬卡道",
+   "township": "屏東縣新埤鄉",
+   "pop1915": 16,
+   "pop1935": 9,
+   "report_page": 92
+  },
+  {
+   "name": "南岸",
+   "group": "馬卡道",
+   "township": "屏東縣新埤鄉",
+   "pop1915": 5,
+   "pop1935": 11,
+   "report_page": 92
+  },
+  {
+   "name": "洲仔",
+   "group": "馬卡道",
+   "township": "屏東縣崁頂鄉",
+   "pop1915": 5,
+   "pop1935": 25,
+   "report_page": 93
+  },
+  {
+   "name": "羗園",
+   "group": "馬卡道",
+   "township": "屏東縣佳冬鄉",
+   "pop1915": 16,
+   "pop1935": 20,
+   "report_page": 94
+  },
+  {
+   "name": "大武丁",
+   "group": "馬卡道",
+   "township": "屏東縣佳冬鄉",
+   "pop1915": 5,
+   "pop1935": 42,
+   "report_page": 94
+  },
+  {
+   "name": "下埔頭",
+   "group": "馬卡道",
+   "township": "屏東縣佳冬鄉",
+   "pop1915": 5,
+   "pop1935": 15,
+   "report_page": 94
+  },
+  {
+   "name": "雷公火／日出",
+   "group": "跨族混居",
+   "township": "臺東縣關山鎮",
+   "pop1915": 12,
+   "pop1935": 44,
+   "report_page": 107
+  },
+  {
+   "name": "長良",
+   "group": "跨族混居",
+   "township": "花蓮縣玉里鎮",
+   "pop1915": 0,
+   "pop1935": 163,
+   "report_page": 110
+  }
+ ]
+}

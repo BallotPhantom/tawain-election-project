@@ -1507,6 +1507,37 @@
       padding-right: 4px
     }
 
+    /* Political History's icon-only comparison row (_candRowCompare) — no
+       candidate-name text, just the party emblem, in a much narrower column
+       than .blb's normal 70px so the freed width goes to .bbg's flex:1 track
+       instead (a much longer bar is the whole point of this row type). Only
+       applied where explicitly used — every other .blb on the site keeps its
+       full 70px label width untouched. */
+    .blb.blb-icon {
+      width: 20px;
+      padding-right: 0;
+      /* base .blb's overflow:hidden exists only to ellipsis-truncate long
+         candidate-name text — this variant has no text, just a small fixed
+         logo, so clipping here only cuts off the logo itself (the actual
+         emblem asset renders slightly larger, 14-15px, than the 13px span
+         _partyLogoIcon wraps it in; harmless everywhere else since normal
+         .blb rows have enough natural height to absorb it, but this
+         variant's tighter flex-driven row height doesn't). */
+      overflow: visible
+    }
+
+    /* other/ind fallback inside .blb-icon (see _candRowCompare's own
+       comment) — a short 2-char text label standing in for the missing
+       party emblem. font-size kept small enough that 2 CJK characters fit
+       inside the 20px column without wrapping; full name still reachable
+       via the element's native title tooltip. */
+    .blb-icon-label {
+      font-size: 9px;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
     .camp-green {
       border-color: #1b9e4b
     }
@@ -1556,6 +1587,94 @@
       transition: width .12s
     }
 
+    /* Political History overlay-comparison bar — a MODIFIER on .bbg/.bfill,
+       not a replacement: base .bbg/.bfill above are untouched so every other
+       bar on the site (Central/Local Government, County/Township/Village
+       Profile) is byte-for-byte unaffected. .bbg-compare makes the track a
+       positioning context for a NESTED pair, not two same-size rectangles
+       stacked on each other (that first attempt fully hid whichever bar was
+       underneath in the overlap zone — see the design note below). Instead:
+       .bfill-prev is a FULL-HEIGHT background band (top:0, height:100%),
+       .bfill-current is a THINNER foreground band vertically centered inside
+       it (top:50%, height:60%, translateY(-50%)) — both start at the SAME
+       left:0 0%-baseline. Because current is deliberately shorter than the
+       track, previous's own top/bottom edge is always visible peeking above
+       and below current for as much of the width as previous reaches, in
+       BOTH directions:
+         previous(44.7%) > current(38.0%): 0–38% shows current's solid band
+           with previous's lighter edges visible above/below it; 38–44.7%
+           shows only previous's lighter tail (current does not reach there).
+         previous(38.0%) < current(44.7%): 0–38% shows the same nested
+           look; 38–44.7% shows current's own band continuing alone (no
+           previous edges there — previous does not reach that far either).
+       previous/current identity is ALWAYS background/foreground respectively
+       — z-index is fixed, never swapped by which value is larger (an
+       earlier attempt tied z-index to magnitude with same-height rectangles,
+       which just moved which color got fully hidden rather than fixing the
+       actual problem: two identical-height, identically-positioned fills can
+       never both be visible in their overlap regardless of stacking order). */
+    /* Political History's comparison rows sit closer together than base
+       .bar-row's 2px margin reads well for, once each row grew a nested
+       overlay bar (visually denser than a plain single-fill bar) — extra
+       breathing room requested between rows. Scoped to this row type only;
+       every other .bar-row (Central/Local Government, plain _candRow) keeps
+       the original 2px. */
+    .bar-row.bar-row-compare {
+      margin-bottom: 6px
+    }
+
+    .bbg.bbg-compare {
+      position: relative
+    }
+
+    .bbg.bbg-compare .bfill {
+      position: absolute;
+      left: 0;
+      transition: width .3s ease
+    }
+
+    /* Keep .bpct at its ORIGINAL 40px width here (per explicit instruction:
+       the comparison bar must be exactly as long as Central Government's own
+       bar — widening this column steals space from .bbg's flex:1 track and
+       visibly shortens it). A signed pp delta like "-14.9pp" is one
+       character longer than a plain "38.0%", so this modifier only shrinks
+       the font-size+nowraps instead of widening the column — every other
+       .bpct on the site (Central/Local Government, plain _candRow rows) is
+       untouched. */
+    .bpct.bpct-compare {
+      font-size: 9px;
+      white-space: nowrap
+    }
+
+    /* Same reasoning as .bpct-compare above — .bvote keeps its ORIGINAL 60px
+       width (matching Central Government's own bar exactly), only the font
+       shrinks slightly for the signed vote-count delta. */
+    .bvote.bvote-compare {
+      font-size: 9px
+    }
+
+    .bfill-prev {
+      top: 0;
+      height: 100%;
+      opacity: .5;
+      z-index: 1
+    }
+
+    .bfill-current {
+      top: 50%;
+      height: 60%;
+      transform: translateY(-50%);
+      opacity: 1;
+      z-index: 2
+    }
+
+    .bdelta {
+      font-size: 9px;
+      font-weight: 400;
+      margin-top: 1px;
+      font-variant-numeric: tabular-nums
+    }
+
     /* ── 棒狀圖毛玻璃光澤紋路（v1.63加、v1.64拿掉）──────────────────────────
        你說先刪掉、但如果之後要用要固定用這個設計，先原封不動存在這裡備用：
     .bbg, .pl-bar-wrap, .hist-bar-wrap {
@@ -1591,6 +1710,77 @@
       color: rgba(255, 255, 255, 0.4);
       font-variant-numeric: tabular-nums;
       flex-shrink: 0
+    }
+
+    /* Political History's multi-year timeline primitive (this round's
+       "YEAR NODE ─── YEAR NODE ─── YEAR NODE" redesign) — ONE shared row
+       markup for Presidential/Party-list/Mayor/each Legislative ED, built by
+       profile.html's _timelineRowHtml(). Each node is an equal-width flex
+       column; .pol-timeline-link is a connecting line segment positioned to
+       the LEFT of its own node (absolute, right:50% within an inline
+       relative node, width:100%) so it reaches back to the previous node's
+       center — simpler than measuring real dot positions, and correct
+       because every node column is the same width. */
+    .pol-timeline {
+      display: flex;
+      align-items: flex-start;
+      margin: 2px 0 4px
+    }
+    .pol-timeline-node {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center
+    }
+    .pol-timeline-link {
+      position: absolute;
+      right: 50%;
+      top: 15px;
+      width: 100%;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.15);
+      z-index: 0
+    }
+    .pol-timeline-year {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.4);
+      margin-bottom: 3px
+    }
+    .pol-timeline-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      position: relative;
+      z-index: 1
+    }
+    .pol-timeline-label {
+      font-size: 10px;
+      font-weight: 700;
+      margin-top: 4px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+    .pol-timeline-tagwrap {
+      min-height: 13px;
+      margin-top: 2px
+    }
+    .pol-timeline-tag {
+      display: inline-block;
+      font-size: 8px;
+      font-weight: 700;
+      padding: 0 5px;
+      border-radius: 7px;
+      line-height: 13px
+    }
+    .pol-timeline-tag-flip {
+      color: #f59e0b;
+      background: rgba(245, 158, 11, 0.15)
     }
 
     .bar-row-collapsible {
