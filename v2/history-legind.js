@@ -15,19 +15,24 @@
  *    has a solid-green 「查看村里」 instead), opening every village of the county;
  *  - no legend (user: 「這個圖利請刪掉」): #legend is hidden while the mode is on;
  *  - data: LEGIND (v2/data_legind.js, build_v2_legind.py, tests/reconcile_v2_legind.py), all three years from CEC files.
- * V2LegInd.draw(win, year, kind 'p' | 'm') / V2LegInd.clear(win).
+ * 總統 (2026-10-31, user: 「好做總統」): also one nationwide race, drawn the same way as a third kind 'pres' — data PRES_HIST
+ * (v2/data_pres.js, build_v2_pres.py, tests/reconcile_v2_pres.py), 2008–2024; a row's tooltip names the running mate.
+ * V2LegInd.draw(win, year, kind 'p' | 'm' | 'pres') / V2LegInd.clear(win).
  */
 (function () {
   var BLACK = '#0a0d16';   // mapBgColor()'s base colour
   var IND_CLR = '#8a8a8a';
 
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
-  function dataFor(year, kind) { return ((typeof LEGIND !== 'undefined' ? LEGIND : {})[year] || {})[kind] || null; }
+  function dataFor(year, kind) {
+    if (kind === 'pres') return (typeof PRES_HIST !== 'undefined' ? PRES_HIST : {})[year] || null;
+    return ((typeof LEGIND !== 'undefined' ? LEGIND : {})[year] || {})[kind] || null;
+  }
 
   function partyClr(win, p) { var M = G(win, 'PARTY_COLOR_MAP') || {}; return M[p] || IND_CLR; }
   // [elig, cast, valid, v0, ...] → candidates sorted by votes here
   function ranked(c, vec) {
-    return c.d.cands.map(function (x, i) { return { n: x[0], p: x[1], e: x[2], v: vec[3 + i] }; })
+    return c.d.cands.map(function (x, i) { return { n: x[0], p: x[1], e: x[2], m: x[3], v: vec[3 + i] }; })
       .sort(function (a, b) { return b.v - a.v; });
   }
   function fill(c, vec) {
@@ -45,6 +50,8 @@
   }
 
   // ── panels (test.html's legislative row markup) ──
+  // 總統's nationwide / big-county figures don't fit the vote column: 萬 from a million up (as the 不分區 panel), full number in the tooltip
+  function votes(win, v) { return v >= 1e6 ? win.T((v / 1e4).toFixed(1) + '萬', (v / 1e6).toFixed(2) + 'M') : v.toLocaleString(); }
   function rowsHtml(c, vec, maxRows) {
     var win = c.win, T = win.T, logos = G(win, "typeof logoSVGs !== 'undefined' ? logoSVGs : {}") || {};
     var r = ranked(c, vec).filter(function (x, i) { return x.v > 0 || i < 3; });
@@ -55,9 +62,9 @@
       var check = x.e ? '<span style="color:#2ebd59;font-weight:bold;margin-right:2px">&#10004;</span>' : '';
       var ico = logos[x.p] ? '<span style="display:inline-block;width:12px;height:12px;flex-shrink:0;vertical-align:middle;">' + logos[x.p] + '</span>' : '';
       var nm = typeof win.translateCandidate === 'function' ? win.translateCandidate(x.n) : x.n;
-      return '<div class="bar-row"><div class="blb" style="border-right:none;' + ns + '" title="' + x.n + '">' + check + nm + '</div>' + ico +
+      return '<div class="bar-row"><div class="blb" style="border-right:none;' + ns + '" title="' + x.n + (x.m ? '／' + x.m : '') + '">' + check + nm + '</div>' + ico +
         '<div class="bbg"><div class="bfill" style="width:' + pct.toFixed(1) + '%;background:' + partyClr(win, x.p) + ';opacity:' + (x.e ? '1' : '0.4') + '"></div></div>' +
-        '<div class="bpct" style="' + ns + '">' + pct.toFixed(1) + '%</div><div class="bvote" style="' + ns + '">' + x.v.toLocaleString() + '</div></div>';
+        '<div class="bpct" style="' + ns + '">' + pct.toFixed(1) + '%</div><div class="bvote" style="' + ns + '" title="' + x.v.toLocaleString() + '">' + votes(win, x.v) + '</div></div>';
     }).join('');
   }
   // the engine's own turnout pills (turnoutBadgeHtml): the same 紅綠燈 dots as every other panel (user 2026-10-31:
@@ -67,14 +74,17 @@
     return '<div style="margin-bottom:6px">' + win.turnoutBadgeHtml(vec[1] / vec[0] * 100, (vec[1] - vec[2]) / vec[1] * 100) + '</div>';
   }
 
-  function raceName(c) { return c.year + ' ' + (c.kind === 'p' ? c.win.T('平地原住民立委', 'Lowland Indigenous Legislator') : c.win.T('山地原住民立委', 'Highland Indigenous Legislator')); }
+  function raceName(c) {
+    if (c.kind === 'pres') return c.year + ' ' + c.win.T('總統', 'Presidential');
+    return c.year + ' ' + (c.kind === 'p' ? c.win.T('平地原住民立委', 'Lowland Indigenous Legislator') : c.win.T('山地原住民立委', 'Highland Indigenous Legislator'));
+  }
 
   function nationalPanel(c) {
     // 全台 panel: no hemicycle — the seat cards on the map's left show it all the time (user 2026-10-31: 「把hist mode的右邊全台總覽的半圓形圖都刪掉（左邊有常駐顯示了）」)
 
     var T = c.win.T;
     return '<div class="t1">' + T('全台', 'All Taiwan') + '</div>' +
-      '<div style="font-size:10px;color:#888;margin-top:2px">' + raceName(c) + T('・全國一個選區，應選 3 席', ' · one nationwide district, 3 seats') + '</div>' +
+      '<div style="font-size:10px;color:#888;margin-top:2px">' + raceName(c) + (c.kind === 'pres' ? T('・全國一個選區，應選 1 人', ' · one nationwide race, 1 winner') : T('・全國一個選區，應選 3 席', ' · one nationwide district, 3 seats')) + '</div>' +
       turnoutLine(c.win, c.d.nat) +
       '<div class="sec-title" style="margin-bottom:5px">' + T('候選人得票', 'Candidate Votes') + '</div>' +
       '<div style="max-height:320px;overflow-y:auto">' + rowsHtml(c, c.d.nat) + '</div>' +

@@ -168,6 +168,7 @@
       <button class="btn" data-type="township" data-type-scope="local" data-zh-title="鄉鎮市長＋直轄市山地原住民區長；直轄市、省轄市的一般區區長為官派，地圖畫成黑色底圖；點鄉鎮進入村里層" data-en-title="Township mayors + elected heads of the special-municipality indigenous districts; other district heads are appointed (drawn black); click a township for its villages" data-zh="鄉鎮市區長" data-en="Township Head">鄉鎮市區長</button>
       <button class="btn" data-type="townrep" data-type-scope="local" data-zh-title="鄉鎮市民代表（含平地原住民代表、直轄市山地原住民區民代表）；全台是代表會色塊，點鄉鎮進入村里層；面板上方半圓圖是代表會席次" data-en-title="Township representatives (incl. lowland-indigenous and indigenous-district representatives); the map shows each council, click a township for its villages; the hemicycle shows the council's seats" data-zh="鄉鎮市民代表" data-en="Township Rep">鄉鎮市民代表</button>
       <button class="btn" data-type="villchief" data-type-scope="local" data-zh-title="村長／里長；最底層，地圖直接是全台村里，不再往下點" data-en-title="Village / borough chiefs — the lowest level; the map shows every village nationwide" data-zh="村里長" data-en="Village Chief">村里長</button>
+      <button class="btn" data-type="president" data-type-scope="national" data-zh="總統" data-en="President">總統</button>
       <button class="btn" data-type="legislative" data-type-scope="national" data-zh="立法委員" data-en="Legislators">立法委員</button>
     </div>
 
@@ -219,9 +220,10 @@
 <script src="toolbtns.js?v=20261031c"></script>
 <script src="legbars.js?v=20261027f"></script>
 <script src="noglow.js?v=20261029f"></script>
-<script src="data_legind.js?v=20261031a"></script>
+<script src="data_legind.js?v=20261031b"></script>
+<script src="data_pres.js?v=20261031a"></script>
 <script src="tcborder.js?v=20261031a"></script>
-<script src="history-legind.js?v=20261031c"></script>
+<script src="history-legind.js?v=20261031f"></script>
 <script src="data_legdist.js?v=20261028d"></script>
 <script src="data_career.js?v=20261029a"></script>
 <script src="career.js?v=20261029a"></script>
@@ -318,6 +320,9 @@
     // (縣市席次點 seat dots removed 2026-10-27, user: 「把席次原點功能刪掉」; history-seatdots.js kept in backup/)
   };
 
+  // 總統 (2026-10-31, user: 「好做總統」): V2 draws it from CEC files (history-legind.js kind 'pres', v2/data_pres.js)
+  var PRES_YEARS = ['2008', '2012', '2016', '2020', '2024'];
+
   function setStatus(text, warn) {
     statusEl.textContent = text;
     statusEl.classList.toggle('warn', !!warn);
@@ -348,7 +353,7 @@
         // Data-adaptive: only show years the *current* Legislative sub-mode
         // actually has data for (e.g. Party-List's wider 2008–2024 range vs.
         // Geographic/Indigenous's narrower one) rather than one shared range.
-        var allowed = LEG_YEARS_BY_SUBMODE[state.legSubmode] || [];
+        var allowed = state.type === 'president' ? PRES_YEARS : (LEG_YEARS_BY_SUBMODE[state.legSubmode] || []);
         show = allowed.indexOf(yr) !== -1;
       }
       b.style.display = show ? '' : 'none';
@@ -392,7 +397,7 @@
     compareLink.href = ENGINE_SRC[state.scope];
     compareLink.textContent = T('↗ 對照原始 V1', '↗ Original V1') + ' (' + (state.scope === 'national' ? 'test.html' : 'council.html') + ')';
 
-    var typeLabel = state.scope === 'national' ? T('立法委員', 'Legislators') : (state.type === 'councilor' ? T('縣市議員', 'Councilors') : state.type === 'township' ? T('鄉鎮市區長', 'Township heads') : state.type === 'villchief' ? T('村里長', 'Village chiefs') : state.type === 'townrep' ? T('鄉鎮市民代表', 'Township representatives') : T('縣市長', 'Mayors'));
+    var typeLabel = state.scope === 'national' ? (state.type === 'president' ? T('總統', 'President') : T('立法委員', 'Legislators')) : (state.type === 'councilor' ? T('縣市議員', 'Councilors') : state.type === 'township' ? T('鄉鎮市區長', 'Township heads') : state.type === 'villchief' ? T('村里長', 'Village chiefs') : state.type === 'townrep' ? T('鄉鎮市民代表', 'Township representatives') : T('縣市長', 'Mayors'));
     document.title = T('歷屆選舉', 'Election History') + ' · V2 — ' + typeLabel;
   }
 
@@ -709,6 +714,7 @@
         ? { type: 'mayor', year: state.localYear }
         : { type: 'councilor', year: state.localYear, submode: state.councilSubmode };
     }
+    if (state.type === 'president') return { type: 'president', year: state.legYear };
     if (state.legSubmode === 'pl') return { submode: 'pl', year: state.legYear };
     if (state.legSubmode === 'ind-p' || state.legSubmode === 'ind-m') return { submode: state.legSubmode, year: state.legYear };
     return { submode: 'geo', year: state.legYear };
@@ -744,7 +750,7 @@
     // 跳槽 tags: which race the panel shows (v2/career.js) — 不分區 has party rows only
     var RACE = { mayor: 'M', councilor: 'C', township: 'T', townrep: 'R', villchief: 'V' };
     win.__v2CareerCtx = key === 'local' ? (RACE[desired.type] ? { race: RACE[desired.type], year: desired.year } : null)
-      : (desired.submode === 'pl' ? null : { race: 'L', year: desired.year });
+      : (desired.submode === 'pl' || desired.type === 'president' ? null : { race: 'L', year: desired.year });
     try {
       if (key === 'local') {
         if (window.V2TownshipHead) window.V2TownshipHead.clear(win);
@@ -800,6 +806,8 @@
             'html.v2-ind #pie-swing-row { display: none !important; }\n' +
             // its map-legend holds only the 激戰區域 key there, for the overlay the hidden button switched
             'html.v2-ind #map-legend { display: none !important; }\n' +
+            // 總統: no seats — the left seat cards are 立委's
+            'html.v2-pres #v2-leg-left { display: none !important; }\n' +
             // 區域立委 2008 / 2012 (history-legdist.js): the engine underneath is on 2016 — its 2016-only boxes are hidden
             // (圓餅 / 激戰區域 and, for 2012, 政黨輪替分析 run on 2008 / 2012 data — history-legdist.js; 2008 has no earlier
             // year, so its 政黨輪替分析 box is hidden — user 2026-10-28: 「政黨輪替分析加在2012(2008隱藏）」)
@@ -810,9 +818,18 @@
         rootCls.toggle('v2-noflip', desired.submode !== 'geo');
         rootCls.toggle('v2-legdist', legDist);
         rootCls.toggle('v2-pl', desired.submode === 'pl');
-        rootCls.toggle('v2-ind', desired.submode === 'ind-p' || desired.submode === 'ind-m');
+        var pres = desired.type === 'president';
+        rootCls.toggle('v2-ind', pres || desired.submode === 'ind-p' || desired.submode === 'ind-m');
+        rootCls.toggle('v2-pres', pres);
         win.setMode('winner');
-        if (desired.submode === 'pl') {
+        if (pres) {
+          // 總統: one nationwide race like 原住民立委 — the engine is put in its indigenous mode (a blank V2 can draw on;
+          // 2008 / 2012 on 2016) and V2 draws 全台 → 22 縣市 → 鄉鎮 → 村里 from CEC files; no seat cards (html.v2-pres)
+          win.setWinnerYear(oldYear ? '2016' : desired.year);
+          win.setIndLegMode('p');
+          window.V2LegInd.draw(win, desired.year, 'pres');
+          setStatus(T('總統 ' + desired.year, 'President ' + desired.year));
+        } else if (desired.submode === 'pl') {
           // the seat cards follow the engine's year (2008 / 2012: 2016 underneath, cards from V2LegDist.cards below)
           win.setWinnerYear(oldYear ? '2016' : desired.year);
           win.setPLCountyMode(desired.year);
@@ -884,7 +901,7 @@
   // other scope, NEITHER branch matched and the apply silently no-opped. It
   // was never a timing race; forcing state.type to a valid value for the new
   // scope removes the invalid state entirely rather than papering over it.
-  var VALID_TYPES = { local: ['mayor', 'councilor', 'township', 'townrep', 'villchief'], national: ['legislative'] };
+  var VALID_TYPES = { local: ['mayor', 'councilor', 'township', 'townrep', 'villchief'], national: ['legislative', 'president'] };
   function setScope(s) {
     if (s === state.scope) { applyCurrent(); return; }
     state.scope = s;
