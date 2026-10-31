@@ -7,7 +7,7 @@
  * in the 原住民 mode's design (history-legind.js): blocks filled by the leading candidate's party, deeper = bigger lead
  * (the engine's winMarginFill / PARTY_COLOR_MAP); candidate rows in test.html's legislative row markup (legbars.js);
  * township lines / white outline from the shared V2TcBorder style; the 2027 補選 yellow hover outline. The 全台 panel has
- * the 73-seat hemicycle on the engine's own seat layout (buildHemiSeats, as its 區域 hemicycle).
+ * the 73-seat hemicycle on the engine's own seat layout (dropped 2026-10-31 — the left seat cards show it).
  * Data: LEGDIST (v2/data_legdist.js, build_v2_legdist.py, tests/reconcile_v2_legdist.py), CEC files on today's codes.
  * V2LegDist.draw(win, year) / V2LegDist.clear(win).
  */
@@ -58,15 +58,13 @@
         '<div class="bpct" style="' + ns + '">' + pct.toFixed(1) + '%</div><div class="bvote" style="' + ns + '">' + x.v.toLocaleString() + '</div></div>';
     }).join('');
   }
+  // the engine's own turnout pills (turnoutBadgeHtml): the same 紅綠燈 dots as every other panel (user 2026-10-31:
+  // 「原住民的投票率跟有效票率tag沒有紅綠燈」)
   function turnoutLine(win, vec) {
-    var T = win.T;
     if (!vec[0] || !vec[1]) return '';
-    // the engine's own pills (投票率 / 有效票率 with their traffic-light dots), as its district panels
-    if (typeof win.turnoutBadgeHtml === 'function') return '<div style="margin-bottom:6px">' + win.turnoutBadgeHtml(vec[1] / vec[0] * 100, (vec[1] - vec[2]) / vec[1] * 100) + '</div>';
-    var pill = function (lbl, val) { return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#999;padding:1px 6px 1px 4px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)">' + lbl + val + '%</span>'; };
-    return '<div style="display:flex;gap:6px;margin-top:4px;margin-bottom:6px;flex-wrap:wrap;opacity:0.8">' +
-      pill(T('投票率：', 'Turnout: '), (vec[1] / vec[0] * 100).toFixed(2)) + pill(T('有效票比率：', 'Valid: '), (vec[2] / vec[1] * 100).toFixed(2)) + '</div>';
+    return '<div style="margin-bottom:6px">' + win.turnoutBadgeHtml(vec[1] / vec[0] * 100, (vec[1] - vec[2]) / vec[1] * 100) + '</div>';
   }
+
   function raceName(c) { return c.year + ' ' + c.win.T('區域立委', 'District Legislator'); }
   // the district's result tag: the 區域立委 win-badge (test.html getWinnerBadgeClass classes)
   var BADGE = { dpp: 'bd-green', kmt: 'bd-blue', tpp: 'bd-white', tsr: 'bd-tsr', npp: 'bd-npp', pfp: 'bd-pfp', tsu: 'bd-tsu', np: 'bd-np', npsu: 'bd-npu' };
@@ -144,28 +142,13 @@
       
       '<div style="max-height:320px;overflow-y:auto">' + rowsHtml(c, r, vec, ed) + '</div>';
   }
-  // 73 seats on the engine's own 區域 hemicycle layout (REGION_SEATS = buildHemiSeats([12,16,21,24], 90, 80, 32, 11))
-  function hemiHtml(c) {
-    var win = c.win, seats = typeof win.buildHemiSeats === 'function' ? win.buildHemiSeats([12, 16, 21, 24], 90, 80, 32, 11) : [];
-    var parties = Object.keys(c.d.seats).sort(function (a, b) { return (ORDER[a] || 8) - (ORDER[b] || 8); });
-    var list = []; parties.forEach(function (p) { for (var i = 0; i < c.d.seats[p]; i++) list.push(p); });
-    var dots = seats.map(function (s, i) {
-      return '<circle cx="' + s.cx.toFixed(1) + '" cy="' + s.cy.toFixed(1) + '" r="4.2" fill="' + partyClr(win, list[i]) + '"></circle>';
-    }).join('');
-    var logos = G(win, "typeof logoSVGs !== 'undefined' ? logoSVGs : {}") || {};
-    var chips = parties.map(function (p) {
-      var ico = logos[p] ? '<span style="display:inline-block;width:12px;height:12px;vertical-align:middle">' + logos[p] + '</span>' : '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + partyClr(win, p) + '"></span>';
-      return '<span title="' + partyName(win, p) + '" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;color:' + partyClr(win, p) + '">' + ico + c.d.seats[p] + '</span>';
-    }).join('');
-    return '<div style="display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:8px">' + chips + '</div>' +
-      '<div style="position:relative;height:88px;margin:4px 0"><svg width="180" height="88" style="display:block;margin:0 auto;overflow:visible">' + dots + '</svg>' +
-      '<div style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-size:16px;color:rgba(255,255,255,0.85);font-weight:700">73</div></div>';
-  }
+
   function nationalPanel(c) {
+    // 全台 panel: no hemicycle — the seat cards on the map's left show it all the time (user 2026-10-31: 「把hist mode的右邊全台總覽的半圓形圖都刪掉（左邊有常駐顯示了）」)
+
     var T = c.win.T;
     return '<div class="t1">' + T('全台', 'All Taiwan') + '</div>' +
       '<div style="font-size:10px;color:#888;margin-top:2px">' + raceName(c) + (+c.year < 2016 ? T('・73 選區，選區界線與 2016 相同', ' · 73 districts, the same lines as 2016') : T('・73 選區', ' · 73 districts')) + '</div>' +
-      hemiHtml(c) +
       '<div class="hint" style="text-align:center;opacity:0.5;margin-top:8px">' + T('移到選區查看資料，點選進入鄉鎮市區 ▶', 'Hover a district; click to enter its townships ▶') + '</div>';
   }
   function tcName(c, tc) {
