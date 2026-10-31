@@ -38,7 +38,9 @@
     // map's top-left corner is cleared — #left-rail (the emptied V1 sidebar), #map-title (the bar names the page),
     // #sidebar-toggle (☰) — and the map's ＋／− buttons go (.zbts; the mouse wheel still zooms). The crumb, the national
     // view buttons and the ⚠ disclaimer move into the bar (navbar.js / disclaimer.js, mounted below).
-    '#left-rail', '#map-title', '#sidebar-toggle', '.zbts'
+    '#left-rail', '#map-title', '#sidebar-toggle', '.zbts',
+    // the 「｜」 divider in council.html's map-corner toolbar (user 2026-10-31: 「把｜這個刪掉（所有版本）」)
+    '#council-ticker-toolbar > span'
   ];
   // Hover outline on every engine page = the 2027 補選預測 page's (user 2026-10-28: 「黃框…改成跟2027立委補選一樣」):
   // #f5c518, 2.2 px, no glow. The engines (V1, untouched) draw it as stroke="#ffcd78" + drop-shadow filters (counties
