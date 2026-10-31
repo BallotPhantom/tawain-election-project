@@ -84,7 +84,11 @@
   #v2-nav { flex-wrap: nowrap; gap: 10px; }
   #v2-status:not(.warn) { display: none; }
   .v2-group-label, #v2-compare-link, #v2-year-group .btn { display: none !important; }
-  #v2-nav > .v2-nav { margin-left: auto; }
+  /* ⚠ first, then crumb + 全台鄉鎮市區 / 全台村里, flush against 中文 / EN on the right (user 2026-10-31: 「全台，全台鄉鎮市區，
+     全台村里都往右移…跟中英切換對齊，可能把紅色警告放在最左邊」): one auto margin, on the ⚠ */
+  #v2-nav > .v2-disc { margin-left: auto; }
+  #v2-nav > .v2-nav, #v2-nav > #v2-lang, #v2-nav > #v2-status { margin-left: 0; }
+  #v2-nav > .v2-nav, #v2-nav > .v2-tools { margin-right: 0 !important; }
   #v2-year-select { font: inherit; font-size: 12px; font-weight: 600; color: #e7eaf0; background: rgba(18,24,38,.9); border: 1px solid rgba(255,255,255,.18); border-radius: 7px; padding: 4px 6px; cursor: pointer; }
   #v2-cat-group .btn { white-space: nowrap; }
   #v2-frame-wrap { flex: 1; position: relative; }
@@ -871,7 +875,7 @@
   };
   var navBox = document.getElementById('v2-nav'), navBefore = function () { return navBox.querySelector('.v2-tools') || document.getElementById('v2-lang'); };
   var navBar = window.V2NavBar ? window.V2NavBar.mount(navBox, navBefore(), activeWin) : null;
-  var disc = window.V2Disclaimer ? window.V2Disclaimer.mount(navBox, navBefore(), activeWin) : null;
+  var disc = window.V2Disclaimer ? window.V2Disclaimer.mount(navBox, navBox.querySelector('.v2-nav') || navBefore(), activeWin) : null;
 
   // Which Election Type values are meaningful for each Scope. This is the
   // actual root cause fix for the old "year switch does nothing" bug: the
