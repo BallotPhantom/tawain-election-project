@@ -226,7 +226,8 @@
           // cfg.disclaimerExtra(win): HTML shown above the disclaimer (the forecast page's research note)
           var bar2 = document.getElementById('v2-bar'), before = function () { return bar2.querySelector('.v2-tools') || bar2.querySelector('.v2-lang'); };
           if (window.V2NavBar && !shell.nav) shell.nav = window.V2NavBar.mount(bar2, before(), function () { return shell.win; });
-          if (window.V2Disclaimer && !shell.disc) shell.disc = window.V2Disclaimer.mount(bar2, before(), function () { return shell.win; }, cfg.disclaimerExtra);
+          // ⚠ left of the crumb, as on the History page (user 2026-10-31: 「紅色警告按鈕的位置應該所有都統一放在最左邊」)
+          if (window.V2Disclaimer && !shell.disc) shell.disc = window.V2Disclaimer.mount(bar2, bar2.querySelector('.v2-nav') || before(), function () { return shell.win; }, cfg.disclaimerExtra);
         } catch (e) {
           shell.status('⚠ ' + e.message, true);
         }
