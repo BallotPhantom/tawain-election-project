@@ -46,6 +46,23 @@
   // .nat-vill-hover-ed district outlines of the 全台鄉鎮 / 村里 views; this per-iframe sheet outranks all of them.
   // history.html (its own two iframes, no shell) injects the same rule — keep both in step.
   var HOVER27_CSS = '[stroke="#ffcd78"], .ft-ed:hover, .ft-tc:hover, .ft-vill:hover, .nat-tc-hover-ed, .nat-vill-hover-ed { stroke: #f5c518 !important; stroke-width: 2.2px !important; filter: none !important; vector-effect: non-scaling-stroke; }';
+  // Where drill-downs centre the map (user 2026-10-31: 「點進縣市再回台灣都會整個地圖偏左」「光是點進的縣市就會偏左了」).
+  // The engines' mapVisibleCenterX centres between #left-rail and the info panel; with #left-rail hidden (ALWAYS_HIDE) its
+  // width is 0 and every zoomTo / fitFeats landed half a panel left of the first view. Here: between a V2 left panel
+  // (政黨基本盤's 全台總覽 #v2-bl-left, the forecast's #v2-r26-left) and the info panel when the page has one, otherwise
+  // the middle of the map — where the first national view sits. Shared with history.html (V2Shell.centerFix).
+  function centerFix(win) {
+    if (typeof win.mapVisibleCenterX !== 'function' || win.mapVisibleCenterX.v2) return;
+    var f = function (W) {
+      var d = win.document, ip = d.getElementById('ip');
+      var ipW = ip && win.getComputedStyle(ip).display !== 'none' ? ip.getBoundingClientRect().width : 0;
+      var lp = d.getElementById('v2-bl-left') || d.getElementById('v2-r26-left');
+      var lw = lp && win.getComputedStyle(lp).display !== 'none' ? lp.getBoundingClientRect().right : ipW;
+      return W / 2 + (lw - ipW) / 2;
+    };
+    f.v2 = true;
+    win.mapVisibleCenterX = f;
+  }
   function injectHover27(win) {
     var doc = win.document;
     if (doc.getElementById('v2-hover27-style')) return;
@@ -186,6 +203,7 @@
           // base-vote page keeps 選舉人數校正, which only matters there)
           injectHide(win, ALWAYS_HIDE.filter(function (sel) { return (cfg.keep || []).indexOf(sel) < 0; }).concat(cfg.hide || []));
           injectHover27(win);
+          centerFix(win);
           // English safety net: pinyin for unknown names, county / party / fixed strings in the panels (v2/i18n.js)
           if (window.V2I18n) window.V2I18n.attach(win);
           // township layers in the shared 原住民 border style (v2/tcborder.js, loaded by each page)
@@ -199,7 +217,7 @@
           // the engine's 「i」 and 色盲友善 buttons, in the bar next to the language switch (v2/toolbtns.js)
           if (window.V2Tools && !shell.tools) {
             var bar = document.getElementById('v2-bar');
-            shell.tools = window.V2Tools.mount(bar, bar.querySelector('.v2-lang'), function () { return shell.win; }, function () { return lang; });
+            shell.tools = window.V2Tools.mount(bar, bar.querySelector('.v2-lang'), function () { return shell.win; }, function () { return lang; }, cfg.infoNote);   // cfg.infoNote(win): the page's own 「i」 text
           }
           if (shell.tools) shell.tools.refresh();
           // crumb + 全台鄉鎮市區 / 全台村里, then ⚠, left of the 「i」 (v2/navbar.js, v2/disclaimer.js — loaded by each page).
@@ -216,5 +234,6 @@
     frame.src = cfg.engine;
   };
 
+  shell.centerFix = centerFix;
   window.V2Shell = shell;
 })();

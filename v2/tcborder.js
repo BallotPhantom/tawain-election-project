@@ -84,13 +84,13 @@
       win.setLang = function () { var r = sl.apply(this, arguments); try { apply(); } catch (e) {} return r; };
       win.setLang.v2Tcb = true;
     }
-    var isBlock = function (el) { return el && el.tagName === 'path' && el.classList && (el.classList.contains('ft-tc') || el.classList.contains('ft-pltc') || el.classList.contains('ft-ed')); };
+    var isBlock = function (el) { return el && el.tagName === 'path' && el.classList && (el.classList.contains('ft-tc') || el.classList.contains('ft-pltc') || el.classList.contains('ft-town-baselean') || el.classList.contains('ft-ed')); };
     var isVill = function (el) { return el && el.tagName === 'path' && /(^|\s)(ft-vill\S*|v2-li-blk)(\s|$)/.test(el.getAttribute('class') || ''); };
 
     function apply() {
       st.raf = 0;
       fillGaps();
-      var blocks = [].filter.call(g.querySelectorAll('path.ft-tc, path.ft-pltc'), function (el) { return !st.group || !st.group.contains(el); });
+      var blocks = [].filter.call(g.querySelectorAll('path.ft-tc, path.ft-pltc, path.ft-town-baselean')   /* + 政黨基本盤's township layer (2026-10-31: 「地圖設計必須跟其他mode統一」) */, function (el) { return !st.group || !st.group.contains(el); });
       var engine = blocks.filter(function (el) { return !el.classList.contains('v2-own'); });
       // the 全台 district layer (.ft-ed, no township blocks): the 2008 / 2012 design (user 2026-10-28: 「2012,2008的邊線
       // 設計跟2016,2020,2024不同讓2016,2020,2024改成2012 的設計」) — blocks stroked in their own fill, district lines =
