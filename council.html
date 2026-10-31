@@ -352434,9 +352434,12 @@ const HIST_PL_VOTES_2016 = {"g":5370953,"pfp":794838,"b":3280949,"tsu":305675,"n
         const _latestApproval = polls => (polls || []).filter(p => p && p.date)
           .slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
         const _fillApprovalSlot = (numId, lblId, polls, subjectZh, subjectEn) => {
-          const latest = _latestApproval(polls);
+          const latest = _approvalWeightedNow(polls);
           const numEl = document.getElementById(numId);
           if (!latest) { setLblP(lblId, subjectZh, subjectEn); if (numEl) { numEl.textContent = '--'; numEl.style.color = ''; } return; }
+          // 加權平均（近90天全國民調，見_approvalWeightedNow），不再只取最後公布的一份
+          latest.approve_pct = latest.approve; latest.disapprove_pct = latest.disapprove;
+          if (numEl) numEl.title = (currentLang === 'en' ? `Weighted average of ${latest.n} national polls, ${latest.from}–${latest.to}` : `近90天${latest.n}份全國民調加權平均（${latest.from}～${latest.to}）`);
           const isDisapprove = latest.disapprove_pct > latest.approve_pct;
           const val = isDisapprove ? latest.disapprove_pct : latest.approve_pct;
           setLblP(lblId, subjectZh + (isDisapprove ? '不支持率' : '支持率'), subjectEn + (isDisapprove ? ' Disapprove' : ' Approve'));
@@ -362099,7 +362102,7 @@ function _addCouncilLayer() {
 
 // ── 2026 縣市長預測：民調權重公式（跟產生data_mayor2026_predict.js的Python腳本用同一套公式，
 // 這裡重新用JS實作一次是為了在面板上即時顯示每筆民調實際被賦予的權重，不是為了重新彙整資料）──
-const POLL_REF_DATE = new Date('2026-08-14');
+const POLL_REF_DATE = new Date('2026-10-31'); // 跟regen3.py的REF_DATE同步
 function _pollParseEndDate(dateStr) {
   if (!dateStr) return null;
   const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
@@ -362110,10 +362113,17 @@ function _pollIsInformal(pollster, note) {
   const text = (pollster || '') + (note || '');
   return /YouTube|街頭|非正式|非科學/.test(text);
 }
+// 跟regen3.py的is_self_commissioned()/SKEWED_SAMPLE_SPONSORS同步（2026-10-26）：候選人陣營委託、
+// 以及樣本結構明顯失衡的委託方（信民協會），跟政黨委託一樣0.4。
+const POLL_SKEWED_SAMPLE_SPONSORS = new Set(['信民協會']);
+function _pollIsSelfCommissioned(sponsor) {
+  return !!sponsor && sponsor !== 'unknown' && /競選總部|競選辦公室|團隊|後援會|之友會/.test(sponsor);
+}
 function _pollHouseWeight(pollster, sponsor) {
   const lean = (typeof POLL_HOUSE_LEAN !== 'undefined' && POLL_HOUSE_LEAN[pollster]) ? POLL_HOUSE_LEAN[pollster].lean : 'unknown';
   const isPartyInternal = sponsor && sponsor !== 'unknown' && /黨/.test(sponsor);
   if (isPartyInternal) return 0.4;
+  if (_pollIsSelfCommissioned(sponsor) || POLL_SKEWED_SAMPLE_SPONSORS.has(sponsor)) return 0.4;
   if (lean === 'blue' || lean === 'green') return 0.7;
   return 1.0;
 }
@@ -362264,8 +362274,8 @@ function _renderMarginHistogramSvg(margins, colorLead, colorTrail) {
 // 高斯核加權趨勢+標準差——依時間距離給權重（越近某評估點權重越高），同時乘上外部傳入的
 // 房效/來源權重(p.hw)，在時間軸上取40個評估點算出加權平均±加權標準差。抽成共用函式讓民調
 // 折線圖跟總統/行政院滿意度趨勢圖用同一套邏輯，不要各自維護一份容易日後跑掉。
-function _gaussTrendStats(series, tMin, tRange, bwMs, getVal) {
-  const N = 40;
+function _gaussTrendStats(series, tMin, tRange, bwMs, getVal, nSamples) {
+  const N = nSamples || 40;
   const out = [];
   for (let i = 0; i < N; i++) {
     const te = tMin + (i / (N - 1)) * tRange;
@@ -362298,7 +362308,7 @@ function _renderPollLineChartSvg(polls, mc) {
     const hw = _pollHouseWeight(p.pollster, p.sponsor);
     cands.forEach(c => {
       const normPct = sumPct > 0 ? (c.pct || 0) / sumPct * 100 : c.pct;
-      pts.push({ t: d.getTime(), name: c.name, party: c.party, pct: normPct, dateLbl: p.date || '', hw });
+      pts.push({ t: d.getTime(), name: c.name, party: c.party, pct: normPct, dateLbl: p.date || '', hw, pollster: p.pollster || '' });
     });
   });
   if (pts.length < 2) return '';
@@ -362331,13 +362341,17 @@ function _renderPollLineChartSvg(polls, mc) {
   // 起伏的曲線+淡色帶——這樣線的形狀是民調真正告訴我們的「支持度怎麼隨時間變動」，不是模型單一
   // 估計值硬拉成一條線。模型當下的10-90區間改成只在最右側畫一個小標記，供對照「模型現在信多少」
   // 用，不再假裝成一條貫穿全圖的趨勢線。
-  const bwMs = Math.max(tRange / 6, 12 * 86400000);
+  // 平滑寬度固定30天（2026-10-26，使用者要求縮短）：原本「整段時間的1/6」在各縣市是37~70天，
+  // 最近一個月的民調會被兩三個月前的舊民調稀釋。每週取一個點畫線。
+  const bwMs = 30 * 86400000;
   let bandSvg = '';
+  const _trendData = [];
   Object.keys(byName).forEach(name => {
     const series = byName[name].slice().sort((a, b) => a.t - b.t);
     const clr = partyClr[series[0].party] || '#888';
-    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.pct);
+    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.pct, Math.max(40, Math.ceil(tRange / (7 * 86400000))));
     if (trend.length < 2) return;
+    _trendData.push({ n: _dispCandName(name), c: clr, p: trend.map(pt => [Math.round(pt.t), +pt.mean.toFixed(2)]) });
     const bandTop = trend.map(pt => `${x(pt.t).toFixed(1)},${y(Math.min(100, pt.mean + pt.sd)).toFixed(1)}`).join(' L');
     const bandBot = trend.slice().reverse().map(pt => `${x(pt.t).toFixed(1)},${y(Math.max(0, pt.mean - pt.sd)).toFixed(1)}`).join(' L');
     const linePath = trend.map((pt, i) => `${i === 0 ? 'M' : 'L'}${x(pt.t).toFixed(1)},${y(pt.mean).toFixed(1)}`).join(' ');
@@ -362359,7 +362373,7 @@ function _renderPollLineChartSvg(polls, mc) {
   Object.keys(byName).forEach(name => {
     const series = byName[name].slice().sort((a, b) => a.t - b.t);
     const clr = partyClr[series[0].party] || '#888';
-    const dots = series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.pct).toFixed(1)}" r="1.6" fill="${clr}" opacity="0.5" data-t="${p.t}" data-name="${_dispCandName(p.name)}" data-pct="${p.pct.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${clr}"></circle>`).join('');
+    const dots = series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.pct).toFixed(1)}" r="1.6" fill="${clr}" opacity="0.5" data-t="${p.t}" data-name="${_dispCandName(p.name)}" data-pct="${p.pct.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${clr}" data-pollster="${p.pollster}" data-hw="${p.hw}"></circle>`).join('');
     svg += dots;
   });
   // y軸刻度線畫在資料svg裡（跟著捲動，橫跨全寬），但刻度文字放在固定不捲動的軸svg
@@ -362378,7 +362392,7 @@ function _renderPollLineChartSvg(polls, mc) {
       <div style="display:flex;align-items:flex-start">
         <svg viewBox="0 0 ${axisW} ${H}" style="width:${axisW}px;height:88px;display:block;flex-shrink:0">${yAxisLabels}</svg>
         <div class="pch-scrollwrap" style="position:relative;overflow-x:auto;overflow-y:hidden;flex:1">
-          <svg viewBox="0 0 ${dataW} ${H}" style="width:${dataW}px;height:88px;display:block">${bandSvg}${yGridLines}${svg}${mcMarkerSvg}${cross}${overlay}</svg>
+          <svg viewBox="0 0 ${dataW} ${H}" preserveAspectRatio="none" style="width:${dataW}px;height:88px;display:block" data-trends="${encodeURIComponent(JSON.stringify(_trendData))}">${bandSvg}${yGridLines}${svg}${mcMarkerSvg}${cross}${overlay}</svg>
         </div>
       </div>
       <div class="pch-tip" style="display:none;position:absolute;top:2px;background:rgba(15,15,25,0.92);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 6px;font-size:8.5px;white-space:nowrap;pointer-events:none;z-index:5"></div>
@@ -362405,7 +362419,7 @@ function _pchMove(evt) {
   });
   if (bestT === null) return;
   let cxAtT = null, dateLbl = '';
-  const rows = [];
+  const rows = [], srcs = new Set();
   dots.forEach(d => {
     const match = d.getAttribute('data-t') === bestT;
     d.setAttribute('r', match ? '3' : '1.6');
@@ -362413,7 +362427,11 @@ function _pchMove(evt) {
     if (match) {
       cxAtT = d.getAttribute('cx');
       dateLbl = d.getAttribute('data-date');
-      rows.push(`<div style="color:${d.getAttribute('data-clr')}">${d.getAttribute('data-name')} ${d.getAttribute('data-pct')}%</div>`);
+      // 2026-10-26：民調點多帶機構名稱與機構權重（data-pollster/data-hw，只有民調／滿意度兩張圖有；
+      // 當選率趨勢圖的點沒有這兩個屬性，維持原樣）
+      const _pl = d.getAttribute('data-pollster'), _hw = d.getAttribute('data-hw');
+      if (_pl) srcs.add(`${_pl}${_hw ? ` ×${(+_hw).toFixed(1)}` : ''}`);
+      rows.push({ name: d.getAttribute('data-name'), pct: d.getAttribute('data-pct'), clr: d.getAttribute('data-clr') });
     }
   });
   const cross = svg.querySelector('.pch-cross');
@@ -362432,16 +362450,30 @@ function _pchMove(evt) {
     const dotScreenX = rect.left + (parseFloat(cxAtT) - vb.x) / vb.width * rect.width;
     let leftPx = dotScreenX - outerRect.left;
     // 夾在外層容器可視寬度內，避免tooltip本身（估寬~140px）伸到容器外面看起來被切掉
-    const tipW = 140;
+    const tipW = 170;
     leftPx = Math.max(tipW / 2, Math.min(outerRect.width - tipW / 2, leftPx));
     tip.style.left = leftPx + 'px';
     tip.style.transform = 'translateX(-50%)';
     // 2026-09-21：金門縣roster從2人擴到7人後，原本針對「當時最多候選人的縣市」(澎湖縣6人)
     // 調的maxRows=6開始截斷、跳出「還有1筆」——調整成7，跟目前全部縣市裡最多候選人數對齊。
     const maxRows = 7;
-    const shown = rows.slice(0, maxRows).join('');
+    // 2026-10-26：精簡版——機構×權重只在標題列寫一次，每行「名稱 原始值（趨勢 x%）」
+    const trendMap = {};
+    const _tr = svg.getAttribute('data-trends');
+    if (_tr) {
+      const tNum = +bestT;
+      JSON.parse(decodeURIComponent(_tr)).forEach(s => {
+        const p = s.p; if (!p.length) return;
+        let v = p[p.length - 1][1];
+        if (tNum <= p[0][0]) v = p[0][1];
+        else for (let i = 1; i < p.length; i++) if (p[i][0] >= tNum) { const f = (tNum - p[i-1][0]) / (p[i][0] - p[i-1][0]); v = p[i-1][1] + f * (p[i][1] - p[i-1][1]); break; }
+        trendMap[s.n] = v;
+      });
+    }
+    const shown = rows.slice(0, maxRows).map(r => `<div style="color:${r.clr}">${r.name} ${r.pct}%${trendMap[r.name] != null ? `<span style="color:rgba(255,255,255,0.4)">（${T('趨勢','trend')} ${trendMap[r.name].toFixed(1)}%）</span>` : ''}</div>`).join('');
     const more = rows.length > maxRows ? `<div style="color:rgba(255,255,255,0.4)">${T(`…還有${rows.length - maxRows}筆（同日多組情境）`,`…${rows.length - maxRows} more (multiple scenarios same day)`)}</div>` : '';
-    tip.innerHTML = `<div style="font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:2px">${dateLbl}</div>${shown}${more}`;
+    const srcLbl = srcs.size ? ` <span style="font-weight:400;color:rgba(255,255,255,0.45)">${[...srcs].join('、')}</span>` : '';
+    tip.innerHTML = `<div style="font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:1px">${dateLbl}${srcLbl}</div>${shown}${more}`;
   }
 }
 function _pchLeave(evt) {
@@ -362484,25 +362516,29 @@ function _renderApprovalTrendSvg(polls, seriesDefs) {
   const dataW = Math.max(240, nT * 26);
   const x = t => padL + ((t - tMin) / tRange) * (dataW - padL - padR);
   const y = v => (H - padB) - ((v - yMin) / yRange) * (H - padB - 4);
-  const bwMs = Math.max(tRange / 6, 20 * 86400000);
+  // 平滑寬度固定45天（2026-10-26）：原本用「整段時間的1/6」，滿意度資料累積到2年多(~860天)
+  // 後等於每點跟前後~5個月一起平均，2025年中TPOF不滿意55-58%那段下滑被抹成一條平線。
+  const bwMs = 45 * 86400000;
   const byKey = {};
   pts.forEach(p => { (byKey[p.key] = byKey[p.key] || []).push(p); });
   let bandSvg = '', dotsSvg = '';
   // 跟民調折線圖同一套_gaussTrendStats：加權平均±加權標準差畫成粗線+淡色帶，取代原本只有
   // 平均線、沒有區間的版本——滿意度調查本來就跟候選人民調一樣，同一時期會有多家不同機構
   // 各自數字有落差，這個離散度本身就是有意義的不確定性，應該畫出來而不是只呈現單一平滑值。
+  const _trendData = [];
   seriesDefs.forEach(sd => {
     const series = (byKey[sd.key] || []).slice().sort((a, b) => a.t - b.t);
     if (!series.length) return;
-    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.val);
+    const trend = _gaussTrendStats(series, tMin, tRange, bwMs, p => p.val, Math.max(40, Math.ceil(tRange / (7 * 86400000))));
     if (trend.length >= 2) {
+      _trendData.push({ n: sd.label, c: sd.color, p: trend.map(pt => [Math.round(pt.t), +pt.mean.toFixed(2)]) });
       const bandTop = trend.map(pt => `${x(pt.t).toFixed(1)},${y(Math.min(100, pt.mean + pt.sd)).toFixed(1)}`).join(' L');
       const bandBot = trend.slice().reverse().map(pt => `${x(pt.t).toFixed(1)},${y(Math.max(0, pt.mean - pt.sd)).toFixed(1)}`).join(' L');
       const linePath = trend.map((pt, i) => `${i === 0 ? 'M' : 'L'}${x(pt.t).toFixed(1)},${y(pt.mean).toFixed(1)}`).join(' ');
       bandSvg += `<path d="M${bandTop} L${bandBot} Z" fill="${sd.color}" opacity="0.16"></path>
         <path d="${linePath}" stroke="${sd.color}" stroke-width="2" fill="none" opacity="0.9"></path>`;
     }
-    dotsSvg += series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.val).toFixed(1)}" r="1.6" fill="${sd.color}" opacity="0.5" data-t="${p.t}" data-name="${sd.label}" data-pct="${p.val.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${sd.color}"></circle>`).join('');
+    dotsSvg += series.map(p => `<circle class="pch-dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.val).toFixed(1)}" r="1.6" fill="${sd.color}" opacity="0.5" data-t="${p.t}" data-name="${sd.label}" data-pct="${p.val.toFixed(1)}" data-date="${p.dateLbl}" data-clr="${sd.color}" data-pollster="${p.pollster}" data-hw="${p.hw}"></circle>`).join('');
   });
   const yGridLines = [yMin, (yMin + yMax) / 2, yMax].map(v =>
     `<line x1="0" y1="${y(v).toFixed(1)}" x2="${dataW}" y2="${y(v).toFixed(1)}" stroke="rgba(255,255,255,0.06)"></line>`
@@ -362519,12 +362555,33 @@ function _renderApprovalTrendSvg(polls, seriesDefs) {
       <div style="display:flex;align-items:flex-start">
         <svg viewBox="0 0 ${axisW} ${H}" style="width:${axisW}px;height:88px;display:block;flex-shrink:0">${yAxisLabels}</svg>
         <div class="pch-scrollwrap" style="position:relative;overflow-x:auto;overflow-y:hidden;flex:1">
-          <svg viewBox="0 0 ${dataW} ${H}" style="width:${dataW}px;height:88px;display:block">${yGridLines}${bandSvg}${dotsSvg}${cross}${overlay}</svg>
+          <svg viewBox="0 0 ${dataW} ${H}" preserveAspectRatio="none" style="width:${dataW}px;height:88px;display:block" data-trends="${encodeURIComponent(JSON.stringify(_trendData))}">${yGridLines}${bandSvg}${dotsSvg}${cross}${overlay}</svg>
         </div>
       </div>
       <div class="pch-tip" style="display:none;position:absolute;top:2px;background:rgba(15,15,25,0.92);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 6px;font-size:8.5px;white-space:nowrap;pointer-events:none;z-index:5"></div>
     </div>
   </div>`;
+}
+// 總統／閣揆滿意度「目前」的加權估計（2026-10-26）：取最新一筆民調日期往前90天內的全國民調，
+// 權重＝_pollHouseWeight（機構立場0.7／政黨或陣營委託0.4）× exp(-距最新一筆天數/120)，跟縣市長
+// 民調同一套權重。原本右上角只顯示「最後公布的那一份」，數字會跟著哪家最後發布而跳動。
+// 這個數字只供參考，不進縣市長預測模型（2018/2022回測加入國政滿意度反而變差）。
+function _approvalWeightedNow(polls) {
+  const rows = (polls || []).map(p => ({ p, d: _pollParseEndDate(p.date) }))
+    .filter(r => r.d && r.p.approve_pct != null && r.p.disapprove_pct != null);
+  if (!rows.length) return null;
+  const tMax = Math.max.apply(null, rows.map(r => r.d.getTime()));
+  const win = rows.filter(r => (tMax - r.d.getTime()) / 86400000 <= 90);
+  let wSum = 0, aSum = 0, dSum = 0;
+  const used = win.map(r => {
+    const days = (tMax - r.d.getTime()) / 86400000;
+    const w = _pollHouseWeight(r.p.pollster, r.p.sponsor) * Math.exp(-days / 120);
+    wSum += w; aSum += w * r.p.approve_pct; dSum += w * r.p.disapprove_pct;
+    return { pollster: r.p.pollster, date: r.p.date, w, a: r.p.approve_pct, dis: r.p.disapprove_pct };
+  }).sort((x, y) => y.w - x.w);
+  if (wSum <= 0) return null;
+  return { approve: aSum / wSum, disapprove: dSum / wSum, n: used.length, used, wSum,
+    to: new Date(tMax).toISOString().slice(0, 10), from: new Date(tMax - 90 * 86400000).toISOString().slice(0, 10) };
 }
 function _renderApprovalCardHtml(title, polls) {
   const seriesDefs = [
@@ -362536,8 +362593,13 @@ function _renderApprovalCardHtml(title, polls) {
   const latest = (polls || []).slice().filter(p => _pollParseEndDate(p.date)).sort((a, b) => _pollParseEndDate(b.date) - _pollParseEndDate(a.date))[0];
   const _latestUndecided = latest && latest.undecided_pct !== undefined && latest.undecided_pct !== null
     ? T(`／不表態${latest.undecided_pct}%`,` / Undecided ${latest.undecided_pct}%`) : '';
+  const _wn = _approvalWeightedNow(polls);
+  const weightedNote = _wn
+    ? `<div style="font-size:9.5px;color:rgba(255,255,255,0.7);margin-bottom:2px">${T(`加權平均（${_wn.from}～${_wn.to}，${_wn.n}份全國民調）：滿意${_wn.approve.toFixed(1)}%／不滿意${_wn.disapprove.toFixed(1)}%`,`Weighted average (${_wn.from}–${_wn.to}, ${_wn.n} national polls): Approve ${_wn.approve.toFixed(1)}% / Disapprove ${_wn.disapprove.toFixed(1)}%`)}</div>
+       <div style="font-size:8.5px;color:rgba(196,181,253,0.6);margin-bottom:3px;line-height:1.5">${T('權重：','Weights: ')}${_wn.used.map(u => `${u.pollster} ${u.date.slice(5)} ${(100 * u.w / _wn.wSum).toFixed(0)}%`).join('、')}${T('（偏藍／偏綠機構×0.7、政黨或陣營委託×0.4、越舊越低；僅供參考，不進預測模型）',' (Blue/Green-leaning ×0.7, party/campaign-commissioned ×0.4, older polls weigh less; reference only, not used in the forecast model)')}</div>`
+    : '';
   const latestNote = latest
-    ? `<div style="font-size:9px;color:rgba(255,255,255,0.45);margin-bottom:5px">${T(`最新：${latest.pollster} ${latest.date}　滿意${latest.approve_pct}%／不滿意${latest.disapprove_pct}%${_latestUndecided}`,`Latest: ${latest.pollster} ${latest.date}　Approve ${latest.approve_pct}% / Disapprove ${latest.disapprove_pct}%${_latestUndecided}`)}</div>`
+    ? weightedNote + `<div style="font-size:9px;color:rgba(255,255,255,0.45);margin-bottom:5px">${T(`最新：${latest.pollster} ${latest.date}　滿意${latest.approve_pct}%／不滿意${latest.disapprove_pct}%${_latestUndecided}`,`Latest: ${latest.pollster} ${latest.date}　Approve ${latest.approve_pct}% / Disapprove ${latest.disapprove_pct}%${_latestUndecided}`)}</div>`
     : '';
   return `<div style="border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:8px;background:rgba(124,58,237,0.06)">
     <div style="font-size:10px;font-weight:700;color:#c4b5fd;letter-spacing:0.05em;margin-bottom:4px">${title}</div>
@@ -363110,15 +363172,19 @@ function _mayor2026PredictPanelHtml(cc, m) {
           const leanInfo = (typeof POLL_HOUSE_LEAN !== 'undefined' && POLL_HOUSE_LEAN[p.pollster]) ? POLL_HOUSE_LEAN[p.pollster] : {lean:'unknown'};
           const leanClr = {blue:'#60a5fa', green:'#4ade80', neutral:'#aaa', unknown:'#888'}[leanInfo.lean] || '#888';
           const isInternal = p.sponsor && p.sponsor !== 'unknown' && /黨/.test(p.sponsor);
+          const sponsorTag = isInternal ? T('政黨內部民調','Party-internal poll')
+            : POLL_SKEWED_SAMPLE_SPONSORS.has(p.sponsor) ? T('委託方樣本失衡，降權','Skewed-sample sponsor, discounted')
+            : _pollIsSelfCommissioned(p.sponsor) ? T('陣營委託','Campaign-commissioned') : null;
+          const pubNote = p.public_note ? `<div style="color:rgba(251,191,36,0.75);font-size:9px;margin-top:2px;line-height:1.5">${T(p.public_note, p.public_note_en || p.public_note)}</div>` : '';
           const w = _pollTotalWeight(p);
           const candsStr = (p.candidates||[]).map(c => `${_dispCandName(c.name)} ${c.pct}%`).join(' ／ ');
           return `<div style="border-top:1px solid rgba(255,255,255,0.06);padding:5px 0;font-size:10px">
             <div style="display:flex;justify-content:space-between;color:rgba(255,255,255,0.7)">
-              <span>${p.pollster} <span style="color:${leanClr}">（${isInternal ? T('政黨內部民調','Party-internal poll') : LEAN_LABEL[leanInfo.lean]}）</span></span>
+              <span>${p.pollster} <span style="color:${leanClr}">（${sponsorTag || LEAN_LABEL[leanInfo.lean]}）</span></span>
               <span style="color:rgba(255,255,255,0.4)">${_dispPollDate(p.date)}</span>
             </div>
             <div style="color:rgba(255,255,255,0.55);margin-top:2px">${candsStr}</div>
-            <div style="color:rgba(196,181,253,0.6);font-size:9px;margin-top:2px">${T('加權權重','Weight')}：${w.toFixed(2)}${leanInfo.note ? ` · ${T(leanInfo.note, leanInfo.note_en || leanInfo.note)}` : ''}</div>
+            <div style="color:rgba(196,181,253,0.6);font-size:9px;margin-top:2px">${T('加權權重','Weight')}：${w.toFixed(2)}${leanInfo.note ? ` · ${T(leanInfo.note, leanInfo.note_en || leanInfo.note)}` : ''}</div>${pubNote}
           </div>`;
         }).join('');
   const pollCount = polls ? polls.length : 0;
@@ -365237,8 +365303,8 @@ const MAYOR_2026_PREDICT_TC = {
   '10008110':{name:'',p:"kmt",wp:"kmt",wn:"許淑華",v:6249,pct:62.49,tot:10000,elig:14350,cands:[{"n": "許淑華", "p": "kmt", "v": 6249, "e": 1}, {"n": "溫世政", "p": "dpp", "v": 3751, "e": 0}]},
   '10008120':{name:'',p:"kmt",wp:"kmt",wn:"許淑華",v:7157,pct:71.57,tot:10000,elig:12536,cands:[{"n": "許淑華", "p": "kmt", "v": 7157, "e": 1}, {"n": "溫世政", "p": "dpp", "v": 2843, "e": 0}]},
   '10008130':{name:'',p:"kmt",wp:"kmt",wn:"許淑華",v:8142,pct:81.42,tot:10000,elig:12214,cands:[{"n": "許淑華", "p": "kmt", "v": 8142, "e": 1}, {"n": "溫世政", "p": "dpp", "v": 1858, "e": 0}]},
-  '10020010':{name:'',p:"dpp",wp:"dpp",wn:"王美惠",v:5193,pct:51.93,tot:10000,elig:96706,cands:[{"n": "王美惠", "p": "dpp", "v": 5193, "e": 1}, {"n": "張啓楷", "p": "tpp", "v": 4807, "e": 0}]},
-  '10020020':{name:'',p:"dpp",wp:"dpp",wn:"王美惠",v:5342,pct:53.42,tot:10000,elig:117424,cands:[{"n": "王美惠", "p": "dpp", "v": 5342, "e": 1}, {"n": "張啓楷", "p": "tpp", "v": 4658, "e": 0}]},
+  '10020010':{name:'',p:"dpp",wp:"dpp",wn:"王美惠",v:5165,pct:51.65,tot:10000,elig:96706,cands:[{"n": "王美惠", "p": "dpp", "v": 5165, "e": 1}, {"n": "張啓楷", "p": "tpp", "v": 4835, "e": 0}]},
+  '10020020':{name:'',p:"dpp",wp:"dpp",wn:"王美惠",v:5314,pct:53.14,tot:10000,elig:117424,cands:[{"n": "王美惠", "p": "dpp", "v": 5314, "e": 1}, {"n": "張啓楷", "p": "tpp", "v": 4686, "e": 0}]},
   '10010010':{name:'',p:"dpp",wp:"dpp",wn:"蔡易餘",v:6965,pct:69.65,tot:10000,elig:31556,cands:[{"n": "蔡易餘", "p": "dpp", "v": 6965, "e": 1}, {"n": "吳品叡", "p": "ind", "v": 3035, "e": 0}]},
   '10010020':{name:'',p:"dpp",wp:"dpp",wn:"蔡易餘",v:6908,pct:69.08,tot:10000,elig:33816,cands:[{"n": "蔡易餘", "p": "dpp", "v": 6908, "e": 1}, {"n": "吳品叡", "p": "ind", "v": 3092, "e": 0}]},
   '10010030':{name:'',p:"dpp",wp:"dpp",wn:"蔡易餘",v:6935,pct:69.35,tot:10000,elig:22325,cands:[{"n": "蔡易餘", "p": "dpp", "v": 6935, "e": 1}, {"n": "吳品叡", "p": "ind", "v": 3065, "e": 0}]},
@@ -365257,25 +365323,25 @@ const MAYOR_2026_PREDICT_TC = {
   '10010160':{name:'',p:"dpp",wp:"dpp",wn:"蔡易餘",v:6832,pct:68.32,tot:10000,elig:9690,cands:[{"n": "蔡易餘", "p": "dpp", "v": 6832, "e": 1}, {"n": "吳品叡", "p": "ind", "v": 3168, "e": 0}]},
   '10010170':{name:'',p:"dpp",wp:"dpp",wn:"蔡易餘",v:6964,pct:69.64,tot:10000,elig:3900,cands:[{"n": "蔡易餘", "p": "dpp", "v": 6964, "e": 1}, {"n": "吳品叡", "p": "ind", "v": 3036, "e": 0}]},
   '10010180':{name:'',p:"dpp",wp:"dpp",wn:"蔡易餘",v:7251,pct:72.51,tot:10000,elig:4466,cands:[{"n": "蔡易餘", "p": "dpp", "v": 7251, "e": 1}, {"n": "吳品叡", "p": "ind", "v": 2749, "e": 0}]},
-  '10017010':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5516,pct:55.16,tot:10000,elig:43912,cands:[{"n": "謝國樑", "p": "kmt", "v": 5516, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4484, "e": 0}]},
-  '10017020':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5243,pct:52.43,tot:10000,elig:44893,cands:[{"n": "謝國樑", "p": "kmt", "v": 5243, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4757, "e": 0}]},
-  '10017030':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5451,pct:54.51,tot:10000,elig:32476,cands:[{"n": "謝國樑", "p": "kmt", "v": 5451, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4549, "e": 0}]},
-  '10017040':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5234,pct:52.34,tot:10000,elig:33955,cands:[{"n": "謝國樑", "p": "kmt", "v": 5234, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4766, "e": 0}]},
-  '10017050':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5370,pct:53.7,tot:10000,elig:39334,cands:[{"n": "謝國樑", "p": "kmt", "v": 5370, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4630, "e": 0}]},
-  '10017060':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5445,pct:54.45,tot:10000,elig:67779,cands:[{"n": "謝國樑", "p": "kmt", "v": 5445, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4555, "e": 0}]},
-  '10017070':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5723,pct:57.23,tot:10000,elig:45564,cands:[{"n": "謝國樑", "p": "kmt", "v": 5723, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4277, "e": 0}]},
-  '10002010':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5190,pct:51.9,tot:10000,elig:76650,cands:[{"n": "林國漳", "p": "dpp", "v": 5190, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4810, "e": 0}]},
-  '10002020':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5266,pct:52.66,tot:10000,elig:55126,cands:[{"n": "林國漳", "p": "dpp", "v": 5266, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4734, "e": 0}]},
-  '10002030':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5278,pct:52.78,tot:10000,elig:32600,cands:[{"n": "林國漳", "p": "dpp", "v": 5278, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4722, "e": 0}]},
-  '10002040':{name:'',p:"kmt",wp:"kmt",wn:"吳宗憲",v:5350,pct:53.5,tot:10000,elig:24249,cands:[{"n": "吳宗憲", "p": "kmt", "v": 5350, "e": 1}, {"n": "林國漳", "p": "dpp", "v": 4650, "e": 0}]},
-  '10002050':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5421,pct:54.21,tot:10000,elig:29950,cands:[{"n": "林國漳", "p": "dpp", "v": 5421, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4579, "e": 0}]},
-  '10002060':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5402,pct:54.02,tot:10000,elig:21272,cands:[{"n": "林國漳", "p": "dpp", "v": 5402, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4598, "e": 0}]},
-  '10002070':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5567,pct:55.67,tot:10000,elig:27549,cands:[{"n": "林國漳", "p": "dpp", "v": 5567, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4433, "e": 0}]},
-  '10002080':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5766,pct:57.66,tot:10000,elig:44463,cands:[{"n": "林國漳", "p": "dpp", "v": 5766, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4234, "e": 0}]},
-  '10002090':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5565,pct:55.65,tot:10000,elig:34891,cands:[{"n": "林國漳", "p": "dpp", "v": 5565, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4435, "e": 0}]},
-  '10002100':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5556,pct:55.56,tot:10000,elig:18676,cands:[{"n": "林國漳", "p": "dpp", "v": 5556, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4444, "e": 0}]},
-  '10002110':{name:'',p:"kmt",wp:"kmt",wn:"吳宗憲",v:7802,pct:78.02,tot:10000,elig:4844,cands:[{"n": "吳宗憲", "p": "kmt", "v": 7802, "e": 1}, {"n": "林國漳", "p": "dpp", "v": 2198, "e": 0}]},
-  '10002120':{name:'',p:"kmt",wp:"kmt",wn:"吳宗憲",v:8208,pct:82.08,tot:10000,elig:4509,cands:[{"n": "吳宗憲", "p": "kmt", "v": 8208, "e": 1}, {"n": "林國漳", "p": "dpp", "v": 1792, "e": 0}]},
+  '10017010':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5347,pct:53.47,tot:10000,elig:43912,cands:[{"n": "謝國樑", "p": "kmt", "v": 5347, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4653, "e": 0}]},
+  '10017020':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5074,pct:50.74,tot:10000,elig:44893,cands:[{"n": "謝國樑", "p": "kmt", "v": 5074, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4926, "e": 0}]},
+  '10017030':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5282,pct:52.82,tot:10000,elig:32476,cands:[{"n": "謝國樑", "p": "kmt", "v": 5282, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4718, "e": 0}]},
+  '10017040':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5065,pct:50.65,tot:10000,elig:33955,cands:[{"n": "謝國樑", "p": "kmt", "v": 5065, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4935, "e": 0}]},
+  '10017050':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5201,pct:52.01,tot:10000,elig:39334,cands:[{"n": "謝國樑", "p": "kmt", "v": 5201, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4799, "e": 0}]},
+  '10017060':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5276,pct:52.76,tot:10000,elig:67779,cands:[{"n": "謝國樑", "p": "kmt", "v": 5276, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4724, "e": 0}]},
+  '10017070':{name:'',p:"kmt",wp:"kmt",wn:"謝國樑",v:5554,pct:55.54,tot:10000,elig:45564,cands:[{"n": "謝國樑", "p": "kmt", "v": 5554, "e": 1}, {"n": "童子瑋", "p": "dpp", "v": 4446, "e": 0}]},
+  '10002010':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5036,pct:50.36,tot:10000,elig:76650,cands:[{"n": "林國漳", "p": "dpp", "v": 5036, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4964, "e": 0}]},
+  '10002020':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5112,pct:51.12,tot:10000,elig:55126,cands:[{"n": "林國漳", "p": "dpp", "v": 5112, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4888, "e": 0}]},
+  '10002030':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5124,pct:51.24,tot:10000,elig:32600,cands:[{"n": "林國漳", "p": "dpp", "v": 5124, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4876, "e": 0}]},
+  '10002040':{name:'',p:"kmt",wp:"kmt",wn:"吳宗憲",v:5504,pct:55.04,tot:10000,elig:24249,cands:[{"n": "吳宗憲", "p": "kmt", "v": 5504, "e": 1}, {"n": "林國漳", "p": "dpp", "v": 4496, "e": 0}]},
+  '10002050':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5267,pct:52.67,tot:10000,elig:29950,cands:[{"n": "林國漳", "p": "dpp", "v": 5267, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4733, "e": 0}]},
+  '10002060':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5248,pct:52.48,tot:10000,elig:21272,cands:[{"n": "林國漳", "p": "dpp", "v": 5248, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4752, "e": 0}]},
+  '10002070':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5413,pct:54.13,tot:10000,elig:27549,cands:[{"n": "林國漳", "p": "dpp", "v": 5413, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4587, "e": 0}]},
+  '10002080':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5612,pct:56.12,tot:10000,elig:44463,cands:[{"n": "林國漳", "p": "dpp", "v": 5612, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4388, "e": 0}]},
+  '10002090':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5411,pct:54.11,tot:10000,elig:34891,cands:[{"n": "林國漳", "p": "dpp", "v": 5411, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4589, "e": 0}]},
+  '10002100':{name:'',p:"dpp",wp:"dpp",wn:"林國漳",v:5402,pct:54.02,tot:10000,elig:18676,cands:[{"n": "林國漳", "p": "dpp", "v": 5402, "e": 1}, {"n": "吳宗憲", "p": "kmt", "v": 4598, "e": 0}]},
+  '10002110':{name:'',p:"kmt",wp:"kmt",wn:"吳宗憲",v:7956,pct:79.56,tot:10000,elig:4844,cands:[{"n": "吳宗憲", "p": "kmt", "v": 7956, "e": 1}, {"n": "林國漳", "p": "dpp", "v": 2044, "e": 0}]},
+  '10002120':{name:'',p:"kmt",wp:"kmt",wn:"吳宗憲",v:8362,pct:83.62,tot:10000,elig:4509,cands:[{"n": "吳宗憲", "p": "kmt", "v": 8362, "e": 1}, {"n": "林國漳", "p": "dpp", "v": 1638, "e": 0}]},
   '10013010':{name:'',p:"dpp",wp:"dpp",wn:"周春米",v:5578,pct:55.78,tot:10000,elig:161826,cands:[{"n": "周春米", "p": "dpp", "v": 5578, "e": 1}, {"n": "蘇清泉", "p": "kmt", "v": 4422, "e": 0}]},
   '10013020':{name:'',p:"dpp",wp:"dpp",wn:"周春米",v:5579,pct:55.79,tot:10000,elig:45158,cands:[{"n": "周春米", "p": "dpp", "v": 5579, "e": 1}, {"n": "蘇清泉", "p": "kmt", "v": 4421, "e": 0}]},
   '10013030':{name:'',p:"kmt",wp:"kmt",wn:"蘇清泉",v:5004,pct:50.04,tot:10000,elig:37785,cands:[{"n": "蘇清泉", "p": "kmt", "v": 5004, "e": 1}, {"n": "周春米", "p": "dpp", "v": 4996, "e": 0}]},
@@ -365309,203 +365375,203 @@ const MAYOR_2026_PREDICT_TC = {
   '10013310':{name:'',p:"kmt",wp:"kmt",wn:"蘇清泉",v:6169,pct:61.69,tot:10000,elig:3846,cands:[{"n": "蘇清泉", "p": "kmt", "v": 6169, "e": 1}, {"n": "周春米", "p": "dpp", "v": 3831, "e": 0}]},
   '10013320':{name:'',p:"kmt",wp:"kmt",wn:"蘇清泉",v:6654,pct:66.54,tot:10000,elig:4081,cands:[{"n": "蘇清泉", "p": "kmt", "v": 6654, "e": 1}, {"n": "周春米", "p": "dpp", "v": 3346, "e": 0}]},
   '10013330':{name:'',p:"kmt",wp:"kmt",wn:"蘇清泉",v:5850,pct:58.5,tot:10000,elig:4057,cands:[{"n": "蘇清泉", "p": "kmt", "v": 5850, "e": 1}, {"n": "周春米", "p": "dpp", "v": 4150, "e": 0}]},
-  '10007010':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5853,pct:58.53,tot:10000,elig:183451,cands:[{"n": "陳素月", "p": "dpp", "v": 5853, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2238, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1909, "e": 0}]},
-  '10007020':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5363,pct:53.63,tot:10000,elig:68446,cands:[{"n": "陳素月", "p": "dpp", "v": 5363, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2746, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1891, "e": 0}]},
-  '10007030':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5463,pct:54.63,tot:10000,elig:72790,cands:[{"n": "陳素月", "p": "dpp", "v": 5463, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2617, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1920, "e": 0}]},
-  '10007040':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5283,pct:52.83,tot:10000,elig:13596,cands:[{"n": "陳素月", "p": "dpp", "v": 5283, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2810, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1907, "e": 0}]},
-  '10007050':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5165,pct:51.65,tot:10000,elig:30693,cands:[{"n": "陳素月", "p": "dpp", "v": 5165, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2921, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1914, "e": 0}]},
-  '10007060':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5228,pct:52.28,tot:10000,elig:38091,cands:[{"n": "陳素月", "p": "dpp", "v": 5228, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2870, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1902, "e": 0}]},
-  '10007070':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5311,pct:53.11,tot:10000,elig:31353,cands:[{"n": "陳素月", "p": "dpp", "v": 5311, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2757, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1932, "e": 0}]},
-  '10007080':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5779,pct:57.79,tot:10000,elig:37380,cands:[{"n": "陳素月", "p": "dpp", "v": 5779, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2288, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1933, "e": 0}]},
-  '10007090':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:6679,pct:66.79,tot:10000,elig:19366,cands:[{"n": "陳素月", "p": "dpp", "v": 6679, "e": 1}, {"n": "邱建富", "p": "ind", "v": 1903, "e": 0}, {"n": "魏平政", "p": "kmt", "v": 1418, "e": 0}]},
-  '10007100':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5763,pct:57.63,tot:10000,elig:98662,cands:[{"n": "陳素月", "p": "dpp", "v": 5763, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2291, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1946, "e": 0}]},
-  '10007110':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5555,pct:55.55,tot:10000,elig:43448,cands:[{"n": "陳素月", "p": "dpp", "v": 5555, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2505, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1940, "e": 0}]},
-  '10007120':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:6103,pct:61.03,tot:10000,elig:33589,cands:[{"n": "陳素月", "p": "dpp", "v": 6103, "e": 1}, {"n": "邱建富", "p": "ind", "v": 1993, "e": 0}, {"n": "魏平政", "p": "kmt", "v": 1904, "e": 0}]},
-  '10007130':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5741,pct:57.41,tot:10000,elig:33111,cands:[{"n": "陳素月", "p": "dpp", "v": 5741, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2284, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1975, "e": 0}]},
-  '10007140':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4876,pct:48.76,tot:10000,elig:26808,cands:[{"n": "陳素月", "p": "dpp", "v": 4876, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3177, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1947, "e": 0}]},
-  '10007150':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5898,pct:58.98,tot:10000,elig:28814,cands:[{"n": "陳素月", "p": "dpp", "v": 5898, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2141, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1961, "e": 0}]},
-  '10007160':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5865,pct:58.65,tot:10000,elig:29709,cands:[{"n": "陳素月", "p": "dpp", "v": 5865, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2171, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1964, "e": 0}]},
-  '10007170':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:6097,pct:60.97,tot:10000,elig:34922,cands:[{"n": "陳素月", "p": "dpp", "v": 6097, "e": 1}, {"n": "邱建富", "p": "ind", "v": 2011, "e": 0}, {"n": "魏平政", "p": "kmt", "v": 1892, "e": 0}]},
-  '10007180':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5953,pct:59.53,tot:10000,elig:12431,cands:[{"n": "陳素月", "p": "dpp", "v": 5953, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2080, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1967, "e": 0}]},
-  '10007190':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5724,pct:57.24,tot:10000,elig:27061,cands:[{"n": "陳素月", "p": "dpp", "v": 5724, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2337, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1939, "e": 0}]},
-  '10007200':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5158,pct:51.58,tot:10000,elig:40941,cands:[{"n": "陳素月", "p": "dpp", "v": 5158, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2880, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1962, "e": 0}]},
-  '10007210':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5885,pct:58.85,tot:10000,elig:22124,cands:[{"n": "陳素月", "p": "dpp", "v": 5885, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2149, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1966, "e": 0}]},
-  '10007220':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5899,pct:58.99,tot:10000,elig:24463,cands:[{"n": "陳素月", "p": "dpp", "v": 5899, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2141, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1960, "e": 0}]},
-  '10007230':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5429,pct:54.29,tot:10000,elig:27393,cands:[{"n": "陳素月", "p": "dpp", "v": 5429, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2642, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1929, "e": 0}]},
-  '10007240':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5364,pct:53.64,tot:10000,elig:13609,cands:[{"n": "陳素月", "p": "dpp", "v": 5364, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2675, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1961, "e": 0}]},
-  '10007250':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5745,pct:57.45,tot:10000,elig:12048,cands:[{"n": "陳素月", "p": "dpp", "v": 5745, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2312, "e": 0}, {"n": "邱建富", "p": "ind", "v": 1943, "e": 0}]},
-  '10007260':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:6333,pct:63.33,tot:10000,elig:24307,cands:[{"n": "陳素月", "p": "dpp", "v": 6333, "e": 1}, {"n": "邱建富", "p": "ind", "v": 1986, "e": 0}, {"n": "魏平政", "p": "kmt", "v": 1681, "e": 0}]},
-  '65000010':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:4936,pct:49.36,tot:10000,elig:451072,cands:[{"n": "李四川", "p": "kmt", "v": 4741, "e": 0}, {"n": "蘇巧慧", "p": "dpp", "v": 4936, "e": 1}, {"n": "蘇輝湟", "p": "ind", "v": 323, "e": 0}]},
-  '65000020':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5291,pct:52.91,tot:10000,elig:319770,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5291, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4389, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 320, "e": 0}]},
-  '65000030':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5448,pct:54.48,tot:10000,elig:342192,cands:[{"n": "李四川", "p": "kmt", "v": 5448, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4224, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 328, "e": 0}]},
-  '65000040':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5665,pct:56.65,tot:10000,elig:175828,cands:[{"n": "李四川", "p": "kmt", "v": 5665, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4006, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 329, "e": 0}]},
-  '65000050':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5028,pct:50.28,tot:10000,elig:340775,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5028, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4650, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 322, "e": 0}]},
-  '65000060':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5775,pct:57.75,tot:10000,elig:254934,cands:[{"n": "李四川", "p": "kmt", "v": 5775, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 3895, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 330, "e": 0}]},
-  '65000070':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:4890,pct:48.9,tot:10000,elig:147303,cands:[{"n": "李四川", "p": "kmt", "v": 4788, "e": 0}, {"n": "蘇巧慧", "p": "dpp", "v": 4890, "e": 1}, {"n": "蘇輝湟", "p": "ind", "v": 322, "e": 0}]},
-  '65000080':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:4885,pct:48.85,tot:10000,elig:72376,cands:[{"n": "李四川", "p": "kmt", "v": 4885, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4791, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 324, "e": 0}]},
-  '65000090':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5037,pct:50.37,tot:10000,elig:93094,cands:[{"n": "李四川", "p": "kmt", "v": 5037, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4638, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 325, "e": 0}]},
-  '65000100':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5281,pct:52.81,tot:10000,elig:155852,cands:[{"n": "李四川", "p": "kmt", "v": 5281, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4392, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 327, "e": 0}]},
-  '65000110':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5269,pct:52.69,tot:10000,elig:175020,cands:[{"n": "李四川", "p": "kmt", "v": 5269, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4405, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 326, "e": 0}]},
-  '65000120':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5470,pct:54.7,tot:10000,elig:32915,cands:[{"n": "李四川", "p": "kmt", "v": 5470, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4202, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 328, "e": 0}]},
-  '65000130':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:4882,pct:48.82,tot:10000,elig:197795,cands:[{"n": "李四川", "p": "kmt", "v": 4882, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4794, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 324, "e": 0}]},
-  '65000140':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5308,pct:53.08,tot:10000,elig:164290,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5308, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4372, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 320, "e": 0}]},
-  '65000150':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:4940,pct:49.4,tot:10000,elig:75855,cands:[{"n": "李四川", "p": "kmt", "v": 4738, "e": 0}, {"n": "蘇巧慧", "p": "dpp", "v": 4940, "e": 1}, {"n": "蘇輝湟", "p": "ind", "v": 322, "e": 0}]},
-  '65000160':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:4885,pct:48.85,tot:10000,elig:62281,cands:[{"n": "李四川", "p": "kmt", "v": 4793, "e": 0}, {"n": "蘇巧慧", "p": "dpp", "v": 4885, "e": 1}, {"n": "蘇輝湟", "p": "ind", "v": 322, "e": 0}]},
-  '65000170':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5150,pct:51.5,tot:10000,elig:96248,cands:[{"n": "李四川", "p": "kmt", "v": 5150, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4524, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 326, "e": 0}]},
-  '65000180':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5198,pct:51.98,tot:10000,elig:20193,cands:[{"n": "李四川", "p": "kmt", "v": 5198, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4477, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 325, "e": 0}]},
-  '65000190':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5359,pct:53.59,tot:10000,elig:6498,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5359, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4322, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 319, "e": 0}]},
-  '65000200':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5350,pct:53.5,tot:10000,elig:5879,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5350, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4331, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 319, "e": 0}]},
-  '65000210':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5409,pct:54.09,tot:10000,elig:19306,cands:[{"n": "李四川", "p": "kmt", "v": 5409, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4264, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 327, "e": 0}]},
-  '65000220':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5291,pct:52.91,tot:10000,elig:9687,cands:[{"n": "李四川", "p": "kmt", "v": 5291, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4383, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 326, "e": 0}]},
-  '65000230':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:4981,pct:49.81,tot:10000,elig:34151,cands:[{"n": "李四川", "p": "kmt", "v": 4981, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4695, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 324, "e": 0}]},
-  '65000240':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5056,pct:50.56,tot:10000,elig:3964,cands:[{"n": "李四川", "p": "kmt", "v": 5056, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4620, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 324, "e": 0}]},
-  '65000250':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5055,pct:50.55,tot:10000,elig:7369,cands:[{"n": "李四川", "p": "kmt", "v": 5055, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4621, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 324, "e": 0}]},
-  '65000260':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5619,pct:56.19,tot:10000,elig:10336,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5619, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4064, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 317, "e": 0}]},
-  '65000270':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:4863,pct:48.63,tot:10000,elig:18000,cands:[{"n": "李四川", "p": "kmt", "v": 4863, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4814, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 323, "e": 0}]},
-  '65000280':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:4991,pct:49.91,tot:10000,elig:18420,cands:[{"n": "李四川", "p": "kmt", "v": 4991, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4685, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 324, "e": 0}]},
-  '65000290':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:6047,pct:60.47,tot:10000,elig:5114,cands:[{"n": "李四川", "p": "kmt", "v": 6047, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 3621, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 332, "e": 0}]},
-  '10018010':{name:'',p:"ind",wp:"ind",wn:"高虹安",v:6086,pct:60.86,tot:10000,elig:164026,cands:[{"n": "高虹安", "p": "ind", "v": 6086, "e": 1}, {"n": "莊競程", "p": "dpp", "v": 3305, "e": 0}, {"n": "何志勇", "p": "kmt", "v": 609, "e": 0}]},
-  '10018020':{name:'',p:"ind",wp:"ind",wn:"高虹安",v:5606,pct:56.06,tot:10000,elig:122034,cands:[{"n": "高虹安", "p": "ind", "v": 5606, "e": 1}, {"n": "莊競程", "p": "dpp", "v": 3784, "e": 0}, {"n": "何志勇", "p": "kmt", "v": 610, "e": 0}]},
-  '10018030':{name:'',p:"ind",wp:"ind",wn:"高虹安",v:5279,pct:52.79,tot:10000,elig:64698,cands:[{"n": "高虹安", "p": "ind", "v": 5279, "e": 1}, {"n": "莊競程", "p": "dpp", "v": 4111, "e": 0}, {"n": "何志勇", "p": "kmt", "v": 610, "e": 0}]},
-  '10004010':{name:'',p:"dpp",wp:"dpp",wn:"鄭朝方",v:5237,pct:52.37,tot:10000,elig:148551,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 4389, "e": 0}, {"n": "鄭朝方", "p": "dpp", "v": 5237, "e": 1}, {"n": "朱定瑀", "p": "ind", "v": 374, "e": 0}]},
-  '10004020':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:4956,pct:49.56,tot:10000,elig:77666,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 4956, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4622, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 422, "e": 0}]},
-  '10004030':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5056,pct:50.56,tot:10000,elig:28475,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5056, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4514, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 430, "e": 0}]},
-  '10004040':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5149,pct:51.49,tot:10000,elig:23240,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5149, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4413, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 438, "e": 0}]},
-  '10004050':{name:'',p:"dpp",wp:"dpp",wn:"鄭朝方",v:5368,pct:53.68,tot:10000,elig:64996,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 4268, "e": 0}, {"n": "鄭朝方", "p": "dpp", "v": 5368, "e": 1}, {"n": "朱定瑀", "p": "ind", "v": 364, "e": 0}]},
-  '10004060':{name:'',p:"dpp",wp:"dpp",wn:"鄭朝方",v:5056,pct:50.56,tot:10000,elig:46193,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 4556, "e": 0}, {"n": "鄭朝方", "p": "dpp", "v": 5056, "e": 1}, {"n": "朱定瑀", "p": "ind", "v": 388, "e": 0}]},
-  '10004070':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5308,pct:53.08,tot:10000,elig:17157,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5308, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4240, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 452, "e": 0}]},
-  '10004080':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5492,pct:54.92,tot:10000,elig:10638,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5492, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4041, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 467, "e": 0}]},
-  '10004090':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5375,pct:53.75,tot:10000,elig:7616,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5375, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4167, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 458, "e": 0}]},
-  '10004100':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5578,pct:55.78,tot:10000,elig:12512,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5578, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 3947, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 475, "e": 0}]},
-  '10004110':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:6139,pct:61.39,tot:10000,elig:4782,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 6139, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 3340, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 521, "e": 0}]},
-  '10004120':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:6543,pct:65.43,tot:10000,elig:7111,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 6543, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 2901, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 556, "e": 0}]},
-  '10004130':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:6740,pct:67.4,tot:10000,elig:3783,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 6740, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 2688, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 572, "e": 0}]},
-  '68000010':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6589,pct:65.89,tot:10000,elig:366627,cands:[{"n": "張善政", "p": "kmt", "v": 6589, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3411, "e": 0}]},
-  '68000020':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6919,pct:69.19,tot:10000,elig:338619,cands:[{"n": "張善政", "p": "kmt", "v": 6919, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3081, "e": 0}]},
-  '68000030':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6052,pct:60.52,tot:10000,elig:77228,cands:[{"n": "張善政", "p": "kmt", "v": 6052, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3948, "e": 0}]},
-  '68000040':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:7016,pct:70.16,tot:10000,elig:141846,cands:[{"n": "張善政", "p": "kmt", "v": 7016, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 2984, "e": 0}]},
-  '68000050':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6032,pct:60.32,tot:10000,elig:130434,cands:[{"n": "張善政", "p": "kmt", "v": 6032, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3968, "e": 0}]},
-  '68000060':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6043,pct:60.43,tot:10000,elig:69701,cands:[{"n": "張善政", "p": "kmt", "v": 6043, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3957, "e": 0}]},
-  '68000070':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6380,pct:63.8,tot:10000,elig:138494,cands:[{"n": "張善政", "p": "kmt", "v": 6380, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3620, "e": 0}]},
-  '68000080':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6658,pct:66.58,tot:10000,elig:168451,cands:[{"n": "張善政", "p": "kmt", "v": 6658, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3342, "e": 0}]},
-  '68000090':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:7221,pct:72.21,tot:10000,elig:101501,cands:[{"n": "張善政", "p": "kmt", "v": 7221, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 2779, "e": 0}]},
-  '68000100':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6822,pct:68.22,tot:10000,elig:182430,cands:[{"n": "張善政", "p": "kmt", "v": 6822, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3178, "e": 0}]},
-  '68000110':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6055,pct:60.55,tot:10000,elig:41069,cands:[{"n": "張善政", "p": "kmt", "v": 6055, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3945, "e": 0}]},
-  '68000120':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:5718,pct:57.18,tot:10000,elig:58603,cands:[{"n": "張善政", "p": "kmt", "v": 5718, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 4282, "e": 0}]},
-  '68000130':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:8322,pct:83.22,tot:10000,elig:10124,cands:[{"n": "張善政", "p": "kmt", "v": 8322, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 1678, "e": 0}]},
-  '10016010':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3638,pct:36.38,tot:10000,elig:52839,cands:[{"n": "陳振中", "p": "kmt", "v": 3638, "e": 1}, {"n": "葉竹林", "p": "ind", "v": 2699, "e": 0}, {"n": "吳淑瑾", "p": "dpp", "v": 2116, "e": 0}, {"n": "許智富", "p": "ind", "v": 646, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 547, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 354, "e": 0}]},
-  '10016020':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3205,pct:32.05,tot:10000,elig:13505,cands:[{"n": "陳振中", "p": "kmt", "v": 3205, "e": 1}, {"n": "吳淑瑾", "p": "dpp", "v": 2998, "e": 0}, {"n": "葉竹林", "p": "ind", "v": 2603, "e": 0}, {"n": "許智富", "p": "ind", "v": 465, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 368, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 361, "e": 0}]},
-  '10016030':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3313,pct:33.13,tot:10000,elig:8622,cands:[{"n": "陳振中", "p": "kmt", "v": 3313, "e": 1}, {"n": "葉竹林", "p": "ind", "v": 2725, "e": 0}, {"n": "吳淑瑾", "p": "dpp", "v": 2319, "e": 0}, {"n": "許智富", "p": "ind", "v": 696, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 597, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 350, "e": 0}]},
-  '10016040':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3114,pct:31.14,tot:10000,elig:7261,cands:[{"n": "陳振中", "p": "kmt", "v": 3114, "e": 1}, {"n": "葉竹林", "p": "ind", "v": 2747, "e": 0}, {"n": "吳淑瑾", "p": "dpp", "v": 2418, "e": 0}, {"n": "許智富", "p": "ind", "v": 736, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 639, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 346, "e": 0}]},
-  '10016050':{name:'',p:"dpp",wp:"dpp",wn:"吳淑瑾",v:4894,pct:48.94,tot:10000,elig:4777,cands:[{"n": "吳淑瑾", "p": "dpp", "v": 4894, "e": 1}, {"n": "陳振中", "p": "kmt", "v": 2774, "e": 0}, {"n": "葉竹林", "p": "ind", "v": 1931, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 401, "e": 0}, {"n": "許智富", "p": "ind", "v": 0, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 0, "e": 0}]},
-  '10016060':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:4852,pct:48.52,tot:10000,elig:3356,cands:[{"n": "陳振中", "p": "kmt", "v": 4852, "e": 1}, {"n": "吳淑瑾", "p": "dpp", "v": 2971, "e": 0}, {"n": "葉竹林", "p": "ind", "v": 1776, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 401, "e": 0}, {"n": "許智富", "p": "ind", "v": 0, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 0, "e": 0}]},
-  '66000010':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5794,pct:57.94,tot:10000,elig:13521,cands:[{"n": "江啟臣", "p": "kmt", "v": 5794, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4206, "e": 0}]},
-  '66000020':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5948,pct:59.48,tot:10000,elig:63037,cands:[{"n": "江啟臣", "p": "kmt", "v": 5948, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4052, "e": 0}]},
-  '66000030':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6259,pct:62.59,tot:10000,elig:102553,cands:[{"n": "江啟臣", "p": "kmt", "v": 6259, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3741, "e": 0}]},
-  '66000040':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6053,pct:60.53,tot:10000,elig:90086,cands:[{"n": "江啟臣", "p": "kmt", "v": 6053, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3947, "e": 0}]},
-  '66000050':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6349,pct:63.49,tot:10000,elig:118882,cands:[{"n": "江啟臣", "p": "kmt", "v": 6349, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3651, "e": 0}]},
-  '66000060':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6425,pct:64.25,tot:10000,elig:183033,cands:[{"n": "江啟臣", "p": "kmt", "v": 6425, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3575, "e": 0}]},
-  '66000070':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6231,pct:62.31,tot:10000,elig:138694,cands:[{"n": "江啟臣", "p": "kmt", "v": 6231, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3769, "e": 0}]},
-  '66000080':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6519,pct:65.19,tot:10000,elig:235986,cands:[{"n": "江啟臣", "p": "kmt", "v": 6519, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3481, "e": 0}]},
-  '66000090':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5946,pct:59.46,tot:10000,elig:132286,cands:[{"n": "江啟臣", "p": "kmt", "v": 5946, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4054, "e": 0}]},
-  '66000100':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6899,pct:68.99,tot:10000,elig:40912,cands:[{"n": "江啟臣", "p": "kmt", "v": 6899, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3101, "e": 0}]},
-  '66000110':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5575,pct:55.75,tot:10000,elig:60242,cands:[{"n": "江啟臣", "p": "kmt", "v": 5575, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4425, "e": 0}]},
-  '66000120':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5176,pct:51.76,tot:10000,elig:72612,cands:[{"n": "江啟臣", "p": "kmt", "v": 5176, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4824, "e": 0}]},
-  '66000130':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5906,pct:59.06,tot:10000,elig:75295,cands:[{"n": "江啟臣", "p": "kmt", "v": 5906, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4094, "e": 0}]},
-  '66000140':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5306,pct:53.06,tot:10000,elig:47647,cands:[{"n": "江啟臣", "p": "kmt", "v": 5306, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4694, "e": 0}]},
-  '66000150':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6321,pct:63.21,tot:10000,elig:43678,cands:[{"n": "江啟臣", "p": "kmt", "v": 6321, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3679, "e": 0}]},
-  '66000160':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5772,pct:57.72,tot:10000,elig:53056,cands:[{"n": "江啟臣", "p": "kmt", "v": 5772, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4228, "e": 0}]},
-  '66000170':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6238,pct:62.38,tot:10000,elig:88683,cands:[{"n": "江啟臣", "p": "kmt", "v": 6238, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3762, "e": 0}]},
-  '66000180':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6440,pct:64.4,tot:10000,elig:76112,cands:[{"n": "江啟臣", "p": "kmt", "v": 6440, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3560, "e": 0}]},
-  '66000190':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6526,pct:65.26,tot:10000,elig:19883,cands:[{"n": "江啟臣", "p": "kmt", "v": 6526, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3474, "e": 0}]},
-  '66000200':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6708,pct:67.08,tot:10000,elig:12186,cands:[{"n": "江啟臣", "p": "kmt", "v": 6708, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3292, "e": 0}]},
-  '66000210':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6112,pct:61.12,tot:10000,elig:26147,cands:[{"n": "江啟臣", "p": "kmt", "v": 6112, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3888, "e": 0}]},
-  '66000220':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5605,pct:56.05,tot:10000,elig:15646,cands:[{"n": "江啟臣", "p": "kmt", "v": 5605, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4395, "e": 0}]},
-  '66000230':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6195,pct:61.95,tot:10000,elig:62727,cands:[{"n": "江啟臣", "p": "kmt", "v": 6195, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3805, "e": 0}]},
-  '66000240':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6275,pct:62.75,tot:10000,elig:46385,cands:[{"n": "江啟臣", "p": "kmt", "v": 6275, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3725, "e": 0}]},
-  '66000250':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5929,pct:59.29,tot:10000,elig:63070,cands:[{"n": "江啟臣", "p": "kmt", "v": 5929, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4071, "e": 0}]},
-  '66000260':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6348,pct:63.48,tot:10000,elig:53585,cands:[{"n": "江啟臣", "p": "kmt", "v": 6348, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3652, "e": 0}]},
-  '66000270':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6233,pct:62.33,tot:10000,elig:159004,cands:[{"n": "江啟臣", "p": "kmt", "v": 6233, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3767, "e": 0}]},
-  '66000280':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6154,pct:61.54,tot:10000,elig:169873,cands:[{"n": "江啟臣", "p": "kmt", "v": 6154, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3846, "e": 0}]},
-  '66000290':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:7834,pct:78.34,tot:10000,elig:9286,cands:[{"n": "江啟臣", "p": "kmt", "v": 7834, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 2166, "e": 0}]},
-  '63000010':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5580,pct:55.8,tot:10000,elig:151159,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5580, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4169, "e": 0}, {"n": "郭璽", "p": "ind", "v": 83, "e": 0}, {"n": "唐新民", "p": "other", "v": 72, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 60, "e": 0}, {"n": "林志成", "p": "ind", "v": 36, "e": 0}]},
-  '63000020':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5622,pct:56.22,tot:10000,elig:170907,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5622, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4123, "e": 0}, {"n": "郭璽", "p": "ind", "v": 85, "e": 0}, {"n": "唐新民", "p": "other", "v": 73, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 61, "e": 0}, {"n": "林志成", "p": "ind", "v": 36, "e": 0}]},
-  '63000030':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5653,pct:56.53,tot:10000,elig:223525,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5653, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4089, "e": 0}, {"n": "郭璽", "p": "ind", "v": 86, "e": 0}, {"n": "唐新民", "p": "other", "v": 74, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 61, "e": 0}, {"n": "林志成", "p": "ind", "v": 37, "e": 0}]},
-  '63000040':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5297,pct:52.97,tot:10000,elig:176271,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5297, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4480, "e": 0}, {"n": "郭璽", "p": "ind", "v": 74, "e": 0}, {"n": "唐新民", "p": "other", "v": 64, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 53, "e": 0}, {"n": "林志成", "p": "ind", "v": 32, "e": 0}]},
-  '63000050':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5527,pct:55.27,tot:10000,elig:115582,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5527, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4227, "e": 0}, {"n": "郭璽", "p": "ind", "v": 83, "e": 0}, {"n": "唐新民", "p": "other", "v": 70, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 58, "e": 0}, {"n": "林志成", "p": "ind", "v": 35, "e": 0}]},
-  '63000060':{name:'',p:"dpp",wp:"dpp",wn:"沈伯洋",v:5273,pct:52.73,tot:10000,elig:98209,cands:[{"n": "沈伯洋", "p": "dpp", "v": 5273, "e": 1}, {"n": "蔣萬安", "p": "kmt", "v": 4575, "e": 0}, {"n": "郭璽", "p": "ind", "v": 51, "e": 0}, {"n": "唐新民", "p": "other", "v": 43, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 36, "e": 0}, {"n": "林志成", "p": "ind", "v": 22, "e": 0}]},
-  '63000070':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5201,pct:52.01,tot:10000,elig:148984,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5201, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4585, "e": 0}, {"n": "郭璽", "p": "ind", "v": 71, "e": 0}, {"n": "唐新民", "p": "other", "v": 61, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 51, "e": 0}, {"n": "林志成", "p": "ind", "v": 31, "e": 0}]},
-  '63000080':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5987,pct:59.87,tot:10000,elig:210341,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5987, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 3722, "e": 0}, {"n": "郭璽", "p": "ind", "v": 97, "e": 0}, {"n": "唐新民", "p": "other", "v": 83, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 69, "e": 0}, {"n": "林志成", "p": "ind", "v": 42, "e": 0}]},
-  '63000090':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5435,pct:54.35,tot:10000,elig:94414,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5435, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4329, "e": 0}, {"n": "郭璽", "p": "ind", "v": 78, "e": 0}, {"n": "唐新民", "p": "other", "v": 68, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 56, "e": 0}, {"n": "林志成", "p": "ind", "v": 34, "e": 0}]},
-  '63000100':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5524,pct:55.24,tot:10000,elig:220493,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5524, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4231, "e": 0}, {"n": "郭璽", "p": "ind", "v": 82, "e": 0}, {"n": "唐新民", "p": "other", "v": 70, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 58, "e": 0}, {"n": "林志成", "p": "ind", "v": 35, "e": 0}]},
-  '63000110':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:4929,pct:49.29,tot:10000,elig:219458,cands:[{"n": "蔣萬安", "p": "kmt", "v": 4929, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4884, "e": 0}, {"n": "郭璽", "p": "ind", "v": 63, "e": 0}, {"n": "唐新民", "p": "other", "v": 53, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 44, "e": 0}, {"n": "林志成", "p": "ind", "v": 27, "e": 0}]},
-  '63000120':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5099,pct:50.99,tot:10000,elig:197426,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5099, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4698, "e": 0}, {"n": "郭璽", "p": "ind", "v": 68, "e": 0}, {"n": "唐新民", "p": "other", "v": 58, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 48, "e": 0}, {"n": "林志成", "p": "ind", "v": 29, "e": 0}]},
-  '67000010':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5297,pct:52.97,tot:10000,elig:62078,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5297, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4703, "e": 0}]},
-  '67000020':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6162,pct:61.62,tot:10000,elig:21122,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6162, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3838, "e": 0}]},
-  '67000030':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6263,pct:62.63,tot:10000,elig:23116,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6263, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3737, "e": 0}]},
-  '67000040':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6058,pct:60.58,tot:10000,elig:17941,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6058, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3942, "e": 0}]},
-  '67000050':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6240,pct:62.4,tot:10000,elig:19369,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6240, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3760, "e": 0}]},
-  '67000060':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5887,pct:58.87,tot:10000,elig:17209,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5887, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4113, "e": 0}]},
-  '67000070':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6722,pct:67.22,tot:10000,elig:36423,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6722, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3278, "e": 0}]},
-  '67000080':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5881,pct:58.81,tot:10000,elig:19697,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5881, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4119, "e": 0}]},
-  '67000090':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6095,pct:60.95,tot:10000,elig:18297,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6095, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3905, "e": 0}]},
-  '67000100':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6601,pct:66.01,tot:10000,elig:18070,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6601, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3399, "e": 0}]},
-  '67000110':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5833,pct:58.33,tot:10000,elig:7955,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5833, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4167, "e": 0}]},
-  '67000120':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6019,pct:60.19,tot:10000,elig:48798,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6019, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3981, "e": 0}]},
-  '67000130':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5778,pct:57.78,tot:10000,elig:21588,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5778, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4222, "e": 0}]},
-  '67000140':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6327,pct:63.27,tot:10000,elig:21211,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6327, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3673, "e": 0}]},
-  '67000150':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6051,pct:60.51,tot:10000,elig:18859,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6051, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3949, "e": 0}]},
-  '67000160':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6378,pct:63.78,tot:10000,elig:16775,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6378, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3622, "e": 0}]},
-  '67000170':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5304,pct:53.04,tot:10000,elig:9166,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5304, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4696, "e": 0}]},
-  '67000180':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5534,pct:55.34,tot:10000,elig:36152,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5534, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4466, "e": 0}]},
-  '67000190':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6187,pct:61.87,tot:10000,elig:41024,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6187, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3813, "e": 0}]},
-  '67000200':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6082,pct:60.82,tot:10000,elig:30514,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6082, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3918, "e": 0}]},
-  '67000210':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6117,pct:61.17,tot:10000,elig:25331,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6117, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3883, "e": 0}]},
-  '67000220':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5748,pct:57.48,tot:10000,elig:6190,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5748, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4252, "e": 0}]},
-  '67000230':{name:'',p:"kmt",wp:"kmt",wn:"謝龍介",v:5297,pct:52.97,tot:10000,elig:11559,cands:[{"n": "謝龍介", "p": "kmt", "v": 5297, "e": 1}, {"n": "陳亭妃", "p": "dpp", "v": 4703, "e": 0}]},
-  '67000240':{name:'',p:"kmt",wp:"kmt",wn:"謝龍介",v:5332,pct:53.32,tot:10000,elig:7946,cands:[{"n": "謝龍介", "p": "kmt", "v": 5332, "e": 1}, {"n": "陳亭妃", "p": "dpp", "v": 4668, "e": 0}]},
-  '67000250':{name:'',p:"kmt",wp:"kmt",wn:"謝龍介",v:5020,pct:50.2,tot:10000,elig:7255,cands:[{"n": "謝龍介", "p": "kmt", "v": 5020, "e": 1}, {"n": "陳亭妃", "p": "dpp", "v": 4980, "e": 0}]},
-  '67000260':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5909,pct:59.09,tot:10000,elig:4018,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5909, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4091, "e": 0}]},
-  '67000270':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5782,pct:57.82,tot:10000,elig:64586,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5782, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4218, "e": 0}]},
-  '67000280':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6103,pct:61.03,tot:10000,elig:56227,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6103, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3897, "e": 0}]},
-  '67000290':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6010,pct:60.1,tot:10000,elig:28957,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6010, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3990, "e": 0}]},
-  '67000300':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5656,pct:56.56,tot:10000,elig:3367,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5656, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4344, "e": 0}]},
-  '67000310':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5542,pct:55.42,tot:10000,elig:192041,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5542, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4458, "e": 0}]},
-  '67000320':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5366,pct:53.66,tot:10000,elig:145871,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5366, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4634, "e": 0}]},
-  '67000330':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6045,pct:60.45,tot:10000,elig:104540,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6045, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3955, "e": 0}]},
-  '67000340':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5424,pct:54.24,tot:10000,elig:105453,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5424, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4576, "e": 0}]},
-  '67000350':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5879,pct:58.79,tot:10000,elig:161423,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5879, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4121, "e": 0}]},
-  '67000360':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5667,pct:56.67,tot:10000,elig:55962,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5667, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4333, "e": 0}]},
-  '67000370':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5840,pct:58.4,tot:10000,elig:62113,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5840, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4160, "e": 0}]},
-  '10014010':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6921,pct:69.21,tot:10000,elig:84393,cands:[{"n": "吳秀華", "p": "kmt", "v": 6921, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3079, "e": 0}]},
-  '10014020':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7190,pct:71.9,tot:10000,elig:11564,cands:[{"n": "吳秀華", "p": "kmt", "v": 7190, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2810, "e": 0}]},
-  '10014030':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7546,pct:75.46,tot:10000,elig:6991,cands:[{"n": "吳秀華", "p": "kmt", "v": 7546, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2454, "e": 0}]},
-  '10014040':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7192,pct:71.92,tot:10000,elig:14432,cands:[{"n": "吳秀華", "p": "kmt", "v": 7192, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2808, "e": 0}]},
-  '10014050':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6696,pct:66.96,tot:10000,elig:6426,cands:[{"n": "吳秀華", "p": "kmt", "v": 6696, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3304, "e": 0}]},
-  '10014060':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7123,pct:71.23,tot:10000,elig:6895,cands:[{"n": "吳秀華", "p": "kmt", "v": 7123, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2877, "e": 0}]},
-  '10014070':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7184,pct:71.84,tot:10000,elig:7178,cands:[{"n": "吳秀華", "p": "kmt", "v": 7184, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2816, "e": 0}]},
-  '10014080':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7479,pct:74.79,tot:10000,elig:6016,cands:[{"n": "吳秀華", "p": "kmt", "v": 7479, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2521, "e": 0}]},
-  '10014090':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7133,pct:71.33,tot:10000,elig:9254,cands:[{"n": "吳秀華", "p": "kmt", "v": 7133, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2867, "e": 0}]},
-  '10014100':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7750,pct:77.5,tot:10000,elig:4791,cands:[{"n": "吳秀華", "p": "kmt", "v": 7750, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2250, "e": 0}]},
-  '10014110':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7848,pct:78.48,tot:10000,elig:3684,cands:[{"n": "吳秀華", "p": "kmt", "v": 7848, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2152, "e": 0}]},
-  '10014120':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:8422,pct:84.22,tot:10000,elig:3200,cands:[{"n": "吳秀華", "p": "kmt", "v": 8422, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 1578, "e": 0}]},
-  '10014130':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:8282,pct:82.82,tot:10000,elig:2865,cands:[{"n": "吳秀華", "p": "kmt", "v": 8282, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 1718, "e": 0}]},
-  '10014140':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:8212,pct:82.12,tot:10000,elig:2958,cands:[{"n": "吳秀華", "p": "kmt", "v": 8212, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 1788, "e": 0}]},
-  '10014150':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:8058,pct:80.58,tot:10000,elig:2987,cands:[{"n": "吳秀華", "p": "kmt", "v": 8058, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 1942, "e": 0}]},
-  '10014160':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7513,pct:75.13,tot:10000,elig:4219,cands:[{"n": "吳秀華", "p": "kmt", "v": 7513, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2487, "e": 0}]},
-  '10015010':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:3861,pct:38.61,tot:10000,elig:80094,cands:[{"n": "游淑貞", "p": "kmt", "v": 3861, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3343, "e": 0}, {"n": "張峻", "p": "ind", "v": 2796, "e": 0}]},
-  '10015020':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4224,pct:42.24,tot:10000,elig:9104,cands:[{"n": "游淑貞", "p": "kmt", "v": 4224, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3147, "e": 0}, {"n": "張峻", "p": "ind", "v": 2629, "e": 0}]},
-  '10015030':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4513,pct:45.13,tot:10000,elig:19156,cands:[{"n": "游淑貞", "p": "kmt", "v": 4513, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3003, "e": 0}, {"n": "張峻", "p": "ind", "v": 2484, "e": 0}]},
-  '10015040':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4278,pct:42.78,tot:10000,elig:17027,cands:[{"n": "游淑貞", "p": "kmt", "v": 4278, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3123, "e": 0}, {"n": "張峻", "p": "ind", "v": 2599, "e": 0}]},
-  '10015050':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4033,pct:40.33,tot:10000,elig:70448,cands:[{"n": "游淑貞", "p": "kmt", "v": 4033, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3251, "e": 0}, {"n": "張峻", "p": "ind", "v": 2716, "e": 0}]},
-  '10015060':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4164,pct:41.64,tot:10000,elig:14999,cands:[{"n": "游淑貞", "p": "kmt", "v": 4164, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3194, "e": 0}, {"n": "張峻", "p": "ind", "v": 2642, "e": 0}]},
-  '10015070':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4214,pct:42.14,tot:10000,elig:10582,cands:[{"n": "游淑貞", "p": "kmt", "v": 4214, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3182, "e": 0}, {"n": "張峻", "p": "ind", "v": 2604, "e": 0}]},
-  '10015080':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4494,pct:44.94,tot:10000,elig:3908,cands:[{"n": "游淑貞", "p": "kmt", "v": 4494, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3019, "e": 0}, {"n": "張峻", "p": "ind", "v": 2487, "e": 0}]},
-  '10015090':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4651,pct:46.51,tot:10000,elig:9550,cands:[{"n": "游淑貞", "p": "kmt", "v": 4651, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2915, "e": 0}, {"n": "張峻", "p": "ind", "v": 2434, "e": 0}]},
-  '10015100':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4831,pct:48.31,tot:10000,elig:8502,cands:[{"n": "游淑貞", "p": "kmt", "v": 4831, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2812, "e": 0}, {"n": "張峻", "p": "ind", "v": 2357, "e": 0}]},
-  '10015110':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4717,pct:47.17,tot:10000,elig:13008,cands:[{"n": "游淑貞", "p": "kmt", "v": 4717, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2899, "e": 0}, {"n": "張峻", "p": "ind", "v": 2384, "e": 0}]},
-  '10015120':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:5084,pct:50.84,tot:10000,elig:4938,cands:[{"n": "游淑貞", "p": "kmt", "v": 5084, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2681, "e": 0}, {"n": "張峻", "p": "ind", "v": 2235, "e": 0}]},
-  '10015130':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:5061,pct:50.61,tot:10000,elig:4742,cands:[{"n": "游淑貞", "p": "kmt", "v": 5061, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2695, "e": 0}, {"n": "張峻", "p": "ind", "v": 2244, "e": 0}]},
+  '10007010':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4813,pct:48.13,tot:10000,elig:183451,cands:[{"n": "陳素月", "p": "dpp", "v": 4813, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2647, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2540, "e": 0}]},
+  '10007020':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4323,pct:43.23,tot:10000,elig:68446,cands:[{"n": "陳素月", "p": "dpp", "v": 4323, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3155, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2522, "e": 0}]},
+  '10007030':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4423,pct:44.23,tot:10000,elig:72790,cands:[{"n": "陳素月", "p": "dpp", "v": 4423, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3026, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2551, "e": 0}]},
+  '10007040':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4243,pct:42.43,tot:10000,elig:13596,cands:[{"n": "陳素月", "p": "dpp", "v": 4243, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3219, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2538, "e": 0}]},
+  '10007050':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4125,pct:41.25,tot:10000,elig:30693,cands:[{"n": "陳素月", "p": "dpp", "v": 4125, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3330, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2545, "e": 0}]},
+  '10007060':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4188,pct:41.88,tot:10000,elig:38091,cands:[{"n": "陳素月", "p": "dpp", "v": 4188, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3279, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2533, "e": 0}]},
+  '10007070':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4271,pct:42.71,tot:10000,elig:31353,cands:[{"n": "陳素月", "p": "dpp", "v": 4271, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3166, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2563, "e": 0}]},
+  '10007080':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4739,pct:47.39,tot:10000,elig:37380,cands:[{"n": "陳素月", "p": "dpp", "v": 4739, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2697, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2564, "e": 0}]},
+  '10007090':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5639,pct:56.39,tot:10000,elig:19366,cands:[{"n": "陳素月", "p": "dpp", "v": 5639, "e": 1}, {"n": "邱建富", "p": "ind", "v": 2534, "e": 0}, {"n": "魏平政", "p": "kmt", "v": 1827, "e": 0}]},
+  '10007100':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4723,pct:47.23,tot:10000,elig:98662,cands:[{"n": "陳素月", "p": "dpp", "v": 4723, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2700, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2577, "e": 0}]},
+  '10007110':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4515,pct:45.15,tot:10000,elig:43448,cands:[{"n": "陳素月", "p": "dpp", "v": 4515, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2914, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2571, "e": 0}]},
+  '10007120':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5063,pct:50.63,tot:10000,elig:33589,cands:[{"n": "陳素月", "p": "dpp", "v": 5063, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2313, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2624, "e": 0}]},
+  '10007130':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4701,pct:47.01,tot:10000,elig:33111,cands:[{"n": "陳素月", "p": "dpp", "v": 4701, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2693, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2606, "e": 0}]},
+  '10007140':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:3836,pct:38.36,tot:10000,elig:26808,cands:[{"n": "陳素月", "p": "dpp", "v": 3836, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3586, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2578, "e": 0}]},
+  '10007150':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4858,pct:48.58,tot:10000,elig:28814,cands:[{"n": "陳素月", "p": "dpp", "v": 4858, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2550, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2592, "e": 0}]},
+  '10007160':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4825,pct:48.25,tot:10000,elig:29709,cands:[{"n": "陳素月", "p": "dpp", "v": 4825, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2580, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2595, "e": 0}]},
+  '10007170':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5057,pct:50.57,tot:10000,elig:34922,cands:[{"n": "陳素月", "p": "dpp", "v": 5057, "e": 1}, {"n": "邱建富", "p": "ind", "v": 2642, "e": 0}, {"n": "魏平政", "p": "kmt", "v": 2301, "e": 0}]},
+  '10007180':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4913,pct:49.13,tot:10000,elig:12431,cands:[{"n": "陳素月", "p": "dpp", "v": 4913, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2489, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2598, "e": 0}]},
+  '10007190':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4684,pct:46.84,tot:10000,elig:27061,cands:[{"n": "陳素月", "p": "dpp", "v": 4684, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2746, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2570, "e": 0}]},
+  '10007200':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4118,pct:41.18,tot:10000,elig:40941,cands:[{"n": "陳素月", "p": "dpp", "v": 4118, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3289, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2593, "e": 0}]},
+  '10007210':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4845,pct:48.45,tot:10000,elig:22124,cands:[{"n": "陳素月", "p": "dpp", "v": 4845, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2558, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2597, "e": 0}]},
+  '10007220':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4859,pct:48.59,tot:10000,elig:24463,cands:[{"n": "陳素月", "p": "dpp", "v": 4859, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2550, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2591, "e": 0}]},
+  '10007230':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4389,pct:43.89,tot:10000,elig:27393,cands:[{"n": "陳素月", "p": "dpp", "v": 4389, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3051, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2560, "e": 0}]},
+  '10007240':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4324,pct:43.24,tot:10000,elig:13609,cands:[{"n": "陳素月", "p": "dpp", "v": 4324, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 3084, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2592, "e": 0}]},
+  '10007250':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:4705,pct:47.05,tot:10000,elig:12048,cands:[{"n": "陳素月", "p": "dpp", "v": 4705, "e": 1}, {"n": "魏平政", "p": "kmt", "v": 2721, "e": 0}, {"n": "邱建富", "p": "ind", "v": 2574, "e": 0}]},
+  '10007260':{name:'',p:"dpp",wp:"dpp",wn:"陳素月",v:5293,pct:52.93,tot:10000,elig:24307,cands:[{"n": "陳素月", "p": "dpp", "v": 5293, "e": 1}, {"n": "邱建富", "p": "ind", "v": 2617, "e": 0}, {"n": "魏平政", "p": "kmt", "v": 2090, "e": 0}]},
+  '65000010':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5054,pct:50.54,tot:10000,elig:451072,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5054, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4729, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 217, "e": 0}]},
+  '65000020':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5409,pct:54.09,tot:10000,elig:319770,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5409, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4377, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 214, "e": 0}]},
+  '65000030':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5436,pct:54.36,tot:10000,elig:342192,cands:[{"n": "李四川", "p": "kmt", "v": 5436, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4342, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 222, "e": 0}]},
+  '65000040':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5653,pct:56.53,tot:10000,elig:175828,cands:[{"n": "李四川", "p": "kmt", "v": 5653, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4124, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 223, "e": 0}]},
+  '65000050':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5146,pct:51.46,tot:10000,elig:340775,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5146, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4638, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 216, "e": 0}]},
+  '65000060':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5763,pct:57.63,tot:10000,elig:254934,cands:[{"n": "李四川", "p": "kmt", "v": 5763, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4013, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 224, "e": 0}]},
+  '65000070':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5008,pct:50.08,tot:10000,elig:147303,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5008, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4776, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 216, "e": 0}]},
+  '65000080':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:4909,pct:49.09,tot:10000,elig:72376,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 4909, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4873, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 218, "e": 0}]},
+  '65000090':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5025,pct:50.25,tot:10000,elig:93094,cands:[{"n": "李四川", "p": "kmt", "v": 5025, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4756, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 219, "e": 0}]},
+  '65000100':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5269,pct:52.69,tot:10000,elig:155852,cands:[{"n": "李四川", "p": "kmt", "v": 5269, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4510, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 221, "e": 0}]},
+  '65000110':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5257,pct:52.57,tot:10000,elig:175020,cands:[{"n": "李四川", "p": "kmt", "v": 5257, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4523, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 220, "e": 0}]},
+  '65000120':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5458,pct:54.58,tot:10000,elig:32915,cands:[{"n": "李四川", "p": "kmt", "v": 5458, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4320, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 222, "e": 0}]},
+  '65000130':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:4912,pct:49.12,tot:10000,elig:197795,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 4912, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4870, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 218, "e": 0}]},
+  '65000140':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5426,pct:54.26,tot:10000,elig:164290,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5426, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4360, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 214, "e": 0}]},
+  '65000150':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5058,pct:50.58,tot:10000,elig:75855,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5058, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4726, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 216, "e": 0}]},
+  '65000160':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5003,pct:50.03,tot:10000,elig:62281,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5003, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4781, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 216, "e": 0}]},
+  '65000170':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5138,pct:51.38,tot:10000,elig:96248,cands:[{"n": "李四川", "p": "kmt", "v": 5138, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4642, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 220, "e": 0}]},
+  '65000180':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5186,pct:51.86,tot:10000,elig:20193,cands:[{"n": "李四川", "p": "kmt", "v": 5186, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4595, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 219, "e": 0}]},
+  '65000190':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5477,pct:54.77,tot:10000,elig:6498,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5477, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4310, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 213, "e": 0}]},
+  '65000200':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5468,pct:54.68,tot:10000,elig:5879,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5468, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4319, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 213, "e": 0}]},
+  '65000210':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5397,pct:53.97,tot:10000,elig:19306,cands:[{"n": "李四川", "p": "kmt", "v": 5397, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4382, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 221, "e": 0}]},
+  '65000220':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5279,pct:52.79,tot:10000,elig:9687,cands:[{"n": "李四川", "p": "kmt", "v": 5279, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4501, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 220, "e": 0}]},
+  '65000230':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:4969,pct:49.69,tot:10000,elig:34151,cands:[{"n": "李四川", "p": "kmt", "v": 4969, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4813, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 218, "e": 0}]},
+  '65000240':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5044,pct:50.44,tot:10000,elig:3964,cands:[{"n": "李四川", "p": "kmt", "v": 5044, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4738, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 218, "e": 0}]},
+  '65000250':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:5043,pct:50.43,tot:10000,elig:7369,cands:[{"n": "李四川", "p": "kmt", "v": 5043, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4739, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 218, "e": 0}]},
+  '65000260':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:5737,pct:57.37,tot:10000,elig:10336,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 5737, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4052, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 211, "e": 0}]},
+  '65000270':{name:'',p:"dpp",wp:"dpp",wn:"蘇巧慧",v:4932,pct:49.32,tot:10000,elig:18000,cands:[{"n": "蘇巧慧", "p": "dpp", "v": 4932, "e": 1}, {"n": "李四川", "p": "kmt", "v": 4851, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 217, "e": 0}]},
+  '65000280':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:4979,pct:49.79,tot:10000,elig:18420,cands:[{"n": "李四川", "p": "kmt", "v": 4979, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 4803, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 218, "e": 0}]},
+  '65000290':{name:'',p:"kmt",wp:"kmt",wn:"李四川",v:6035,pct:60.35,tot:10000,elig:5114,cands:[{"n": "李四川", "p": "kmt", "v": 6035, "e": 1}, {"n": "蘇巧慧", "p": "dpp", "v": 3739, "e": 0}, {"n": "蘇輝湟", "p": "ind", "v": 226, "e": 0}]},
+  '10018010':{name:'',p:"ind",wp:"ind",wn:"高虹安",v:5729,pct:57.29,tot:10000,elig:164026,cands:[{"n": "高虹安", "p": "ind", "v": 5729, "e": 1}, {"n": "莊競程", "p": "dpp", "v": 3823, "e": 0}, {"n": "何志勇", "p": "kmt", "v": 448, "e": 0}]},
+  '10018020':{name:'',p:"ind",wp:"ind",wn:"高虹安",v:5249,pct:52.49,tot:10000,elig:122034,cands:[{"n": "高虹安", "p": "ind", "v": 5249, "e": 1}, {"n": "莊競程", "p": "dpp", "v": 4302, "e": 0}, {"n": "何志勇", "p": "kmt", "v": 449, "e": 0}]},
+  '10018030':{name:'',p:"ind",wp:"ind",wn:"高虹安",v:4922,pct:49.22,tot:10000,elig:64698,cands:[{"n": "高虹安", "p": "ind", "v": 4922, "e": 1}, {"n": "莊競程", "p": "dpp", "v": 4629, "e": 0}, {"n": "何志勇", "p": "kmt", "v": 449, "e": 0}]},
+  '10004010':{name:'',p:"dpp",wp:"dpp",wn:"鄭朝方",v:5305,pct:53.05,tot:10000,elig:148551,cands:[{"n": "鄭朝方", "p": "dpp", "v": 5305, "e": 1}, {"n": "徐欣瑩", "p": "kmt", "v": 4443, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 252, "e": 0}]},
+  '10004020':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5010,pct:50.1,tot:10000,elig:77666,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5010, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4690, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 300, "e": 0}]},
+  '10004030':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5110,pct:51.1,tot:10000,elig:28475,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5110, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4582, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 308, "e": 0}]},
+  '10004040':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5203,pct:52.03,tot:10000,elig:23240,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5203, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4481, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 316, "e": 0}]},
+  '10004050':{name:'',p:"dpp",wp:"dpp",wn:"鄭朝方",v:5436,pct:54.36,tot:10000,elig:64996,cands:[{"n": "鄭朝方", "p": "dpp", "v": 5436, "e": 1}, {"n": "徐欣瑩", "p": "kmt", "v": 4322, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 242, "e": 0}]},
+  '10004060':{name:'',p:"dpp",wp:"dpp",wn:"鄭朝方",v:5124,pct:51.24,tot:10000,elig:46193,cands:[{"n": "鄭朝方", "p": "dpp", "v": 5124, "e": 1}, {"n": "徐欣瑩", "p": "kmt", "v": 4610, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 266, "e": 0}]},
+  '10004070':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5362,pct:53.62,tot:10000,elig:17157,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5362, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4308, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 330, "e": 0}]},
+  '10004080':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5546,pct:55.46,tot:10000,elig:10638,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5546, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4109, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 345, "e": 0}]},
+  '10004090':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5429,pct:54.29,tot:10000,elig:7616,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5429, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4235, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 336, "e": 0}]},
+  '10004100':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:5632,pct:56.32,tot:10000,elig:12512,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 5632, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 4015, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 353, "e": 0}]},
+  '10004110':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:6193,pct:61.93,tot:10000,elig:4782,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 6193, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 3408, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 399, "e": 0}]},
+  '10004120':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:6597,pct:65.97,tot:10000,elig:7111,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 6597, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 2969, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 434, "e": 0}]},
+  '10004130':{name:'',p:"kmt",wp:"kmt",wn:"徐欣瑩",v:6794,pct:67.94,tot:10000,elig:3783,cands:[{"n": "徐欣瑩", "p": "kmt", "v": 6794, "e": 1}, {"n": "鄭朝方", "p": "dpp", "v": 2756, "e": 0}, {"n": "朱定瑀", "p": "ind", "v": 450, "e": 0}]},
+  '68000010':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6423,pct:64.23,tot:10000,elig:366627,cands:[{"n": "張善政", "p": "kmt", "v": 6423, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3577, "e": 0}]},
+  '68000020':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6753,pct:67.53,tot:10000,elig:338619,cands:[{"n": "張善政", "p": "kmt", "v": 6753, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3247, "e": 0}]},
+  '68000030':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:5886,pct:58.86,tot:10000,elig:77228,cands:[{"n": "張善政", "p": "kmt", "v": 5886, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 4114, "e": 0}]},
+  '68000040':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6850,pct:68.5,tot:10000,elig:141846,cands:[{"n": "張善政", "p": "kmt", "v": 6850, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3150, "e": 0}]},
+  '68000050':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:5866,pct:58.66,tot:10000,elig:130434,cands:[{"n": "張善政", "p": "kmt", "v": 5866, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 4134, "e": 0}]},
+  '68000060':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:5877,pct:58.77,tot:10000,elig:69701,cands:[{"n": "張善政", "p": "kmt", "v": 5877, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 4123, "e": 0}]},
+  '68000070':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6214,pct:62.14,tot:10000,elig:138494,cands:[{"n": "張善政", "p": "kmt", "v": 6214, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3786, "e": 0}]},
+  '68000080':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6492,pct:64.92,tot:10000,elig:168451,cands:[{"n": "張善政", "p": "kmt", "v": 6492, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3508, "e": 0}]},
+  '68000090':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:7055,pct:70.55,tot:10000,elig:101501,cands:[{"n": "張善政", "p": "kmt", "v": 7055, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 2945, "e": 0}]},
+  '68000100':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:6656,pct:66.56,tot:10000,elig:182430,cands:[{"n": "張善政", "p": "kmt", "v": 6656, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 3344, "e": 0}]},
+  '68000110':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:5889,pct:58.89,tot:10000,elig:41069,cands:[{"n": "張善政", "p": "kmt", "v": 5889, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 4111, "e": 0}]},
+  '68000120':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:5552,pct:55.52,tot:10000,elig:58603,cands:[{"n": "張善政", "p": "kmt", "v": 5552, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 4448, "e": 0}]},
+  '68000130':{name:'',p:"kmt",wp:"kmt",wn:"張善政",v:8156,pct:81.56,tot:10000,elig:10124,cands:[{"n": "張善政", "p": "kmt", "v": 8156, "e": 1}, {"n": "黃世杰", "p": "dpp", "v": 1844, "e": 0}]},
+  '10016010':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3826,pct:38.26,tot:10000,elig:52839,cands:[{"n": "陳振中", "p": "kmt", "v": 3826, "e": 1}, {"n": "葉竹林", "p": "ind", "v": 2387, "e": 0}, {"n": "吳淑瑾", "p": "dpp", "v": 2312, "e": 0}, {"n": "許智富", "p": "ind", "v": 618, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 525, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 332, "e": 0}]},
+  '10016020':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3393,pct:33.93,tot:10000,elig:13505,cands:[{"n": "陳振中", "p": "kmt", "v": 3393, "e": 1}, {"n": "吳淑瑾", "p": "dpp", "v": 3194, "e": 0}, {"n": "葉竹林", "p": "ind", "v": 2291, "e": 0}, {"n": "許智富", "p": "ind", "v": 437, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 346, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 339, "e": 0}]},
+  '10016030':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3501,pct:35.01,tot:10000,elig:8622,cands:[{"n": "陳振中", "p": "kmt", "v": 3501, "e": 1}, {"n": "葉竹林", "p": "ind", "v": 2413, "e": 0}, {"n": "吳淑瑾", "p": "dpp", "v": 2515, "e": 0}, {"n": "許智富", "p": "ind", "v": 668, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 575, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 328, "e": 0}]},
+  '10016040':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:3302,pct:33.02,tot:10000,elig:7261,cands:[{"n": "陳振中", "p": "kmt", "v": 3302, "e": 1}, {"n": "葉竹林", "p": "ind", "v": 2435, "e": 0}, {"n": "吳淑瑾", "p": "dpp", "v": 2614, "e": 0}, {"n": "許智富", "p": "ind", "v": 708, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 617, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 324, "e": 0}]},
+  '10016050':{name:'',p:"dpp",wp:"dpp",wn:"吳淑瑾",v:5044,pct:50.44,tot:10000,elig:4777,cands:[{"n": "吳淑瑾", "p": "dpp", "v": 5044, "e": 1}, {"n": "陳振中", "p": "kmt", "v": 2935, "e": 0}, {"n": "葉竹林", "p": "ind", "v": 1601, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 376, "e": 0}, {"n": "許智富", "p": "ind", "v": 25, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 19, "e": 0}]},
+  '10016060':{name:'',p:"kmt",wp:"kmt",wn:"陳振中",v:4994,pct:49.94,tot:10000,elig:3356,cands:[{"n": "陳振中", "p": "kmt", "v": 4994, "e": 1}, {"n": "吳淑瑾", "p": "dpp", "v": 3138, "e": 0}, {"n": "葉竹林", "p": "ind", "v": 1448, "e": 0}, {"n": "周倪安", "p": "tsu", "v": 376, "e": 0}, {"n": "許智富", "p": "ind", "v": 25, "e": 0}, {"n": "陳盡川", "p": "ind", "v": 19, "e": 0}]},
+  '66000010':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5353,pct:53.53,tot:10000,elig:13521,cands:[{"n": "江啟臣", "p": "kmt", "v": 5353, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4647, "e": 0}]},
+  '66000020':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5507,pct:55.07,tot:10000,elig:63037,cands:[{"n": "江啟臣", "p": "kmt", "v": 5507, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4493, "e": 0}]},
+  '66000030':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5818,pct:58.18,tot:10000,elig:102553,cands:[{"n": "江啟臣", "p": "kmt", "v": 5818, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4182, "e": 0}]},
+  '66000040':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5612,pct:56.12,tot:10000,elig:90086,cands:[{"n": "江啟臣", "p": "kmt", "v": 5612, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4388, "e": 0}]},
+  '66000050':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5908,pct:59.08,tot:10000,elig:118882,cands:[{"n": "江啟臣", "p": "kmt", "v": 5908, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4092, "e": 0}]},
+  '66000060':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5984,pct:59.84,tot:10000,elig:183033,cands:[{"n": "江啟臣", "p": "kmt", "v": 5984, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4016, "e": 0}]},
+  '66000070':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5790,pct:57.9,tot:10000,elig:138694,cands:[{"n": "江啟臣", "p": "kmt", "v": 5790, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4210, "e": 0}]},
+  '66000080':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6078,pct:60.78,tot:10000,elig:235986,cands:[{"n": "江啟臣", "p": "kmt", "v": 6078, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3922, "e": 0}]},
+  '66000090':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5505,pct:55.05,tot:10000,elig:132286,cands:[{"n": "江啟臣", "p": "kmt", "v": 5505, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4495, "e": 0}]},
+  '66000100':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6458,pct:64.58,tot:10000,elig:40912,cands:[{"n": "江啟臣", "p": "kmt", "v": 6458, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3542, "e": 0}]},
+  '66000110':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5134,pct:51.34,tot:10000,elig:60242,cands:[{"n": "江啟臣", "p": "kmt", "v": 5134, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4866, "e": 0}]},
+  '66000120':{name:'',p:"dpp",wp:"dpp",wn:"何欣純",v:5265,pct:52.65,tot:10000,elig:72612,cands:[{"n": "何欣純", "p": "dpp", "v": 5265, "e": 1}, {"n": "江啟臣", "p": "kmt", "v": 4735, "e": 0}]},
+  '66000130':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5465,pct:54.65,tot:10000,elig:75295,cands:[{"n": "江啟臣", "p": "kmt", "v": 5465, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4535, "e": 0}]},
+  '66000140':{name:'',p:"dpp",wp:"dpp",wn:"何欣純",v:5135,pct:51.35,tot:10000,elig:47647,cands:[{"n": "江啟臣", "p": "kmt", "v": 4865, "e": 0}, {"n": "何欣純", "p": "dpp", "v": 5135, "e": 1}]},
+  '66000150':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5880,pct:58.8,tot:10000,elig:43678,cands:[{"n": "江啟臣", "p": "kmt", "v": 5880, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4120, "e": 0}]},
+  '66000160':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5331,pct:53.31,tot:10000,elig:53056,cands:[{"n": "江啟臣", "p": "kmt", "v": 5331, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4669, "e": 0}]},
+  '66000170':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5797,pct:57.97,tot:10000,elig:88683,cands:[{"n": "江啟臣", "p": "kmt", "v": 5797, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4203, "e": 0}]},
+  '66000180':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5999,pct:59.99,tot:10000,elig:76112,cands:[{"n": "江啟臣", "p": "kmt", "v": 5999, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4001, "e": 0}]},
+  '66000190':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6085,pct:60.85,tot:10000,elig:19883,cands:[{"n": "江啟臣", "p": "kmt", "v": 6085, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3915, "e": 0}]},
+  '66000200':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:6267,pct:62.67,tot:10000,elig:12186,cands:[{"n": "江啟臣", "p": "kmt", "v": 6267, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 3733, "e": 0}]},
+  '66000210':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5671,pct:56.71,tot:10000,elig:26147,cands:[{"n": "江啟臣", "p": "kmt", "v": 5671, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4329, "e": 0}]},
+  '66000220':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5164,pct:51.64,tot:10000,elig:15646,cands:[{"n": "江啟臣", "p": "kmt", "v": 5164, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4836, "e": 0}]},
+  '66000230':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5754,pct:57.54,tot:10000,elig:62727,cands:[{"n": "江啟臣", "p": "kmt", "v": 5754, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4246, "e": 0}]},
+  '66000240':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5834,pct:58.34,tot:10000,elig:46385,cands:[{"n": "江啟臣", "p": "kmt", "v": 5834, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4166, "e": 0}]},
+  '66000250':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5488,pct:54.88,tot:10000,elig:63070,cands:[{"n": "江啟臣", "p": "kmt", "v": 5488, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4512, "e": 0}]},
+  '66000260':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5907,pct:59.07,tot:10000,elig:53585,cands:[{"n": "江啟臣", "p": "kmt", "v": 5907, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4093, "e": 0}]},
+  '66000270':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5792,pct:57.92,tot:10000,elig:159004,cands:[{"n": "江啟臣", "p": "kmt", "v": 5792, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4208, "e": 0}]},
+  '66000280':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:5713,pct:57.13,tot:10000,elig:169873,cands:[{"n": "江啟臣", "p": "kmt", "v": 5713, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 4287, "e": 0}]},
+  '66000290':{name:'',p:"kmt",wp:"kmt",wn:"江啟臣",v:7393,pct:73.93,tot:10000,elig:9286,cands:[{"n": "江啟臣", "p": "kmt", "v": 7393, "e": 1}, {"n": "何欣純", "p": "dpp", "v": 2607, "e": 0}]},
+  '63000010':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5161,pct:51.61,tot:10000,elig:151159,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5161, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4710, "e": 0}, {"n": "林志成", "p": "ind", "v": 32, "e": 0}, {"n": "郭璽", "p": "ind", "v": 28, "e": 0}, {"n": "唐新民", "p": "other", "v": 47, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 22, "e": 0}]},
+  '63000020':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5203,pct:52.03,tot:10000,elig:170907,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5203, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4664, "e": 0}, {"n": "林志成", "p": "ind", "v": 32, "e": 0}, {"n": "郭璽", "p": "ind", "v": 30, "e": 0}, {"n": "唐新民", "p": "other", "v": 48, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 23, "e": 0}]},
+  '63000030':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5234,pct:52.34,tot:10000,elig:223525,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5234, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4630, "e": 0}, {"n": "林志成", "p": "ind", "v": 33, "e": 0}, {"n": "郭璽", "p": "ind", "v": 31, "e": 0}, {"n": "唐新民", "p": "other", "v": 49, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 23, "e": 0}]},
+  '63000040':{name:'',p:"dpp",wp:"dpp",wn:"沈伯洋",v:5021,pct:50.21,tot:10000,elig:176271,cands:[{"n": "蔣萬安", "p": "kmt", "v": 4878, "e": 0}, {"n": "沈伯洋", "p": "dpp", "v": 5021, "e": 1}, {"n": "林志成", "p": "ind", "v": 28, "e": 0}, {"n": "郭璽", "p": "ind", "v": 19, "e": 0}, {"n": "唐新民", "p": "other", "v": 39, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 15, "e": 0}]},
+  '63000050':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5108,pct:51.08,tot:10000,elig:115582,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5108, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4768, "e": 0}, {"n": "林志成", "p": "ind", "v": 31, "e": 0}, {"n": "郭璽", "p": "ind", "v": 28, "e": 0}, {"n": "唐新民", "p": "other", "v": 45, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 20, "e": 0}]},
+  '63000060':{name:'',p:"dpp",wp:"dpp",wn:"沈伯洋",v:5811,pct:58.11,tot:10000,elig:98209,cands:[{"n": "沈伯洋", "p": "dpp", "v": 5811, "e": 1}, {"n": "蔣萬安", "p": "kmt", "v": 4153, "e": 0}, {"n": "林志成", "p": "ind", "v": 18, "e": 0}, {"n": "郭璽", "p": "ind", "v": 0, "e": 0}, {"n": "唐新民", "p": "other", "v": 18, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 0, "e": 0}]},
+  '63000070':{name:'',p:"dpp",wp:"dpp",wn:"沈伯洋",v:5126,pct:51.26,tot:10000,elig:148984,cands:[{"n": "沈伯洋", "p": "dpp", "v": 5126, "e": 1}, {"n": "蔣萬安", "p": "kmt", "v": 4782, "e": 0}, {"n": "林志成", "p": "ind", "v": 27, "e": 0}, {"n": "郭璽", "p": "ind", "v": 16, "e": 0}, {"n": "唐新民", "p": "other", "v": 36, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 13, "e": 0}]},
+  '63000080':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5568,pct:55.68,tot:10000,elig:210341,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5568, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4263, "e": 0}, {"n": "郭璽", "p": "ind", "v": 42, "e": 0}, {"n": "林志成", "p": "ind", "v": 38, "e": 0}, {"n": "唐新民", "p": "other", "v": 58, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 31, "e": 0}]},
+  '63000090':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5016,pct:50.16,tot:10000,elig:94414,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5016, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4870, "e": 0}, {"n": "林志成", "p": "ind", "v": 30, "e": 0}, {"n": "郭璽", "p": "ind", "v": 23, "e": 0}, {"n": "唐新民", "p": "other", "v": 43, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 18, "e": 0}]},
+  '63000100':{name:'',p:"kmt",wp:"kmt",wn:"蔣萬安",v:5105,pct:51.05,tot:10000,elig:220493,cands:[{"n": "蔣萬安", "p": "kmt", "v": 5105, "e": 1}, {"n": "沈伯洋", "p": "dpp", "v": 4772, "e": 0}, {"n": "林志成", "p": "ind", "v": 31, "e": 0}, {"n": "郭璽", "p": "ind", "v": 27, "e": 0}, {"n": "唐新民", "p": "other", "v": 45, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 20, "e": 0}]},
+  '63000110':{name:'',p:"dpp",wp:"dpp",wn:"沈伯洋",v:5425,pct:54.25,tot:10000,elig:219458,cands:[{"n": "沈伯洋", "p": "dpp", "v": 5425, "e": 1}, {"n": "蔣萬安", "p": "kmt", "v": 4510, "e": 0}, {"n": "林志成", "p": "ind", "v": 23, "e": 0}, {"n": "郭璽", "p": "ind", "v": 8, "e": 0}, {"n": "唐新民", "p": "other", "v": 28, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 6, "e": 0}]},
+  '63000120':{name:'',p:"dpp",wp:"dpp",wn:"沈伯洋",v:5239,pct:52.39,tot:10000,elig:197426,cands:[{"n": "沈伯洋", "p": "dpp", "v": 5239, "e": 1}, {"n": "蔣萬安", "p": "kmt", "v": 4680, "e": 0}, {"n": "林志成", "p": "ind", "v": 25, "e": 0}, {"n": "郭璽", "p": "ind", "v": 13, "e": 0}, {"n": "唐新民", "p": "other", "v": 33, "e": 0}, {"n": "蕭文乾", "p": "ind", "v": 10, "e": 0}]},
+  '67000010':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6494,pct:64.94,tot:10000,elig:62078,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6494, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3506, "e": 0}]},
+  '67000020':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7359,pct:73.59,tot:10000,elig:21122,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7359, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2641, "e": 0}]},
+  '67000030':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7460,pct:74.6,tot:10000,elig:23116,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7460, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2540, "e": 0}]},
+  '67000040':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7255,pct:72.55,tot:10000,elig:17941,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7255, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2745, "e": 0}]},
+  '67000050':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7437,pct:74.37,tot:10000,elig:19369,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7437, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2563, "e": 0}]},
+  '67000060':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7084,pct:70.84,tot:10000,elig:17209,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7084, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2916, "e": 0}]},
+  '67000070':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7919,pct:79.19,tot:10000,elig:36423,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7919, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2081, "e": 0}]},
+  '67000080':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7078,pct:70.78,tot:10000,elig:19697,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7078, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2922, "e": 0}]},
+  '67000090':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7292,pct:72.92,tot:10000,elig:18297,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7292, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2708, "e": 0}]},
+  '67000100':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7798,pct:77.98,tot:10000,elig:18070,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7798, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2202, "e": 0}]},
+  '67000110':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7030,pct:70.3,tot:10000,elig:7955,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7030, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2970, "e": 0}]},
+  '67000120':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7216,pct:72.16,tot:10000,elig:48798,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7216, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2784, "e": 0}]},
+  '67000130':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6975,pct:69.75,tot:10000,elig:21588,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6975, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3025, "e": 0}]},
+  '67000140':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7524,pct:75.24,tot:10000,elig:21211,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7524, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2476, "e": 0}]},
+  '67000150':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7248,pct:72.48,tot:10000,elig:18859,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7248, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2752, "e": 0}]},
+  '67000160':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7575,pct:75.75,tot:10000,elig:16775,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7575, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2425, "e": 0}]},
+  '67000170':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6501,pct:65.01,tot:10000,elig:9166,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6501, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3499, "e": 0}]},
+  '67000180':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6731,pct:67.31,tot:10000,elig:36152,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6731, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3269, "e": 0}]},
+  '67000190':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7384,pct:73.84,tot:10000,elig:41024,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7384, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2616, "e": 0}]},
+  '67000200':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7279,pct:72.79,tot:10000,elig:30514,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7279, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2721, "e": 0}]},
+  '67000210':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7314,pct:73.14,tot:10000,elig:25331,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7314, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2686, "e": 0}]},
+  '67000220':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6945,pct:69.45,tot:10000,elig:6190,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6945, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3055, "e": 0}]},
+  '67000230':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5900,pct:59.0,tot:10000,elig:11559,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5900, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4100, "e": 0}]},
+  '67000240':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:5865,pct:58.65,tot:10000,elig:7946,cands:[{"n": "陳亭妃", "p": "dpp", "v": 5865, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 4135, "e": 0}]},
+  '67000250':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6177,pct:61.77,tot:10000,elig:7255,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6177, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3823, "e": 0}]},
+  '67000260':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7106,pct:71.06,tot:10000,elig:4018,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7106, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2894, "e": 0}]},
+  '67000270':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6979,pct:69.79,tot:10000,elig:64586,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6979, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3021, "e": 0}]},
+  '67000280':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7300,pct:73.0,tot:10000,elig:56227,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7300, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2700, "e": 0}]},
+  '67000290':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7207,pct:72.07,tot:10000,elig:28957,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7207, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2793, "e": 0}]},
+  '67000300':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6853,pct:68.53,tot:10000,elig:3367,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6853, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3147, "e": 0}]},
+  '67000310':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6739,pct:67.39,tot:10000,elig:192041,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6739, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3261, "e": 0}]},
+  '67000320':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6563,pct:65.63,tot:10000,elig:145871,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6563, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3437, "e": 0}]},
+  '67000330':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7242,pct:72.42,tot:10000,elig:104540,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7242, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2758, "e": 0}]},
+  '67000340':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6621,pct:66.21,tot:10000,elig:105453,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6621, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3379, "e": 0}]},
+  '67000350':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7076,pct:70.76,tot:10000,elig:161423,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7076, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2924, "e": 0}]},
+  '67000360':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:6864,pct:68.64,tot:10000,elig:55962,cands:[{"n": "陳亭妃", "p": "dpp", "v": 6864, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 3136, "e": 0}]},
+  '67000370':{name:'',p:"dpp",wp:"dpp",wn:"陳亭妃",v:7037,pct:70.37,tot:10000,elig:62113,cands:[{"n": "陳亭妃", "p": "dpp", "v": 7037, "e": 1}, {"n": "謝龍介", "p": "kmt", "v": 2963, "e": 0}]},
+  '10014010':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6615,pct:66.15,tot:10000,elig:84393,cands:[{"n": "吳秀華", "p": "kmt", "v": 6615, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3385, "e": 0}]},
+  '10014020':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6884,pct:68.84,tot:10000,elig:11564,cands:[{"n": "吳秀華", "p": "kmt", "v": 6884, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3116, "e": 0}]},
+  '10014030':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7240,pct:72.4,tot:10000,elig:6991,cands:[{"n": "吳秀華", "p": "kmt", "v": 7240, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2760, "e": 0}]},
+  '10014040':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6886,pct:68.86,tot:10000,elig:14432,cands:[{"n": "吳秀華", "p": "kmt", "v": 6886, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3114, "e": 0}]},
+  '10014050':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6390,pct:63.9,tot:10000,elig:6426,cands:[{"n": "吳秀華", "p": "kmt", "v": 6390, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3610, "e": 0}]},
+  '10014060':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6817,pct:68.17,tot:10000,elig:6895,cands:[{"n": "吳秀華", "p": "kmt", "v": 6817, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3183, "e": 0}]},
+  '10014070':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6878,pct:68.78,tot:10000,elig:7178,cands:[{"n": "吳秀華", "p": "kmt", "v": 6878, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3122, "e": 0}]},
+  '10014080':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7173,pct:71.73,tot:10000,elig:6016,cands:[{"n": "吳秀華", "p": "kmt", "v": 7173, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2827, "e": 0}]},
+  '10014090':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:6827,pct:68.27,tot:10000,elig:9254,cands:[{"n": "吳秀華", "p": "kmt", "v": 6827, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 3173, "e": 0}]},
+  '10014100':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7444,pct:74.44,tot:10000,elig:4791,cands:[{"n": "吳秀華", "p": "kmt", "v": 7444, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2556, "e": 0}]},
+  '10014110':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7542,pct:75.42,tot:10000,elig:3684,cands:[{"n": "吳秀華", "p": "kmt", "v": 7542, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2458, "e": 0}]},
+  '10014120':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:8116,pct:81.16,tot:10000,elig:3200,cands:[{"n": "吳秀華", "p": "kmt", "v": 8116, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 1884, "e": 0}]},
+  '10014130':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7976,pct:79.76,tot:10000,elig:2865,cands:[{"n": "吳秀華", "p": "kmt", "v": 7976, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2024, "e": 0}]},
+  '10014140':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7906,pct:79.06,tot:10000,elig:2958,cands:[{"n": "吳秀華", "p": "kmt", "v": 7906, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2094, "e": 0}]},
+  '10014150':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7752,pct:77.52,tot:10000,elig:2987,cands:[{"n": "吳秀華", "p": "kmt", "v": 7752, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2248, "e": 0}]},
+  '10014160':{name:'',p:"kmt",wp:"kmt",wn:"吳秀華",v:7207,pct:72.07,tot:10000,elig:4219,cands:[{"n": "吳秀華", "p": "kmt", "v": 7207, "e": 1}, {"n": "陳瑩", "p": "dpp", "v": 2793, "e": 0}]},
+  '10015010':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:3926,pct:39.26,tot:10000,elig:80094,cands:[{"n": "游淑貞", "p": "kmt", "v": 3926, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3129, "e": 0}, {"n": "張峻", "p": "ind", "v": 2945, "e": 0}]},
+  '10015020':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4289,pct:42.89,tot:10000,elig:9104,cands:[{"n": "游淑貞", "p": "kmt", "v": 4289, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2933, "e": 0}, {"n": "張峻", "p": "ind", "v": 2778, "e": 0}]},
+  '10015030':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4578,pct:45.78,tot:10000,elig:19156,cands:[{"n": "游淑貞", "p": "kmt", "v": 4578, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2789, "e": 0}, {"n": "張峻", "p": "ind", "v": 2633, "e": 0}]},
+  '10015040':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4343,pct:43.43,tot:10000,elig:17027,cands:[{"n": "游淑貞", "p": "kmt", "v": 4343, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2909, "e": 0}, {"n": "張峻", "p": "ind", "v": 2748, "e": 0}]},
+  '10015050':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4098,pct:40.98,tot:10000,elig:70448,cands:[{"n": "游淑貞", "p": "kmt", "v": 4098, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 3037, "e": 0}, {"n": "張峻", "p": "ind", "v": 2865, "e": 0}]},
+  '10015060':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4229,pct:42.29,tot:10000,elig:14999,cands:[{"n": "游淑貞", "p": "kmt", "v": 4229, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2980, "e": 0}, {"n": "張峻", "p": "ind", "v": 2791, "e": 0}]},
+  '10015070':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4279,pct:42.79,tot:10000,elig:10582,cands:[{"n": "游淑貞", "p": "kmt", "v": 4279, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2968, "e": 0}, {"n": "張峻", "p": "ind", "v": 2753, "e": 0}]},
+  '10015080':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4559,pct:45.59,tot:10000,elig:3908,cands:[{"n": "游淑貞", "p": "kmt", "v": 4559, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2805, "e": 0}, {"n": "張峻", "p": "ind", "v": 2636, "e": 0}]},
+  '10015090':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4716,pct:47.16,tot:10000,elig:9550,cands:[{"n": "游淑貞", "p": "kmt", "v": 4716, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2701, "e": 0}, {"n": "張峻", "p": "ind", "v": 2583, "e": 0}]},
+  '10015100':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4896,pct:48.96,tot:10000,elig:8502,cands:[{"n": "游淑貞", "p": "kmt", "v": 4896, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2598, "e": 0}, {"n": "張峻", "p": "ind", "v": 2506, "e": 0}]},
+  '10015110':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:4782,pct:47.82,tot:10000,elig:13008,cands:[{"n": "游淑貞", "p": "kmt", "v": 4782, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2685, "e": 0}, {"n": "張峻", "p": "ind", "v": 2533, "e": 0}]},
+  '10015120':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:5149,pct:51.49,tot:10000,elig:4938,cands:[{"n": "游淑貞", "p": "kmt", "v": 5149, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2467, "e": 0}, {"n": "張峻", "p": "ind", "v": 2384, "e": 0}]},
+  '10015130':{name:'',p:"kmt",wp:"kmt",wn:"游淑貞",v:5126,pct:51.26,tot:10000,elig:4742,cands:[{"n": "游淑貞", "p": "kmt", "v": 5126, "e": 1}, {"n": "魏嘉賢", "p": "ind", "v": 2481, "e": 0}, {"n": "張峻", "p": "ind", "v": 2393, "e": 0}]},
   '10005010':{name:'',p:"kmt",wp:"kmt",wn:"鍾東錦",v:6511,pct:65.11,tot:10000,elig:71277,cands:[{"n": "鍾東錦", "p": "kmt", "v": 6511, "e": 1}, {"n": "陳品安", "p": "dpp", "v": 3489, "e": 0}]},
   '10005020':{name:'',p:"kmt",wp:"kmt",wn:"鍾東錦",v:5064,pct:50.64,tot:10000,elig:37251,cands:[{"n": "鍾東錦", "p": "kmt", "v": 5064, "e": 1}, {"n": "陳品安", "p": "dpp", "v": 4936, "e": 0}]},
   '10005030':{name:'',p:"kmt",wp:"kmt",wn:"鍾東錦",v:5366,pct:53.66,tot:10000,elig:27735,cands:[{"n": "鍾東錦", "p": "kmt", "v": 5366, "e": 1}, {"n": "陳品安", "p": "dpp", "v": 4634, "e": 0}]},
@@ -365524,74 +365590,74 @@ const MAYOR_2026_PREDICT_TC = {
   '10005160':{name:'',p:"kmt",wp:"kmt",wn:"鍾東錦",v:7281,pct:72.81,tot:10000,elig:5452,cands:[{"n": "鍾東錦", "p": "kmt", "v": 7281, "e": 1}, {"n": "陳品安", "p": "dpp", "v": 2719, "e": 0}]},
   '10005170':{name:'',p:"kmt",wp:"kmt",wn:"鍾東錦",v:6997,pct:69.97,tot:10000,elig:3785,cands:[{"n": "鍾東錦", "p": "kmt", "v": 6997, "e": 1}, {"n": "陳品安", "p": "dpp", "v": 3003, "e": 0}]},
   '10005180':{name:'',p:"kmt",wp:"kmt",wn:"鍾東錦",v:7612,pct:76.12,tot:10000,elig:4890,cands:[{"n": "鍾東錦", "p": "kmt", "v": 7612, "e": 1}, {"n": "陳品安", "p": "dpp", "v": 2388, "e": 0}]},
-  '09020010':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:8315,pct:83.15,tot:10000,elig:36571,cands:[{"n": "陳玉珍", "p": "kmt", "v": 8315, "e": 1}, {"n": "李文良", "p": "ind", "v": 739, "e": 0}, {"n": "張國威", "p": "ind", "v": 526, "e": 0}, {"n": "洪和成", "p": "ind", "v": 165, "e": 0}, {"n": "張火木", "p": "ind", "v": 105, "e": 0}, {"n": "黃世團", "p": "ind", "v": 90, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 60, "e": 0}]},
-  '09020020':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:6549,pct:65.49,tot:10000,elig:18375,cands:[{"n": "陳玉珍", "p": "kmt", "v": 6549, "e": 1}, {"n": "李文良", "p": "ind", "v": 2491, "e": 0}, {"n": "張國威", "p": "ind", "v": 533, "e": 0}, {"n": "洪和成", "p": "ind", "v": 168, "e": 0}, {"n": "張火木", "p": "ind", "v": 107, "e": 0}, {"n": "黃世團", "p": "ind", "v": 91, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 61, "e": 0}]},
-  '09020030':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:7013,pct:70.13,tot:10000,elig:26418,cands:[{"n": "陳玉珍", "p": "kmt", "v": 7013, "e": 1}, {"n": "李文良", "p": "ind", "v": 2031, "e": 0}, {"n": "張國威", "p": "ind", "v": 531, "e": 0}, {"n": "洪和成", "p": "ind", "v": 167, "e": 0}, {"n": "張火木", "p": "ind", "v": 106, "e": 0}, {"n": "黃世團", "p": "ind", "v": 91, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 61, "e": 0}]},
-  '09020040':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:8165,pct:81.65,tot:10000,elig:28944,cands:[{"n": "陳玉珍", "p": "kmt", "v": 8165, "e": 1}, {"n": "李文良", "p": "ind", "v": 888, "e": 0}, {"n": "張國威", "p": "ind", "v": 527, "e": 0}, {"n": "洪和成", "p": "ind", "v": 165, "e": 0}, {"n": "張火木", "p": "ind", "v": 105, "e": 0}, {"n": "黃世團", "p": "ind", "v": 90, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 60, "e": 0}]},
-  '09020050':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:7810,pct:78.1,tot:10000,elig:11425,cands:[{"n": "陳玉珍", "p": "kmt", "v": 7810, "e": 1}, {"n": "李文良", "p": "ind", "v": 1240, "e": 0}, {"n": "張國威", "p": "ind", "v": 528, "e": 0}, {"n": "洪和成", "p": "ind", "v": 166, "e": 0}, {"n": "張火木", "p": "ind", "v": 106, "e": 0}, {"n": "黃世團", "p": "ind", "v": 90, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 60, "e": 0}]},
-  '09020060':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:9015,pct:90.15,tot:10000,elig:561,cands:[{"n": "陳玉珍", "p": "kmt", "v": 9015, "e": 1}, {"n": "李文良", "p": "ind", "v": 45, "e": 0}, {"n": "張國威", "p": "ind", "v": 522, "e": 0}, {"n": "洪和成", "p": "ind", "v": 164, "e": 0}, {"n": "張火木", "p": "ind", "v": 104, "e": 0}, {"n": "黃世團", "p": "ind", "v": 90, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 60, "e": 0}]},
+  '09020010':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:7390,pct:73.9,tot:10000,elig:36571,cands:[{"n": "陳玉珍", "p": "kmt", "v": 7390, "e": 1}, {"n": "李文良", "p": "ind", "v": 2007, "e": 0}, {"n": "張國威", "p": "ind", "v": 335, "e": 0}, {"n": "洪和成", "p": "ind", "v": 105, "e": 0}, {"n": "張火木", "p": "ind", "v": 67, "e": 0}, {"n": "黃世團", "p": "ind", "v": 57, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 39, "e": 0}]},
+  '09020020':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:5624,pct:56.24,tot:10000,elig:18375,cands:[{"n": "陳玉珍", "p": "kmt", "v": 5624, "e": 1}, {"n": "李文良", "p": "ind", "v": 3759, "e": 0}, {"n": "張國威", "p": "ind", "v": 342, "e": 0}, {"n": "洪和成", "p": "ind", "v": 108, "e": 0}, {"n": "張火木", "p": "ind", "v": 69, "e": 0}, {"n": "黃世團", "p": "ind", "v": 58, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 40, "e": 0}]},
+  '09020030':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:6088,pct:60.88,tot:10000,elig:26418,cands:[{"n": "陳玉珍", "p": "kmt", "v": 6088, "e": 1}, {"n": "李文良", "p": "ind", "v": 3299, "e": 0}, {"n": "張國威", "p": "ind", "v": 340, "e": 0}, {"n": "洪和成", "p": "ind", "v": 107, "e": 0}, {"n": "張火木", "p": "ind", "v": 68, "e": 0}, {"n": "黃世團", "p": "ind", "v": 58, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 40, "e": 0}]},
+  '09020040':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:7240,pct:72.4,tot:10000,elig:28944,cands:[{"n": "陳玉珍", "p": "kmt", "v": 7240, "e": 1}, {"n": "李文良", "p": "ind", "v": 2156, "e": 0}, {"n": "張國威", "p": "ind", "v": 336, "e": 0}, {"n": "洪和成", "p": "ind", "v": 105, "e": 0}, {"n": "張火木", "p": "ind", "v": 67, "e": 0}, {"n": "黃世團", "p": "ind", "v": 57, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 39, "e": 0}]},
+  '09020050':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:6885,pct:68.85,tot:10000,elig:11425,cands:[{"n": "陳玉珍", "p": "kmt", "v": 6885, "e": 1}, {"n": "李文良", "p": "ind", "v": 2508, "e": 0}, {"n": "張國威", "p": "ind", "v": 337, "e": 0}, {"n": "洪和成", "p": "ind", "v": 106, "e": 0}, {"n": "張火木", "p": "ind", "v": 68, "e": 0}, {"n": "黃世團", "p": "ind", "v": 57, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 39, "e": 0}]},
+  '09020060':{name:'',p:"kmt",wp:"kmt",wn:"陳玉珍",v:8090,pct:80.9,tot:10000,elig:561,cands:[{"n": "陳玉珍", "p": "kmt", "v": 8090, "e": 1}, {"n": "張國威", "p": "ind", "v": 331, "e": 0}, {"n": "洪和成", "p": "ind", "v": 104, "e": 0}, {"n": "張火木", "p": "ind", "v": 66, "e": 0}, {"n": "黃世團", "p": "ind", "v": 57, "e": 0}, {"n": "梁文韜", "p": "ind", "v": 39, "e": 0}, {"n": "李文良", "p": "ind", "v": 1313, "e": 0}]},
   '09007010':{name:'',p:"kmt",wp:"kmt",wn:"王忠銘",v:5388,pct:53.88,tot:10000,elig:6466,cands:[{"n": "王忠銘", "p": "kmt", "v": 5388, "e": 1}, {"n": "曹爾元", "p": "ind", "v": 4612, "e": 0}]},
   '09007020':{name:'',p:"kmt",wp:"kmt",wn:"王忠銘",v:5814,pct:58.14,tot:10000,elig:2745,cands:[{"n": "王忠銘", "p": "kmt", "v": 5814, "e": 1}, {"n": "曹爾元", "p": "ind", "v": 4186, "e": 0}]},
   '09007030':{name:'',p:"kmt",wp:"kmt",wn:"王忠銘",v:5348,pct:53.48,tot:10000,elig:1321,cands:[{"n": "王忠銘", "p": "kmt", "v": 5348, "e": 1}, {"n": "曹爾元", "p": "ind", "v": 4652, "e": 0}]},
   '09007040':{name:'',p:"kmt",wp:"kmt",wn:"王忠銘",v:5308,pct:53.08,tot:10000,elig:1278,cands:[{"n": "王忠銘", "p": "kmt", "v": 5308, "e": 1}, {"n": "曹爾元", "p": "ind", "v": 4692, "e": 0}]},
-  '10009010':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5473,pct:54.73,tot:10000,elig:87569,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5473, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4527, "e": 0}]},
-  '10009020':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5515,pct:55.15,tot:10000,elig:36547,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5515, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4485, "e": 0}]},
-  '10009030':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6178,pct:61.78,tot:10000,elig:56761,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6178, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3822, "e": 0}]},
-  '10009040':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5035,pct:50.35,tot:10000,elig:36540,cands:[{"n": "劉建國", "p": "dpp", "v": 5035, "e": 1}, {"n": "張嘉郡", "p": "kmt", "v": 4965, "e": 0}]},
-  '10009050':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6269,pct:62.69,tot:10000,elig:23216,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6269, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3731, "e": 0}]},
-  '10009060':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5670,pct:56.7,tot:10000,elig:31872,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5670, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4330, "e": 0}]},
-  '10009070':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5075,pct:50.75,tot:10000,elig:26201,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5075, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4925, "e": 0}]},
-  '10009080':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5297,pct:52.97,tot:10000,elig:15748,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5297, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4703, "e": 0}]},
-  '10009090':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5379,pct:53.79,tot:10000,elig:23377,cands:[{"n": "劉建國", "p": "dpp", "v": 5379, "e": 1}, {"n": "張嘉郡", "p": "kmt", "v": 4621, "e": 0}]},
-  '10009100':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5231,pct:52.31,tot:10000,elig:14538,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5231, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4769, "e": 0}]},
-  '10009110':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5044,pct:50.44,tot:10000,elig:21918,cands:[{"n": "劉建國", "p": "dpp", "v": 5044, "e": 1}, {"n": "張嘉郡", "p": "kmt", "v": 4956, "e": 0}]},
-  '10009120':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5359,pct:53.59,tot:10000,elig:19807,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5359, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4641, "e": 0}]},
-  '10009130':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6642,pct:66.42,tot:10000,elig:39070,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6642, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3358, "e": 0}]},
-  '10009140':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5787,pct:57.87,tot:10000,elig:12218,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5787, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4213, "e": 0}]},
-  '10009150':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5764,pct:57.64,tot:10000,elig:10559,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5764, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4236, "e": 0}]},
-  '10009160':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6459,pct:64.59,tot:10000,elig:19628,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6459, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3541, "e": 0}]},
-  '10009170':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5598,pct:55.98,tot:10000,elig:20952,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5598, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4402, "e": 0}]},
-  '10009180':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5656,pct:56.56,tot:10000,elig:19445,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5656, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4344, "e": 0}]},
-  '10009190':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6006,pct:60.06,tot:10000,elig:22664,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6006, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3994, "e": 0}]},
-  '10009200':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5131,pct:51.31,tot:10000,elig:20643,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5131, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4869, "e": 0}]},
-  '64000010':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5911,pct:59.11,tot:10000,elig:19934,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5911, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4089, "e": 0}]},
-  '64000020':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5315,pct:53.15,tot:10000,elig:111871,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5315, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4685, "e": 0}]},
-  '64000030':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5159,pct:51.59,tot:10000,elig:158654,cands:[{"n": "柯志恩", "p": "kmt", "v": 5159, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4841, "e": 0}]},
-  '64000040':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5491,pct:54.91,tot:10000,elig:154114,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5491, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4509, "e": 0}]},
-  '64000050':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5678,pct:56.78,tot:10000,elig:276533,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5678, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4322, "e": 0}]},
-  '64000060':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5415,pct:54.15,tot:10000,elig:41422,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5415, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4585, "e": 0}]},
-  '64000070':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5426,pct:54.26,tot:10000,elig:23286,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5426, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4574, "e": 0}]},
-  '64000080':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5352,pct:53.52,tot:10000,elig:137800,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5352, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4648, "e": 0}]},
-  '64000090':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5724,pct:57.24,tot:10000,elig:153507,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5724, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4276, "e": 0}]},
-  '64000100':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6476,pct:64.76,tot:10000,elig:23220,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6476, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3524, "e": 0}]},
-  '64000110':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5860,pct:58.6,tot:10000,elig:128727,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5860, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4140, "e": 0}]},
-  '64000120':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5405,pct:54.05,tot:10000,elig:293753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5405, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4595, "e": 0}]},
-  '64000130':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6214,pct:62.14,tot:10000,elig:57490,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6214, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3786, "e": 0}]},
-  '64000140':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5831,pct:58.31,tot:10000,elig:95180,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5831, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4169, "e": 0}]},
-  '64000150':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6276,pct:62.76,tot:10000,elig:35263,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6276, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3724, "e": 0}]},
-  '64000160':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6306,pct:63.06,tot:10000,elig:29138,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6306, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3694, "e": 0}]},
-  '64000170':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5977,pct:59.77,tot:10000,elig:78670,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5977, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4023, "e": 0}]},
-  '64000180':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5708,pct:57.08,tot:10000,elig:38377,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5708, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4292, "e": 0}]},
-  '64000190':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5456,pct:54.56,tot:10000,elig:78470,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5456, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4544, "e": 0}]},
-  '64000200':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6406,pct:64.06,tot:10000,elig:34321,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6406, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3594, "e": 0}]},
-  '64000210':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5939,pct:59.39,tot:10000,elig:25168,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5939, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4061, "e": 0}]},
-  '64000220':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6199,pct:61.99,tot:10000,elig:6158,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6199, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3801, "e": 0}]},
-  '64000230':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6322,pct:63.22,tot:10000,elig:23423,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6322, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3678, "e": 0}]},
-  '64000240':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5718,pct:57.18,tot:10000,elig:41753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5718, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4282, "e": 0}]},
-  '64000250':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6004,pct:60.04,tot:10000,elig:25078,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6004, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3996, "e": 0}]},
-  '64000260':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5958,pct:59.58,tot:10000,elig:25362,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5958, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4042, "e": 0}]},
-  '64000270':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5866,pct:58.66,tot:10000,elig:11806,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5866, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4134, "e": 0}]},
-  '64000280':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5730,pct:57.3,tot:10000,elig:15775,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5730, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4270, "e": 0}]},
-  '64000290':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6296,pct:62.96,tot:10000,elig:30001,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6296, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3704, "e": 0}]},
-  '64000300':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5706,pct:57.06,tot:10000,elig:30037,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5706, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4294, "e": 0}]},
-  '64000310':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5332,pct:53.32,tot:10000,elig:33223,cands:[{"n": "柯志恩", "p": "kmt", "v": 5332, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4668, "e": 0}]},
-  '64000320':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5407,pct:54.07,tot:10000,elig:10564,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5407, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4593, "e": 0}]},
-  '64000330':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5284,pct:52.84,tot:10000,elig:5075,cands:[{"n": "柯志恩", "p": "kmt", "v": 5284, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4716, "e": 0}]},
-  '64000340':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5177,pct:51.77,tot:10000,elig:9889,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5177, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4823, "e": 0}]},
-  '64000350':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5541,pct:55.41,tot:10000,elig:12162,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5541, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4459, "e": 0}]},
-  '64000360':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6431,pct:64.31,tot:10000,elig:1594,cands:[{"n": "柯志恩", "p": "kmt", "v": 6431, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3569, "e": 0}]},
-  '64000370':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6622,pct:66.22,tot:10000,elig:3404,cands:[{"n": "柯志恩", "p": "kmt", "v": 6622, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3378, "e": 0}]},
-  '64000380':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6083,pct:60.83,tot:10000,elig:2421,cands:[{"n": "柯志恩", "p": "kmt", "v": 6083, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3917, "e": 0}]},
+  '10009010':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5222,pct:52.22,tot:10000,elig:87569,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5222, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4778, "e": 0}]},
+  '10009020':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5264,pct:52.64,tot:10000,elig:36547,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5264, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4736, "e": 0}]},
+  '10009030':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5927,pct:59.27,tot:10000,elig:56761,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5927, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4073, "e": 0}]},
+  '10009040':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5286,pct:52.86,tot:10000,elig:36540,cands:[{"n": "劉建國", "p": "dpp", "v": 5286, "e": 1}, {"n": "張嘉郡", "p": "kmt", "v": 4714, "e": 0}]},
+  '10009050':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6018,pct:60.18,tot:10000,elig:23216,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6018, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3982, "e": 0}]},
+  '10009060':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5419,pct:54.19,tot:10000,elig:31872,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5419, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4581, "e": 0}]},
+  '10009070':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5176,pct:51.76,tot:10000,elig:26201,cands:[{"n": "張嘉郡", "p": "kmt", "v": 4824, "e": 0}, {"n": "劉建國", "p": "dpp", "v": 5176, "e": 1}]},
+  '10009080':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5046,pct:50.46,tot:10000,elig:15748,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5046, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4954, "e": 0}]},
+  '10009090':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5630,pct:56.3,tot:10000,elig:23377,cands:[{"n": "劉建國", "p": "dpp", "v": 5630, "e": 1}, {"n": "張嘉郡", "p": "kmt", "v": 4370, "e": 0}]},
+  '10009100':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5020,pct:50.2,tot:10000,elig:14538,cands:[{"n": "張嘉郡", "p": "kmt", "v": 4980, "e": 0}, {"n": "劉建國", "p": "dpp", "v": 5020, "e": 1}]},
+  '10009110':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5295,pct:52.95,tot:10000,elig:21918,cands:[{"n": "劉建國", "p": "dpp", "v": 5295, "e": 1}, {"n": "張嘉郡", "p": "kmt", "v": 4705, "e": 0}]},
+  '10009120':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5108,pct:51.08,tot:10000,elig:19807,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5108, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4892, "e": 0}]},
+  '10009130':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6391,pct:63.91,tot:10000,elig:39070,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6391, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3609, "e": 0}]},
+  '10009140':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5536,pct:55.36,tot:10000,elig:12218,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5536, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4464, "e": 0}]},
+  '10009150':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5513,pct:55.13,tot:10000,elig:10559,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5513, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4487, "e": 0}]},
+  '10009160':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:6208,pct:62.08,tot:10000,elig:19628,cands:[{"n": "張嘉郡", "p": "kmt", "v": 6208, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 3792, "e": 0}]},
+  '10009170':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5347,pct:53.47,tot:10000,elig:20952,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5347, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4653, "e": 0}]},
+  '10009180':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5405,pct:54.05,tot:10000,elig:19445,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5405, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4595, "e": 0}]},
+  '10009190':{name:'',p:"kmt",wp:"kmt",wn:"張嘉郡",v:5755,pct:57.55,tot:10000,elig:22664,cands:[{"n": "張嘉郡", "p": "kmt", "v": 5755, "e": 1}, {"n": "劉建國", "p": "dpp", "v": 4245, "e": 0}]},
+  '10009200':{name:'',p:"dpp",wp:"dpp",wn:"劉建國",v:5120,pct:51.2,tot:10000,elig:20643,cands:[{"n": "張嘉郡", "p": "kmt", "v": 4880, "e": 0}, {"n": "劉建國", "p": "dpp", "v": 5120, "e": 1}]},
+  '64000010':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5589,pct:55.89,tot:10000,elig:19934,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5589, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4411, "e": 0}]},
+  '64000020':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5007,pct:50.07,tot:10000,elig:111871,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 4993, "e": 0}, {"n": "柯志恩", "p": "kmt", "v": 5007, "e": 1}]},
+  '64000030':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5481,pct:54.81,tot:10000,elig:158654,cands:[{"n": "柯志恩", "p": "kmt", "v": 5481, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4519, "e": 0}]},
+  '64000040':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5169,pct:51.69,tot:10000,elig:154114,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5169, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4831, "e": 0}]},
+  '64000050':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5356,pct:53.56,tot:10000,elig:276533,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5356, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4644, "e": 0}]},
+  '64000060':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5093,pct:50.93,tot:10000,elig:41422,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5093, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4907, "e": 0}]},
+  '64000070':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5104,pct:51.04,tot:10000,elig:23286,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5104, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4896, "e": 0}]},
+  '64000080':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5030,pct:50.3,tot:10000,elig:137800,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5030, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4970, "e": 0}]},
+  '64000090':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5402,pct:54.02,tot:10000,elig:153507,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5402, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4598, "e": 0}]},
+  '64000100':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6154,pct:61.54,tot:10000,elig:23220,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6154, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3846, "e": 0}]},
+  '64000110':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5538,pct:55.38,tot:10000,elig:128727,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5538, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4462, "e": 0}]},
+  '64000120':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5083,pct:50.83,tot:10000,elig:293753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5083, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4917, "e": 0}]},
+  '64000130':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5892,pct:58.92,tot:10000,elig:57490,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5892, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4108, "e": 0}]},
+  '64000140':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5509,pct:55.09,tot:10000,elig:95180,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5509, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4491, "e": 0}]},
+  '64000150':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5954,pct:59.54,tot:10000,elig:35263,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5954, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4046, "e": 0}]},
+  '64000160':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5984,pct:59.84,tot:10000,elig:29138,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5984, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4016, "e": 0}]},
+  '64000170':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5655,pct:56.55,tot:10000,elig:78670,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5655, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4345, "e": 0}]},
+  '64000180':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5386,pct:53.86,tot:10000,elig:38377,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5386, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4614, "e": 0}]},
+  '64000190':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5134,pct:51.34,tot:10000,elig:78470,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5134, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4866, "e": 0}]},
+  '64000200':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6084,pct:60.84,tot:10000,elig:34321,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6084, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 3916, "e": 0}]},
+  '64000210':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5617,pct:56.17,tot:10000,elig:25168,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5617, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4383, "e": 0}]},
+  '64000220':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5877,pct:58.77,tot:10000,elig:6158,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5877, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4123, "e": 0}]},
+  '64000230':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:6000,pct:60.0,tot:10000,elig:23423,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 6000, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4000, "e": 0}]},
+  '64000240':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5396,pct:53.96,tot:10000,elig:41753,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5396, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4604, "e": 0}]},
+  '64000250':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5682,pct:56.82,tot:10000,elig:25078,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5682, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4318, "e": 0}]},
+  '64000260':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5636,pct:56.36,tot:10000,elig:25362,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5636, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4364, "e": 0}]},
+  '64000270':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5544,pct:55.44,tot:10000,elig:11806,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5544, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4456, "e": 0}]},
+  '64000280':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5408,pct:54.08,tot:10000,elig:15775,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5408, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4592, "e": 0}]},
+  '64000290':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5974,pct:59.74,tot:10000,elig:30001,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5974, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4026, "e": 0}]},
+  '64000300':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5384,pct:53.84,tot:10000,elig:30037,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5384, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4616, "e": 0}]},
+  '64000310':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5654,pct:56.54,tot:10000,elig:33223,cands:[{"n": "柯志恩", "p": "kmt", "v": 5654, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4346, "e": 0}]},
+  '64000320':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5085,pct:50.85,tot:10000,elig:10564,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5085, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4915, "e": 0}]},
+  '64000330':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5606,pct:56.06,tot:10000,elig:5075,cands:[{"n": "柯志恩", "p": "kmt", "v": 5606, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 4394, "e": 0}]},
+  '64000340':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:5145,pct:51.45,tot:10000,elig:9889,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 4855, "e": 0}, {"n": "柯志恩", "p": "kmt", "v": 5145, "e": 1}]},
+  '64000350':{name:'',p:"dpp",wp:"dpp",wn:"賴瑞隆",v:5219,pct:52.19,tot:10000,elig:12162,cands:[{"n": "賴瑞隆", "p": "dpp", "v": 5219, "e": 1}, {"n": "柯志恩", "p": "kmt", "v": 4781, "e": 0}]},
+  '64000360':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6753,pct:67.53,tot:10000,elig:1594,cands:[{"n": "柯志恩", "p": "kmt", "v": 6753, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3247, "e": 0}]},
+  '64000370':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6944,pct:69.44,tot:10000,elig:3404,cands:[{"n": "柯志恩", "p": "kmt", "v": 6944, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3056, "e": 0}]},
+  '64000380':{name:'',p:"kmt",wp:"kmt",wn:"柯志恩",v:6405,pct:64.05,tot:10000,elig:2421,cands:[{"n": "柯志恩", "p": "kmt", "v": 6405, "e": 1}, {"n": "賴瑞隆", "p": "dpp", "v": 3595, "e": 0}]},
 };
 
 let MAYOR_2022_VILL = {
@@ -374899,8 +374965,8 @@ function setMayor2026PredictMode() {
   if (ic) {
     ic.innerHTML = `<div class="t1">${T('2026 縣市長預測 — 研究性質推估','2026 Mayor Prediction — Research Estimate')}</div>`
       + '<div style="color:rgba(255,180,80,0.9);font-size:11px;margin-top:6px;line-height:1.6;border:1px solid rgba(255,180,80,0.3);border-radius:6px;padding:8px;background:rgba(255,180,80,0.08)">'
-      + T('⚠ 已依152筆民調（40家民調機構，house-effect降權+時間衰減加權）換算各縣市得票率，<b>南投縣查無民調，暫以基本面推估代替</b>；尚未做系統性偏誤校正（缺歷史回測資料，見待辦）。移到地圖查看各縣市推估結果與民調明細。',
-          '⚠ Estimated vote shares from 152 polls (40 pollsters, house-effect discount + recency weighting); <b>no polls found for Nantou County, using fundamentals-based estimate instead</b>; systematic bias correction not yet done (lacks historical backtest data, see TODO). Hover the map for per-county estimates and poll details.')
+      + T('⚠ 已依190筆民調（39家民調機構，house-effect降權+時間衰減加權）換算各縣市得票率，<b>南投縣查無民調，暫以基本面推估代替</b>；尚未做系統性偏誤校正（缺歷史回測資料，見待辦）。移到地圖查看各縣市推估結果與民調明細。',
+          '⚠ Estimated vote shares from 190 polls (39 pollsters, house-effect discount + recency weighting); <b>no polls found for Nantou County, using fundamentals-based estimate instead</b>; systematic bias correction not yet done (lacks historical backtest data, see TODO). Hover the map for per-county estimates and poll details.')
       + '</div>';
   }
 }
