@@ -95,6 +95,36 @@
       };
       win._baseLeanBackToCounties.v2 = true;
     }
+    // switching the view (13分類 / 藍綠白 / 泛綠泛藍) recolours the map where it is — same county / township / national
+    // layer, same zoom (user 2026-10-31: 「在某一縣市或區域改分類不回全台，而是直接在那個位置改染色」). The engine redraws only
+    // its county layer and only at level 'ed' — which a county or township drill-down still is, so it wiped those views —
+    // and refreshed the overview only there. So after it: the view the reader was on is drawn again with the new colours
+    // (the engine's own function for it), the zoom is put back as it was, and the overview is redrawn at every level.
+    var tog = win._baseLeanToggleCampMode;
+    if (typeof tog === 'function' && !tog.v2) {
+      win._baseLeanToggleCampMode = function () {
+        var E = function (c) { try { return win.eval(c); } catch (e) { return undefined; } };
+        var lv = E('level'), county = E('_baseLeanCurCounty'), town = E('_baseLeanCurTown');
+        var t = E('d3.zoomTransform(svg.node())');
+        var r = tog.apply(this, arguments);
+        try {
+          var redraw = town ? function () { win._baseLeanGoVillage(town); }
+            : county ? function () { win._baseLeanGoTown(county); }
+            : lv === 'tc' ? function () { win.eval('goTCAllNational()'); }
+            : lv === 'vill' ? function () { win.eval('goVillAllNational()'); }
+            : null;
+          if (redraw) {
+            redraw();
+            win.__v2ZoomBack = t;
+            E('svg.interrupt(); svg.call(zm.transform, window.__v2ZoomBack)');
+          }
+          if (typeof win._renderBaseleanHemiRow === 'function') win._renderBaseleanHemiRow();
+          paint();
+        } catch (e) {}
+        return r;
+      };
+      win._baseLeanToggleCampMode.v2 = true;
+    }
     // 全台總覽 on the map's left (user 2026-10-31: 「重新設計，把全台總覽移到左邊空白處」, as on the 2026 forecast page).
     // The engine keeps the full overview (category totals, the 藍綠白 / 泛綠泛藍 / 13分類 switch, notes) in #hemi-row —
     // the top-right 「全台總覽 ▾」 fold card — and only a two-line pointer in the info panel. So #hemi-row itself moves
@@ -164,11 +194,27 @@
     var color = function (d) {
       try { return d && d.properties && typeof win._baseLeanCountyColor === 'function' ? win._baseLeanCountyColor(d.properties.county) : null; } catch (e) { return null; }
     };
+    // 全台鄉鎮市區 / 全台村里: the engine has no base-vote colouring there (every block #e0e0e0, a V1 gap); the colour
+    // comes from the same function the county drill-down uses (_baseLeanCountyColor(tc / vc)), kept per view
+    var cache = {}, cacheMode = null;
+    var unitColor = function (key) {
+      var m; try { m = win.eval('_baseLeanDisplayMode'); } catch (e) { m = ''; }
+      if (m !== cacheMode) { cache = {}; cacheMode = m; }
+      if (!(key in cache)) { try { cache[key] = win._baseLeanCountyColor(key) || null; } catch (e) { cache[key] = null; } }
+      return cache[key];
+    };
     var paint = function () {
       [].forEach.call(gb.querySelectorAll(':scope > .ft-county-baselean'), function (p) {
         var c = color(p.__data__);
         if (c && p.style.fill !== c) p.style.fill = c;
       });
+      if (typeof win._baseLeanCountyColor === 'function') {
+        [].forEach.call(gb.querySelectorAll(':scope > path.ft-tc, :scope > path.ft-vill'), function (p) {
+          var pr = p.__data__ && p.__data__.properties; if (!pr || p.getAttribute('fill') !== '#e0e0e0') return;
+          var c = unitColor(pr.vc || pr.tc);
+          if (c && p.style.fill !== c) p.style.fill = c;
+        });
+      }
       // county lines after the last block (they are drawn after it already; keep it so if the engine re-joins the blocks)
       var last = gb.querySelector(':scope > .ft-county-baselean:last-of-type');
       [].forEach.call(gb.querySelectorAll(':scope > .ft-baselean-border'), function (n) {
