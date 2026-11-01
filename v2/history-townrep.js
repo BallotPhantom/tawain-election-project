@@ -21,12 +21,18 @@
  * V2TownshipRep.draw(win, year) / V2TownshipRep.clear(win).
  */
 (function () {
-  var BLACK = '#0a0d16';   // mapBgColor()'s base colour (mapBgColor itself returns a CSS gradient, not an SVG fill)
-  var YEARS = ['2014', '2018', '2022'];
+  var BLACK = '#0a0d16';
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該…灰底…沒有選舉的黑底不必改」): a place without data takes the
+  // engine's own no-data grey — '#e0e0e0' (councilVillColor / councilTCTcColor; test.html's vcColor)
+  var NO_DATA_FILL = '#e0e0e0';   // mapBgColor()'s base colour (mapBgColor itself returns a CSS gradient, not an SVG fill)
+  var YEARS = ['2010', '2014', '2018', '2022'];   // 2010 (2026-11-01): TOWNSHIP_REP_OLD — 2014's ▲▼ compare with it
 
   // the engine's top-level const / let bindings are not window properties: read them in its scope
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
-  function repData(year) { return (typeof TOWNSHIP_REP !== 'undefined' ? TOWNSHIP_REP : {})[year] || null; }   // top-level const
+  function repData(year) {   // top-level consts; 2010 = TOWNSHIP_REP_OLD (build_v2_local_2010.py, the same shape)
+    return (typeof TOWNSHIP_REP !== 'undefined' ? TOWNSHIP_REP : {})[year] || (typeof TOWNSHIP_REP_OLD !== 'undefined' ? TOWNSHIP_REP_OLD : {})[year] || null;
+  }
+  function engineYear(year) { return +year < 2014 ? '2014' : year; }
 
   // [[n, p, v, e]] → [{n, p, v, e}]
   function cands(arr) { return arr.map(function (c) { return { n: c[0], p: c[1], v: c[2], e: c[3] }; }); }
@@ -37,7 +43,7 @@
   // 政黨比例 fill (councilDistColor / councilVillColor): party vote totals, first minus second
   function partyFill(win, pv, tot) {
     var pairs = Object.keys(pv).map(function (p) { return [p, pv[p]]; }).sort(function (a, b) { return b[1] - a[1]; });
-    if (!pairs.length || !tot) return BLACK;
+    if (!pairs.length || !tot) return NO_DATA_FILL;
     var margin = (pairs[0][1] - (pairs[1] ? pairs[1][1] : 0)) / tot;
     return win._councilPartyColor(pairs[0][0], Math.max(0.05, Math.min(0.5, margin)));
   }
@@ -58,7 +64,7 @@
   }
   function villFill(c, body, vc) {
     var r = body && villRow(c, body, vc);
-    if (!r || !r[1]) return BLACK;   // no data (臺東市 before 2022) — user: 「沒資料就反黑吧」
+    if (!r || !r[1]) return NO_DATA_FILL;   // no data (臺東市 before 2022, 2010's villages): grey
     var pv = {}, cs = body.d[r[0]][2];
     cs.forEach(function (x, i) { pv[x[1]] = (pv[x[1]] || 0) + r[4 + i]; });
     return partyFill(c.win, pv, r[1]);
@@ -319,7 +325,7 @@
   // put it back to its national state and let setMayorMode tidy its own toolbars before V2 redraws
   function reset(win, year) {
     win.eval("level = 'ed'; curED = null; curTC = null; curVC = null; villAllMode = false;");
-    win.setMayorMode(year);
+    win.setMayorMode(engineYear(year));
   }
 
   // V2's map must stay on top of the engine. The engine can take the map back three ways: its own deferred redraw
@@ -387,5 +393,5 @@
     // hand the county-council box back to the engine (its own empty state)
     if (was && typeof win.drawCountyHemiForED === 'function') { try { win.drawCountyHemiForED(null); } catch (e) {} }
   }
-  window.V2TownshipRep = { draw: draw, clear: clear };
+  window.V2TownshipRep = { draw: draw, clear: clear, engineYear: engineYear, CYCLES: ['2010'] };
 })();

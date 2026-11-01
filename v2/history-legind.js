@@ -21,6 +21,9 @@
  */
 (function () {
   var BLACK = '#0a0d16';   // mapBgColor()'s base colour
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該…灰底…沒有選舉的黑底不必改」): a place without data takes the
+  // engine's own no-data grey — '#e0e0e0' (councilVillColor / councilTCTcColor; test.html's vcColor)
+  var NO_DATA_FILL = '#e0e0e0';
   var IND_CLR = '#8a8a8a';
 
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
@@ -36,9 +39,9 @@
       .sort(function (a, b) { return b.v - a.v; });
   }
   function fill(c, vec) {
-    if (!vec || !vec[2]) return BLACK;
+    if (!vec || !vec[2]) return NO_DATA_FILL;
     var r = ranked(c, vec), top = r[0];
-    if (!top || !top.v) return BLACK;
+    if (!top || !top.v) return NO_DATA_FILL;
     var margin = r.length > 1 ? (top.v - r[1].v) / vec[2] : 1;
     var M = G(c.win, 'PARTY_COLOR_MAP') || {};
     return c.win.winMarginFill(top.p, margin, M[top.p]);

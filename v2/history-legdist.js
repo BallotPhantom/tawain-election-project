@@ -13,6 +13,9 @@
  */
 (function () {
   var BLACK = '#0a0d16';   // mapBgColor()'s base colour
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該…灰底…沒有選舉的黑底不必改」): a place without data takes the
+  // engine's own no-data grey — '#e0e0e0' (councilVillColor / councilTCTcColor; test.html's vcColor)
+  var NO_DATA_FILL = '#e0e0e0';
   var IND_CLR = '#888888';   // the engine's independent grey (its 2016 桃園6 趙正宇 block)
   var HOVER = '#f5c518';   // = the 2027 補選預測 page
   // seats left → right in camp order (council.html's COUNCIL_CAMP_ORDER: 綠 … 無黨籍 … 藍)
@@ -32,9 +35,9 @@
       .sort(function (a, b) { return b.v - a.v; });
   }
   function fill(c, r, vec) {
-    if (!r || !vec || !vec[2]) return BLACK;
+    if (!r || !vec || !vec[2]) return NO_DATA_FILL;
     var s = ranked(r, vec), top = s[0];
-    if (!top || !top.v) return BLACK;
+    if (!top || !top.v) return NO_DATA_FILL;
     var margin = s.length > 1 ? (top.v - s[1].v) / vec[2] : 1;
     return c.win.winMarginFill(top.p, margin, partyClr(c.win, top.p));
   }

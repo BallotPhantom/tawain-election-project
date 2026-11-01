@@ -16,7 +16,10 @@
  * V2OldMayor.draw(win, cycle) / V2OldMayor.clear(win).
  */
 (function () {
-  var BLACK = '#0a0d16';      // mapBgColor()'s base colour
+  var BLACK = '#0a0d16';
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該跟2014縣市長沒資料村里一樣不是全黑而是灰底…沒有選舉的黑底不必改」):
+  // a place without data takes the engine's own no-data grey — 縣市長 mode's '#aaa' (_mayorVillFill / _mayorTcFillColor)
+  var NO_DATA_FILL = '#aaa';      // mapBgColor()'s base colour
   var ENGINE_YEAR = '2014';   // the engine year set up underneath (its mayor-mode legend / panel frame)
 
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
@@ -30,9 +33,9 @@
       .sort(function (a, b) { return b.v - a.v; });
   }
   function fill(c, r, vec) {
-    if (!r || !vec || !vec[2]) return BLACK;
+    if (!r || !vec || !vec[2]) return NO_DATA_FILL;
     var s = ranked(r, vec);
-    if (!s[0].v) return BLACK;
+    if (!s[0].v) return NO_DATA_FILL;
     var margin = s.length > 1 ? (s[0].v - s[1].v) / vec[2] : 1;
     return c.win.winMarginFill(s[0].p, margin, clr(c, s[0].p));
   }

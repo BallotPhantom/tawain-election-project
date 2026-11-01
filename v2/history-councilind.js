@@ -16,7 +16,10 @@
  * V2CouncilInd.attach(win) once per engine; V2CouncilInd.clear(win) on every apply.
  */
 (function () {
-  var BLACK = '#0a0d16';
+  var BLACK = '#0a0d16';   // no 原住民 district there (no election): solidify's council blocks
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該…灰底…沒有選舉的黑底不必改」): a place without data takes the
+  // engine's own no-data grey — '#e0e0e0' (councilVillColor / councilTCTcColor; test.html's vcColor)
+  var NO_DATA_FILL = '#e0e0e0';
 
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
   function clr(win, p) { var CLR = G(win, 'COUNCIL_CLR') || {}, PM = G(win, 'PARTY_COLOR_MAP') || {}; return CLR[p] || PM[p] || '#aaa'; }
@@ -24,9 +27,9 @@
     return rec.cands.map(function (x, i) { return { n: x[0], p: x[1], e: x[2], v: vec[3 + i] }; }).sort(function (a, b) { return b.v - a.v; });
   }
   function fill(win, rec, vec) {
-    if (!rec || !vec || !vec[2]) return BLACK;
+    if (!rec || !vec || !vec[2]) return NO_DATA_FILL;
     var s = ranked(rec, vec);
-    if (!s[0].v) return BLACK;
+    if (!s[0].v) return NO_DATA_FILL;
     return win.winMarginFill(s[0].p, s.length > 1 ? (s[0].v - s[1].v) / vec[2] : 1, clr(win, s[0].p));
   }
   function tcName(win, tc) {

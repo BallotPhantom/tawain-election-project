@@ -21,17 +21,25 @@
  */
 (function () {
   var NO_RACE = '#aaa';       // fallback party colour / village without data (the engine's own '#aaa')
-  var BLACK = '#0a0d16';      // mapBgColor()'s base colour (mapBgColor itself returns a CSS gradient, not an SVG fill)
+  var BLACK = '#0a0d16';
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該跟2014縣市長沒資料村里一樣不是全黑而是灰底…沒有選舉的黑底不必改」):
+  // a place without data takes the engine's own no-data grey — 縣市長 mode's '#aaa' (_mayorVillFill / _mayorTcFillColor)
+  var NO_DATA_FILL = '#aaa';      // mapBgColor()'s base colour (mapBgColor itself returns a CSS gradient, not an SVG fill)
 
   // the engine's top-level const / let bindings are not window properties: read them in its scope
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
 
+  // 1998 / 2002 / 2005 / 2009 (2026-11-01): TOWNSHIP_HEAD_OLD(_VILL), the same shapes (build_v2_township_head_old.py); the
+  // engine underneath stays in its 2014 縣市長 mode for them (ENGINE_YEAR)
   function dataFor(year) {
-    return (typeof TOWNSHIP_HEAD !== 'undefined' ? TOWNSHIP_HEAD : {})[year] || null;   // top-level const in data_township_head.js
+    return (typeof TOWNSHIP_HEAD !== 'undefined' ? TOWNSHIP_HEAD : {})[year] ||   // top-level const in data_township_head.js
+      (typeof TOWNSHIP_HEAD_OLD !== 'undefined' ? TOWNSHIP_HEAD_OLD : {})[year] || null;
   }
   function villFor(year) {
-    return (typeof TOWNSHIP_HEAD_VILL !== 'undefined' ? TOWNSHIP_HEAD_VILL : {})[year] || {};
+    return (typeof TOWNSHIP_HEAD_VILL !== 'undefined' ? TOWNSHIP_HEAD_VILL : {})[year] ||
+      (typeof TOWNSHIP_HEAD_OLD_VILL !== 'undefined' ? TOWNSHIP_HEAD_OLD_VILL : {})[year] || {};
   }
+  function engineYear(year) { return +year < 2014 ? '2014' : year; }
   function winnerOf(t) {
     for (var i = 0; i < t.cands.length; i++) if (t.cands[i].e) return t.cands[i];
     return t.cands[0];
@@ -42,7 +50,7 @@
   }
   function villFill(win, t, row) {
     if (!t) return BLACK;                  // no race (user: 「沒有選的一樣是黑色底圖」)
-    if (!row || !row[0]) return BLACK;     // no village row (臺東市 before 2022): black too (user: 「沒資料就反黑吧」)
+    if (!row || !row[0]) return NO_DATA_FILL;   // no village row (臺東市 before 2022): no data → grey
     var s = villCands(t, row).sort(function (a, b) { return b.v - a.v; });
     var margin = s.length > 1 ? (s[0].v - s[1].v) / row[0] : 1;
     var CLR = G(win, 'COUNCIL_CLR');
@@ -277,7 +285,8 @@
       if (l) { l.dataset.zh = zh; l.dataset.en = en; l.textContent = G(win, 'currentLang') === 'en' ? en : zh; }
       if (v) { v.textContent = val; v.style.color = ''; }
     };
-    var ind = Object.keys(c.data).filter(function (tc) { return ['63', '64', '65', '66', '67', '68'].indexOf(tc.slice(0, 2)) !== -1; }).length;
+    // 直轄市山地原住民區 exist from 2014: before, a 63…68 code is a 縣 township of then (臺北縣 板橋市 …), not an 原住民區
+    var ind = +c.year < 2014 ? 0 : Object.keys(c.data).filter(function (tc) { return ['63', '64', '65', '66', '67', '68'].indexOf(tc.slice(0, 2)) !== -1; }).length;
     set('ss-region', '鄉鎮市長', 'Township mayors', String(n - ind));
     set('ss-pl', '原住民區長', 'Indigenous district chiefs', String(ind));
     set('ss-total', '鄉鎮市區長', 'Township heads', String(n));
@@ -288,7 +297,7 @@
   // put it back to its national state and let setMayorMode tidy its own toolbars before V2 redraws
   function reset(win, year) {
     win.eval("level = 'ed'; curED = null; curTC = null; curVC = null; villAllMode = false;");
-    win.setMayorMode(year);
+    win.setMayorMode(engineYear(year));
   }
 
   // V2's map must stay on top of the engine. The engine can take the map back three ways: its own deferred redraw
@@ -350,5 +359,5 @@
     var svg = G(win, 'svg');
     if (svg) svg.on('mouseleave.v2th', null);
   }
-  window.V2TownshipHead = { draw: draw, clear: clear };
+  window.V2TownshipHead = { draw: draw, clear: clear, engineYear: engineYear, CYCLES: ['1998', '2002', '2005', '2009'] };
 })();
