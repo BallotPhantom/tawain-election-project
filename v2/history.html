@@ -91,6 +91,32 @@
   #v2-nav > .v2-nav, #v2-nav > .v2-tools { margin-right: 0 !important; }
   #v2-year-select { font: inherit; font-size: 12px; font-weight: 600; color: #e7eaf0; background: rgba(18,24,38,.9); border: 1px solid rgba(255,255,255,.18); border-radius: 7px; padding: 4px 6px; cursor: pointer; }
   #v2-cat-group .btn { white-space: nowrap; }
+  /* compact bar (user 2026-10-31: 「市議員mode上方太雜太亂，請把常住按鈕包括警告、色盲、中英文等等全部縮小」): every control
+     smaller so the councillor mode's extra buttons fit one row; the crumb shortens with an ellipsis instead of wrapping */
+  #v2-nav { gap: 6px; padding: 7px 12px; }
+  #v2-nav .btn { font-size: 10.5px !important; padding: 3px 7px !important; line-height: 1.2 !important; }
+  #v2-nav .v2-group { padding: 2px 3px; gap: 3px; }
+  #v2-nav .v2-crumb-sep { display: none; }   /* the groups' own boxes separate them; the room goes to the English labels */
+  #v2-nav { gap: 5px; }
+  #v2-home { font-size: 11px; padding: 3px 8px; }
+  #v2-title { font-size: 12px; }
+  #v2-title .v2-badge { font-size: 8.5px; padding: 1px 5px; margin-left: 5px; }
+  #v2-year-select { font-size: 11px; padding: 2px 4px; width: auto; min-width: 0; max-width: 80px; }
+  #v2-nav #v2-year-group { padding: 0; }
+  #v2-nav > .v2-disc { width: 22px !important; height: 22px !important; font-size: 11px !important; margin-right: 4px !important; }
+  /* English (user 2026-11-01: 「英文的按鈕都還是有擠在一起的問題（全鄉鎮市區）」): the 全台鄉鎮市區 / 全台村里 buttons and zh/EN never
+     shrink — only the crumb's text does, down to an ellipsis; the left groups' English labels are short (Exec. / Reps …) */
+  #v2-nav > .v2-nav { gap: 4px !important; margin-right: 4px !important; min-width: auto !important; flex-shrink: 1; overflow: hidden; }
+  #v2-nav > .v2-nav { flex-wrap: nowrap !important; }
+  #v2-nav > .v2-nav > button { flex: none; white-space: nowrap; }
+  #v2-nav > .v2-nav > span { font-size: 11px !important; min-width: 24px; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+  #v2-nav > .v2-nav > span > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #v2-nav > .v2-tools, #v2-nav > .v2-disc { flex: none; }
+  #v2-nav > *:not(.v2-nav) { flex-shrink: 0; }
+  #v2-nav > .v2-nav > button, #v2-nav > .v2-tools button { font-size: 10.5px !important; padding: 3px 7px !important; border-radius: 6px !important; }
+  #v2-nav > .v2-tools { gap: 4px !important; margin-right: 4px !important; }
+  #v2-lang { flex: none; }
+  #v2-lang button { font-size: 10.5px; padding: 3px 7px; white-space: nowrap; }
   #v2-frame-wrap { flex: 1; position: relative; }
   /* Both engines are persistent, permanently-mounted iframes stacked exactly
      on top of each other; only the active one is visible. visibility:hidden
@@ -158,16 +184,16 @@
     <span class="v2-crumb-sep">/</span>
 
     <div class="v2-group" id="v2-cat-group">
-      <button class="btn" data-cat="exec" data-zh="行政首長" data-en="Executives">行政首長</button>
-      <button class="btn" data-cat="rep" data-zh="民意代表" data-en="Representatives">民意代表</button>
+      <button class="btn" data-cat="exec" data-zh="行政首長" data-en="Exec.">行政首長</button>
+      <button class="btn" data-cat="rep" data-zh="民意代表" data-en="Reps">民意代表</button>
     </div>
 
     <div class="v2-group" id="v2-type-group">
       <span class="v2-group-label" data-zh="選舉類型" data-en="Election">選舉類型</span>
       <button class="btn active" data-type="mayor" data-type-scope="local" data-zh="縣市長" data-en="Mayor">縣市長</button>
       <button class="btn" data-type="councilor" data-type-scope="local" data-zh="縣市議員" data-en="Councilor">縣市議員</button>
-      <button class="btn" data-type="township" data-type-scope="local" data-zh-title="鄉鎮市長＋直轄市山地原住民區長；直轄市、省轄市的一般區區長為官派，地圖畫成黑色底圖；點鄉鎮進入村里層" data-en-title="Township mayors + elected heads of the special-municipality indigenous districts; other district heads are appointed (drawn black); click a township for its villages" data-zh="鄉鎮市區長" data-en="Township Head">鄉鎮市區長</button>
-      <button class="btn" data-type="townrep" data-type-scope="local" data-zh-title="鄉鎮市民代表（含平地原住民代表、直轄市山地原住民區民代表）；全台是代表會色塊，點鄉鎮進入村里層；面板上方半圓圖是代表會席次" data-en-title="Township representatives (incl. lowland-indigenous and indigenous-district representatives); the map shows each council, click a township for its villages; the hemicycle shows the council's seats" data-zh="鄉鎮市民代表" data-en="Township Rep">鄉鎮市民代表</button>
+      <button class="btn" data-type="township" data-type-scope="local" data-zh-title="鄉鎮市長＋直轄市山地原住民區長；直轄市、省轄市的一般區區長為官派，地圖畫成黑色底圖；點鄉鎮進入村里層" data-en-title="Township mayors + elected heads of the special-municipality indigenous districts; other district heads are appointed (drawn black); click a township for its villages" data-zh="鄉鎮市區長" data-en="Twp Head">鄉鎮市區長</button>
+      <button class="btn" data-type="townrep" data-type-scope="local" data-zh-title="鄉鎮市民代表（含平地原住民代表、直轄市山地原住民區民代表）；全台是代表會色塊，點鄉鎮進入村里層；面板上方半圓圖是代表會席次" data-en-title="Township representatives (incl. lowland-indigenous and indigenous-district representatives); the map shows each council, click a township for its villages; the hemicycle shows the council's seats" data-zh="鄉鎮市民代表" data-en="Twp Rep">鄉鎮市民代表</button>
       <button class="btn" data-type="villchief" data-type-scope="local" data-zh-title="村長／里長；最底層，地圖直接是全台村里，不再往下點" data-en-title="Village / borough chiefs — the lowest level; the map shows every village nationwide" data-zh="村里長" data-en="Village Chief">村里長</button>
       <button class="btn" data-type="president" data-type-scope="national" data-zh="總統" data-en="President">總統</button>
       <button class="btn" data-type="legislative" data-type-scope="national" data-zh="立法委員" data-en="Legislators">立法委員</button>
@@ -178,6 +204,14 @@
     <div class="v2-group" id="v2-year-group">
       <span class="v2-group-label" data-zh="年份" data-en="Year">年份</span>
       <select id="v2-year-select" aria-label="Year"></select>
+      <button class="btn" data-year="1997" data-year-scope="local" data-year-type="mayor" data-zh-title="1997 縣市長＋1998 直轄市長（以今日行政區畫出）" data-en-title="1997 county + 1998 municipal mayors (drawn on today's map)">1997／98</button>
+      <button class="btn" data-year="2001" data-year-scope="local" data-year-type="mayor" data-zh-title="2001 縣市長＋2002 直轄市長（以今日行政區畫出）" data-en-title="2001 county + 2002 municipal mayors (drawn on today's map)">2001／02</button>
+      <button class="btn" data-year="2005" data-year-scope="local" data-year-type="mayor" data-zh-title="2005 縣市長＋2006 直轄市長（以今日行政區畫出）" data-en-title="2005 county + 2006 municipal mayors (drawn on today's map)">2005／06</button>
+      <button class="btn" data-year="2009" data-year-scope="local" data-year-type="mayor" data-zh-title="2009 縣市長＋2010 直轄市長（以今日行政區畫出）" data-en-title="2009 county + 2010 municipal mayors (drawn on today's map)">2009／10</button>
+      <button class="btn" data-year="1998" data-year-scope="local" data-year-type="councilor" data-zh-title="1998 縣市議員＋直轄市議員（以今日行政區畫出）" data-en-title="1998 county + municipal councils (drawn on today's map)">1998</button>
+      <button class="btn" data-year="2002" data-year-scope="local" data-year-type="councilor" data-zh-title="2002 縣市議員＋直轄市議員（以今日行政區畫出）" data-en-title="2002 county + municipal councils (drawn on today's map)">2002</button>
+      <button class="btn" data-year="2005" data-year-scope="local" data-year-type="councilor" data-zh-title="2005 縣市議員＋2006 直轄市議員（以今日行政區畫出）" data-en-title="2005 county + 2006 municipal councils (drawn on today's map)">2005／06</button>
+      <button class="btn" data-year="2009" data-year-scope="local" data-year-type="councilor" data-zh-title="2009 縣市議員＋2010 直轄市議員（以今日行政區畫出）" data-en-title="2009 county + 2010 municipal councils (drawn on today's map)">2009／10</button>
       <button class="btn" data-year="2014" data-year-scope="local">2014</button>
       <button class="btn" data-year="2018" data-year-scope="local">2018</button>
       <button class="btn active" data-year="2022" data-year-scope="local">2022</button>
@@ -193,7 +227,7 @@
     <div class="v2-group" id="v2-submode-group">
       <span class="v2-group-label" data-zh="子模式" data-en="View">子模式</span>
       <button class="btn active" data-submode="party" data-submode-scope="councilor" data-zh-title="政黨得票比例加總" data-en-title="Vote share summed by party" data-zh="政黨比例" data-en="By party">政黨比例</button>
-      <button class="btn" data-submode="candidate" data-submode-scope="councilor" data-zh-title="單一最高票候選人" data-en-title="The single top vote-getter" data-zh="最高候選人" data-en="Top candidate">最高候選人</button>
+      <button class="btn" data-submode="candidate" data-submode-scope="councilor" data-zh-title="單一最高票候選人" data-en-title="The single top vote-getter" data-zh="最高候選人" data-en="Top cand.">最高候選人</button>
       <button class="btn active" data-submode="geo" data-submode-scope="legislative" data-zh-title="區域立委選區地圖" data-en-title="Constituency map" data-zh="區域選區" data-en="Constituencies">區域選區</button>
       <button class="btn" data-submode="ind-p" data-submode-scope="legislative" data-zh-title="平地原住民立委" data-en-title="Lowland indigenous legislators" data-zh="平地原住民" data-en="Lowland Indigenous">平地原住民</button>
       <button class="btn" data-submode="ind-m" data-submode-scope="legislative" data-zh-title="山地原住民立委" data-en-title="Highland indigenous legislators" data-zh="山地原住民" data-en="Highland Indigenous">山地原住民</button>
@@ -216,9 +250,9 @@
   </div>
 
 <script src="i18n.js?v=20261029c"></script>
-<script src="navbar.js?v=20261031a"></script>
+<script src="navbar.js?v=20261101b"></script>
 <script src="disclaimer.js?v=20261031d"></script>
-<script src="toolbtns.js?v=20261031c"></script>
+<script src="toolbtns.js?v=20261101a"></script>
 <script src="legbars.js?v=20261027f"></script>
 <script src="noglow.js?v=20261029f"></script>
 <script src="data_legind.js?v=20261031b"></script>
@@ -226,7 +260,7 @@
 <script src="tcborder.js?v=20261031a"></script>
 <script src="history-legind.js?v=20261031f"></script>
 <script src="data_legdist.js?v=20261028d"></script>
-<script src="data_career.js?v=20261029a"></script>
+<script src="data_career.js?v=20261101a"></script>
 <script src="career.js?v=20261029a"></script>
 <script src="history-legdist.js?v=20261031c"></script>
 <script src="data_pl_national.js?v=20261028c"></script>
@@ -237,7 +271,14 @@
 <script src="data_village_chief.js?v=20261027a"></script>
 <script src="history-villchief.js?v=20261027h"></script>
 <script src="data_township_rep.js?v=20261027a"></script>
-<script src="history-townrep.js?v=20261028u"></script>
+<script src="history-townrep.js?v=20261031a"></script>
+<script src="data_oldmayor.js?v=20261031b"></script>
+<script src="history-oldmayor.js?v=20261101d"></script>
+<script src="data_council_ind.js?v=20261031a"></script>
+<script src="data_oldcouncil.js?v=20261031b"></script>
+<script src="history-oldcouncil.js?v=20261101i"></script>
+<script src="history-councilterms.js?v=20261101a"></script>
+<script src="history-councilind.js?v=20261101a"></script>
 <script>
 (function () {
   // Unified History V2 — pure navigation/orchestration shell.
@@ -323,6 +364,11 @@
 
   // 總統 (2026-10-31, user: 「好做總統」): V2 draws it from CEC files (history-legind.js kind 'pres', v2/data_pres.js)
   var PRES_YEARS = ['2008', '2012', '2016', '2020', '2024'];
+  // 縣市長 before 2014 (2026-10-31, user: 「要繼續更新縣市長嗎？歷年的…」): V2 draws them from CEC files on today's map
+  var OLD_MAYOR_YEARS = window.V2OldMayor ? window.V2OldMayor.CYCLES : [];
+  // 縣市議員 before 2014 (2026-10-31, user: 「縣市議員 1998–2009／10」): history-oldcouncil.js
+  var OLD_COUNCIL_YEARS = window.V2OldCouncil ? window.V2OldCouncil.CYCLES : [];
+  var OLD_YEARS = { mayor: OLD_MAYOR_YEARS, councilor: OLD_COUNCIL_YEARS };
 
   function setStatus(text, warn) {
     statusEl.textContent = text;
@@ -330,6 +376,8 @@
   }
 
   function renderControls() {
+    // 縣市長 1997／98–2009／10 (history-oldmayor.js) are 縣市長-only years: any other type snaps back to 2022
+    if (state.scope === 'local' && +state.localYear < 2014 && (OLD_YEARS[state.type] || []).indexOf(state.localYear) === -1) state.localYear = '2022';
     scopeBtns.forEach(function (b) {
       b.classList.toggle('active', b.getAttribute('data-scope') === state.scope);
     });
@@ -349,7 +397,7 @@
     yearBtns.forEach(function (b) {
       var yr = b.getAttribute('data-year');
       var scopeMatch = b.getAttribute('data-year-scope') === state.scope;
-      var show = scopeMatch;
+      var show = scopeMatch && (!b.hasAttribute('data-year-type') || b.getAttribute('data-year-type') === state.type);
       if (scopeMatch && state.scope === 'national') {
         // Data-adaptive: only show years the *current* Legislative sub-mode
         // actually has data for (e.g. Party-List's wider 2008–2024 range vs.
@@ -365,7 +413,7 @@
     var opts = yearBtns.filter(function (b) { return b.style.display !== 'none'; });
     yearSel.innerHTML = opts.map(function (b) {
       var y = b.getAttribute('data-year');
-      return '<option value="' + y + '"' + (b.classList.contains('active') ? ' selected' : '') + '>' + y + '</option>';
+      return '<option value="' + y + '"' + (b.classList.contains('active') ? ' selected' : '') + '>' + b.textContent.trim() + '</option>';
     }).join('');
 
     // 立委 sub-modes are the seat cards on the map's left now (see stripBase5); the bar keeps 縣市議員's pair only
@@ -695,6 +743,10 @@
         if (window.V2Career) window.V2Career.attach(win);   // 跳槽 tags in candidate rows (v2/career.js)   // + 區域立委-style result tags (council.html)
         // legislative bars as long as the mayor / council ones (legbars.js; the national test.html engine only)
         if (key === 'national' && window.V2LegBars) window.V2LegBars.attach(win);
+        // 縣市議員 原住民選區: click → its townships (history-councilind.js; the engine's layer is hover-only)
+        if (key === 'local' && window.V2CouncilInd) window.V2CouncilInd.attach(win);
+        // 縣市議員 term tags counted from 1998 (history-councilterms.js)
+        if (key === 'local' && window.V2CouncilTerms) window.V2CouncilTerms.attach(win);
         // population glow hidden in every History election, both engines (noglow.js; hidden only, V1 untouched)
         if (window.V2NoGlow) window.V2NoGlow.attach(win);
         eng.ready = true;
@@ -711,6 +763,8 @@
       if (state.type === 'township') return { type: 'township', year: state.localYear };
       if (state.type === 'villchief') return { type: 'villchief', year: state.localYear };
       if (state.type === 'townrep') return { type: 'townrep', year: state.localYear };
+      if (state.type === 'mayor' && OLD_MAYOR_YEARS.indexOf(state.localYear) !== -1) return { type: 'oldmayor', year: state.localYear };
+      if (state.type === 'councilor' && OLD_COUNCIL_YEARS.indexOf(state.localYear) !== -1) return { type: 'oldcouncil', year: state.localYear, submode: state.councilSubmode };
       return state.type === 'mayor'
         ? { type: 'mayor', year: state.localYear }
         : { type: 'councilor', year: state.localYear, submode: state.councilSubmode };
@@ -750,14 +804,32 @@
     var win = eng.frame.contentWindow;
     // 跳槽 tags: which race the panel shows (v2/career.js) — 不分區 has party rows only
     var RACE = { mayor: 'M', councilor: 'C', township: 'T', townrep: 'R', villchief: 'V' };
-    win.__v2CareerCtx = key === 'local' ? (RACE[desired.type] ? { race: RACE[desired.type], year: desired.year } : null)
+    win.__v2CareerCtx = key === 'local' ? (RACE[desired.type] && desired.type !== 'oldmayor' ? { race: RACE[desired.type], year: desired.year } : null)
       : (desired.submode === 'pl' || desired.type === 'president' ? null : { race: 'L', year: desired.year });
     try {
       if (key === 'local') {
         if (window.V2TownshipHead) window.V2TownshipHead.clear(win);
         if (window.V2VillageChief) window.V2VillageChief.clear(win);
         if (window.V2TownshipRep) window.V2TownshipRep.clear(win);
-        if (desired.type === 'townrep') {
+        if (window.V2OldMayor) window.V2OldMayor.clear(win);
+        if (window.V2CouncilInd) window.V2CouncilInd.clear(win);
+        if (window.V2OldCouncil) window.V2OldCouncil.clear(win);
+        if (desired.type === 'oldcouncil') {
+          // 縣市議員 1998–2009／10: the engine's 2014 縣市議員 mode underneath (legend, toolbars, county-council box), V2 draws
+          // the cycle from CEC files on today's map (history-oldcouncil.js)
+          win.setCouncilElectionMode(window.V2OldCouncil.ENGINE_YEAR);
+          win.setCouncilMode(desired.submode);
+          var nOc = window.V2OldCouncil.draw(win, desired.year);
+          var labC = (yearBtns.filter(function (b) { return b.getAttribute('data-year') === desired.year && b.getAttribute('data-year-type') === 'councilor'; })[0] || {}).textContent || desired.year;
+          setStatus(T('縣市議員 ' + labC + '：' + nOc + ' 席', 'Councilors ' + labC + ': ' + nOc + ' seats'));
+        } else if (desired.type === 'oldmayor') {
+          // 縣市長 1997／98–2009／10：V1 setMayorMode('2014') sets up the mode (legend, chips, panel), then V2 redraws the
+          // map from CEC files on today's map — one block per race, click → its townships → villages (history-oldmayor.js)
+          win.setMayorMode(window.V2OldMayor.ENGINE_YEAR);
+          var nOm = window.V2OldMayor.draw(win, desired.year);
+          var lab = (yearBtns.filter(function (b) { return b.getAttribute('data-year') === desired.year; })[0] || {}).textContent || desired.year;
+          setStatus(T('縣市長 ' + lab + '：' + nOm + ' 場選舉', 'Mayors ' + lab + ': ' + nOm + ' races'));
+        } else if (desired.type === 'townrep') {
           // 鄉鎮市民代表：V1 setMayorMode(yr) sets up the mode, then V2 redraws the map as 代表會 blocks (the engine's
           // 縣市議員 政黨比例 colouring, no population glow), the hemicycle in the engine's county-council box, click
           // a township → its villages (history-townrep.js)

@@ -32,14 +32,48 @@
 <script src="data_hist_m.js?v=20261031b"></script>
 <script src="data_eds_m.js?v=20261031a"></script>
 <script src="data_names_m.js?v=20261031b"></script>
-<script src="m-common.js?v=20261031a"></script>
+<script src="data_oldmayor_m.js?v=20261031a"></script>
+<script src="m-common.js?v=20261031b"></script>
 <script>
 (function () {
   var T = M.T, H = M_HIST;
   var RACES = [['pres', '總統', 'President', ['2008', '2012', '2016', '2020', '2024']], ['leg', '區域立委', 'District legislators', ['2008', '2012', '2016', '2020', '2024']],
-               ['pl', '不分區政黨', 'Party list', ['2008', '2012', '2016', '2020', '2024']], ['mayor', '縣市長', 'Mayors', ['2014', '2018', '2022']],
-               ['council', '縣市議會', 'Councils', ['2014', '2018', '2022']]];
+               ['pl', '不分區政黨', 'Party list', ['2008', '2012', '2016', '2020', '2024']], ['mayor', '縣市長', 'Mayors', ['1997', '2001', '2005', '2009', '2014', '2018', '2022']],
+               ['council', '縣市議會', 'Councils', ['1998', '2002', '2005', '2009', '2014', '2018', '2022']]];
   var st = { race: 'pres', year: '2024', cc: null, ed: null, open: null };
+  // 縣市長 1997／98–2009／10 (user 2026-10-31: 「桌機歷屆選舉＋手機版都放」; build_v2_oldmayor.py): one record per race, on
+  // today's townships. Before the 2010 mergers a county can hold two races (臺中縣 + 臺中市), so the map is drawn by
+  // township, each in its race winner's colour, and a county page lists its races
+  Object.keys(M_OLDMAYOR).forEach(function (y) { H.mayor[y] = M_OLDMAYOR[y].races; });
+  var isOld = function () { return st.race === 'mayor' && !!M_OLDMAYOR[st.year]; };
+  var yLabel = function (y) { return st.race === 'mayor' && M_OLDMAYOR[y] ? M_OLDMAYOR[y].label : st.race === 'council' ? ({ '2005': '2005／06', '2009': '2009／10' })[y] || y : y; };
+  // 縣市議員 1998–2009／10 (user 2026-10-31: 「縣市議員 1998–2009／10」; build_v2_oldcouncil.py): m/data_oldcouncil_m.js
+  // (279 KB) is loaded the first time one of those years is chosen. A council of that time is the county of that time
+  // (臺中縣 / 臺中市 …): the map colours each council's townships by its largest party, a county page lists its councils
+  // with their districts
+  var isOldC = function () { return st.race === 'council' && +st.year < 2014; };
+  var ocLoading = false;
+  function needOC() {
+    if (typeof M_OLDCOUNCIL !== 'undefined') return true;
+    if (!ocLoading) { ocLoading = true; var sc = document.createElement('script'); sc.src = 'data_oldcouncil_m.js?v=20261101a'; sc.onload = function () { render(); }; document.head.appendChild(sc); }
+    return false;
+  }
+  var ocs = function () { return M_OLDCOUNCIL[st.year].councils; };
+  var topOf = function (by) { var ks = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }), tot = ks.reduce(function (s, k) { return s + by[k]; }, 0); return { ks: ks, tot: tot, fill: ks.length ? M.fill(ks[0], (by[ks[0]] - (by[ks[1]] || 0)) / tot) : '#2a2f3a' }; };
+  var ocName = function (c) { return raceName(c); };
+  var ocKind = { r: ['第', '選區', 'District '], p: ['平地原住民第', '選區', 'Plains Indigenous District '], m: ['山地原住民第', '選區', 'Mountain Indigenous District '] };
+  function ocDist(k, d) {
+    if (d.i) return T('原住民選區（平地山地合併）', 'Indigenous district (plains + mountain)');
+    var no = +d.a; return T(ocKind[k][0] + no + ocKind[k][1], ocKind[k][2] + no);
+  }
+  var OLD_EN = { '臺北縣': 'Taipei County', '臺中縣': 'Taichung County', '臺南縣': 'Tainan County', '高雄縣': 'Kaohsiung County', '桃園縣': 'Taoyuan County', '臺中市': 'Taichung City', '臺南市': 'Tainan City' };
+  var raceName = function (r) {
+    var same = (M_COUNTIES.c[r.cc] && M_COUNTIES.c[r.cc].n || '').replace(/台/g, '臺') === r.n;
+    var cn = M_COUNTIES.c[r.cc] ? M_COUNTIES.c[r.cc].n : '', zh = cn.indexOf('台') !== -1 ? r.n.replace(/臺/g, '台') : r.n;   // the map's own 台 / 臺
+    return same ? M.county(r.cc) : T(zh, OLD_EN[r.n] || r.n);
+  };
+  // the race's own year (user: 「還是要再小title標示…是哪一年投票的」)
+  var raceElec = function (r) { return r.y + (r.m ? T(' 直轄市長', ' municipal mayor') : T(' 縣市長', ' county / city mayor')); };
   // 區域立委 districts (user 2026-10-31: 「區域立委太簡略」 → 「1,2」): drawn as districts, a district page of its own.
   // Outlines: today's (2020–); the five counties redrawn in 2020 use their 2016 lines for 2008–2016 (m/data_eds_m.js)
   var REDRAWN = ['10004', '66000', '67000', '64000', '10013'];
@@ -62,7 +96,12 @@
   function townRec(tc) {
     var d = H[st.race][st.year];
     if (st.race === 'pres' || st.race === 'pl') return d.tc[tc] ? { cands: d.cands, v: d.tc[tc] } : null;
-    if (st.race === 'mayor') { var c = d.filter(function (x) { return x.tc[tc]; })[0]; return c ? { cands: c.cands, v: c.tc[tc] } : null; }
+    if (st.race === 'mayor') {
+      var c = d.filter(function (x) { return x.tc[tc]; })[0];
+      // a county with two races that cycle (臺中縣 + 臺中市): the township names its race
+      var two = c && isOld() && d.filter(function (x) { return x.cc === c.cc; }).length > 1;
+      return c ? { cands: c.cands, v: c.tc[tc], race: two ? c : null } : null;
+    }
     if (st.race === 'leg') {
       var best = null;
       d.forEach(function (e) { var v = e.tc[tc]; if (v && (!best || v[2] > best.v[2])) best = { cands: e.cands, v: v, ed: e }; });
@@ -75,7 +114,7 @@
     var ks = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }), tot = ks.reduce(function (s, k) { return s + by[k]; }, 0);
     return '<div class="seats">' + ks.map(function (k) { return '<i style="flex:' + by[k] + ';background:' + M.color(k) + '" title="' + M.party(k) + ' ' + by[k] + '">' + (by[k] / tot > 0.06 ? by[k] : '') + '</i>'; }).join('') + '</div>' +
       '<div class="rows">' + ks.map(function (k) {
-        return '<div class="r won"><span class="who"><i style="background:' + M.color(k) + '"></i>' + M.party(k) + '</span><span class="bg"><span style="width:' + (by[k] / tot * 100).toFixed(1) + '%;background:' + M.color(k) + '"></span></span><span class="v">' + by[k] + T(' 席', ' seats') + '</span></div>';
+        return '<div class="r won"><span class="who"><i style="background:' + M.color(k) + '"></i>' + M.party(k) + '</span><span class="bg"><span style="width:' + (by[k] / tot * 100).toFixed(1) + '%;background:' + M.color(k) + '"></span></span><span class="v">' + by[k] + T(' 席', by[k] === 1 ? ' seat' : ' seats') + '</span></div>';
       }).join('') + '</div>';
   }
   var bars = function (r) { return M.rows(r.cands, r.v, { list: st.race === 'pl', top: st.race === 'pl' ? 7 : 0 }); };
@@ -83,10 +122,17 @@
   // ---------- render ----------
   function controls() {
     $('race').innerHTML = RACES.map(function (r) { return '<button type="button" data-r="' + r[0] + '" aria-pressed="' + (r[0] === st.race) + '">' + T(r[1], r[2]) + '</button>'; }).join('');
-    $('years').innerHTML = raceOf(st.race)[3].map(function (y) { return '<button type="button" data-y="' + y + '" aria-pressed="' + (y === st.year) + '">' + y + '</button>'; }).join('');
+    $('years').innerHTML = raceOf(st.race)[3].map(function (y) { return '<button type="button" data-y="' + y + '" aria-pressed="' + (y === st.year) + '">' + yLabel(y) + '</button>'; }).join('');
     $('crumb').innerHTML = !st.cc ? '<b>' + T('全台', 'Taiwan') + '</b>' : '<button type="button" data-back>' + T('全台', 'Taiwan') + '</button> › ' +
       (st.ed ? '<button type="button" data-cc>' + M.county(st.cc) + '</button> › <b>' + M.district(st.ed) + '</b>' : '<b>' + M.county(st.cc) + '</b>');
     document.title = T('歷屆選舉 · 手機版', 'Election History · Mobile');
+    // the chosen race / year in view (audit 2026-10-31: 縣市長's seven years pushed 2022 off the right edge of a phone)
+    ['race', 'years'].forEach(function (id) {
+      var box = $(id), b = box.querySelector('[aria-pressed="true"]');
+      if (!b) return;
+      var r = b.getBoundingClientRect(), R = box.getBoundingClientRect();
+      if (r.right > R.right) box.scrollLeft += r.right - R.right + 8; else if (r.left < R.left) box.scrollLeft -= R.left - r.left + 8;
+    });
   }
   function map() {
     var svg = $('map'), items;
@@ -97,6 +143,22 @@
       var e0 = edOf(st.ed);
       items = Object.keys(e0 ? e0.tc : {}).filter(function (tc) { return M_TOWNS.t[tc]; }).map(function (tc) {
         var l = M.lead(e0.cands, e0.tc[tc]); return { key: tc, d: M_TOWNS.t[tc], fill: l ? M.fill(l.c[1], l.margin) : '#2a2f3a', title: M.town(tc) };
+      });
+    } else if (isOldC()) {   // each council's townships in its largest party's colour (seats)
+      items = [];
+      ocs().forEach(function (c) {
+        var t = topOf(c.seats);
+        c.tcs.forEach(function (tc) { if (M_TOWNS.t[tc] && (!st.cc || tc.indexOf(st.cc) === 0)) items.push({ key: tc, d: M_TOWNS.t[tc], fill: t.fill, stroke: st.cc ? null : t.fill, title: ocName(c) + ' · ' + M.party(t.ks[0]) + ' ' + c.seats[t.ks[0]] }); });
+      });
+    } else if (!st.cc && isOld()) {   // every township in its race winner's colour (race blocks)
+      items = [];
+      H.mayor[st.year].forEach(function (r) {
+        var l = M.lead(r.cands, r.v), w = r.cands.filter(function (x) { return x[2]; })[0];
+        Object.keys(r.tc).forEach(function (tc) {
+          // stroke = fill: no township seams inside a race (user 2026-10-31: the 1997–2009 top layer looks like 2014+)
+          var f = l ? M.fill(l.c[1], l.margin) : '#2a2f3a';
+          if (M_TOWNS.t[tc]) items.push({ key: tc, d: M_TOWNS.t[tc], fill: f, stroke: f, title: raceName(r) + (w ? ' · ' + M.person(w[0]) : '') });
+        });
       });
     } else if (!st.cc) {
       items = M.ccs.map(function (cc) {
@@ -113,10 +175,10 @@
         return { key: tc, d: M_TOWNS.t[tc], fill: l ? M.fill(l.c[1], l.margin) : '#2a2f3a', title: M.town(tc) };
       });
     }
-    M.map(svg, items, { fit: !!st.cc, outline: st.ed ? edPath(st.ed, st.year) : st.cc ? M_COUNTIES.c[st.cc].d : null });
+    M.map(svg, items, { lines: !st.cc && (isOld() || isOldC()) ? M.ccs.map(function (cc) { return M_COUNTIES.c[cc].d; }) : null, fit: !!st.cc, outline: st.ed ? edPath(st.ed, st.year) : st.cc ? M_COUNTIES.c[st.cc].d : null });
     svg.setAttribute('aria-label', T('選舉結果地圖', 'Results map'));
     $('hint').textContent = st.race === 'leg' && !st.ed ? T('點選區看該選區；顏色越鮮明＝當選人領先越多', 'Tap a district; brighter colour = bigger winning margin')
-      : st.cc ? (st.race === 'council' ? T('議會席次沒有鄉鎮層資料', 'Council seats have no township figures') : T('點鄉鎮看該鄉鎮的得票', 'Tap a township for its votes'))
+      : st.cc ? (st.race === 'council' ? (isOldC() ? T('點選區看候選人得票', 'Tap a district for its candidates') : T('議會席次沒有鄉鎮層資料', 'Council seats have no township figures')) : T('點鄉鎮看該鄉鎮的得票', 'Tap a township for its votes'))
       : T('點縣市看各鄉鎮；顏色越鮮明＝領先越多', 'Tap a county for its townships; brighter colour = bigger lead');
   }
   function leaderCell(r) {
@@ -128,6 +190,15 @@
     if (st.race === 'pres' || st.race === 'pl') {
       h += '<section class="card"><h2>' + T('全國', 'Nationwide') + '</h2>' + bars({ cands: d.cands, v: d.nat }) + '<div class="meta">' + M.turnout(d.nat) + (st.race === 'pl' ? T('；得票不到 1% 的政黨合併為「其他」', '; parties under 1% pooled as Others') : '') + '</div></section>';
       h += '<section class="card"><h2>' + T('各縣市', 'By county') + '</h2><div class="list">' + M.ccs.map(function (cc) { return '<div class="li" data-cc="' + cc + '"><span class="nm">' + M.county(cc) + '</span>' + leaderCell(countyRec(cc)) + '</div>'; }).join('') + '</div></section>';
+    } else if (isOld()) {
+      var wonO = seatsOf(d.map(function (c) { var w = c.cands.filter(function (x) { return x[2]; })[0]; return w ? w[1] : 'other'; }));
+      h += '<section class="card"><h2>' + T('當選縣市長（' + d.length + ' 場）', 'Mayors elected (' + d.length + ' races)') + '</h2>' + seatStrip(wonO) + '</section>';
+      h += '<section class="card"><h2>' + T('各縣市', 'By race') + '</h2><div class="list">' + M.ccs.map(function (cc) {
+        return d.filter(function (r) { return r.cc === cc; }).map(function (r) {
+          var w = r.cands.filter(function (x) { return x[2]; })[0], i = r.cands.indexOf(w);
+          return '<div class="li" data-cc="' + cc + '"><span class="nm">' + raceName(r) + '<small>' + r.y + '</small></span><span class="ld"><span class="dot" style="background:' + M.color(w[1]) + '"></span>✓ ' + M.person(w[0]) + ' ' + M.pct(r.v[3 + i] / r.v[2]) + '</span></div>';
+        }).join('');
+      }).join('') + '</div><div class="meta">' + T('以今日行政區畫出：2010 年合併前的臺北縣、臺中縣、臺南縣、高雄縣各自選縣長；直轄市長在縣市長選舉的隔年投票。', 'Drawn on today\'s map: before the 2010 mergers Taipei, Taichung, Tainan and Kaohsiung counties elected their own magistrates; municipal mayors were elected the year after.') + '</div></section>';
     } else if (st.race === 'mayor') {
       var won = seatsOf(d.map(function (c) { var w = c.cands.filter(function (x) { return x[2]; })[0]; return w ? w[1] : 'other'; }));
       h += '<section class="card"><h2>' + T('當選縣市長', 'Mayors elected') + '</h2>' + seatStrip(won) + '</section>';
@@ -142,6 +213,15 @@
         var by = seatsOf(edsOf(cc).map(function (e) { var w = e.cands.filter(function (c) { return c[2]; })[0]; return w ? w[1] : 'other'; }));
         return '<div class="li" data-cc="' + cc + '"><span class="nm">' + M.county(cc) + '</span><span class="ld">' + Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).map(function (p) { return '<span class="dot" style="background:' + M.color(p) + '"></span>' + by[p]; }).join(' ') + '</span></div>';
       }).join('') + '</div></section>';
+    } else if (isOldC()) {
+      var all = {}; ocs().forEach(function (c) { Object.keys(c.seats).forEach(function (p) { all[p] = (all[p] || 0) + c.seats[p]; }); });
+      h += '<section class="card"><h2>' + T('全台議員席次（' + ocs().length + ' 個議會）', 'Council seats, all Taiwan (' + ocs().length + ' councils)') + '</h2>' + seatStrip(all) + '</section>';
+      h += '<section class="card"><h2>' + T('各議會最大黨', 'Largest party, by council') + '</h2><div class="list">' + M.ccs.map(function (cc) {
+        return ocs().filter(function (c) { return c.cc === cc; }).map(function (c) {
+          var t = topOf(c.seats);
+          return '<div class="li" data-cc="' + cc + '"><span class="nm">' + ocName(c) + '<small>' + c.y + '・' + t.tot + T(' 席', ' seats') + '</small></span><span class="ld"><span class="dot" style="background:' + M.color(t.ks[0]) + '"></span>' + M.party(t.ks[0]) + ' ' + c.seats[t.ks[0]] + '</span></div>';
+        }).join('');
+      }).join('') + '</div><div class="meta">' + T('以今日行政區畫出：2010 年合併前的臺北縣、臺中縣、臺南縣、高雄縣各有議會；直轄市議員 2006、2010 年投票。', 'Drawn on today\'s map: before the 2010 mergers Taipei, Taichung, Tainan and Kaohsiung counties had their own councils; municipal councils voted in 2006 and 2010.') + '</div></section>';
     } else {
       var tot = {}; Object.keys(d).forEach(function (cc) { Object.keys(d[cc]).forEach(function (p) { tot[p] = (tot[p] || 0) + d[cc][p]; }); });
       h += '<section class="card"><h2>' + T('全台議員席次', 'Council seats, all Taiwan') + '</h2>' + seatStrip(tot) + '</section>';
@@ -154,6 +234,20 @@
   }
   function panelCounty() {
     var h = '', cc = st.cc;
+    if (isOldC()) {
+      return ocs().filter(function (c) { return c.cc === cc; }).map(function (c) {
+        var n = Object.keys(c.seats).reduce(function (s, p) { return s + c.seats[p]; }, 0);
+        var dists = [];
+        ['r', 'p', 'm'].forEach(function (k) { (c.d[k] || []).forEach(function (d) { dists.push([k, d]); }); });
+        return '<section class="card"><h2>' + ocName(c) + T('議會', ' council') + ' <small style="color:var(--faint);font-weight:400;font-size:12px">' + c.y + T(' 選舉・', ' · ') + n + T(' 席', ' seats') + '</small></h2>' + seatStrip(c.seats) +
+          '<div class="list" style="margin-top:8px">' + dists.map(function (kd) {
+            var k = kd[0], d = kd[1], won = d.cands.filter(function (x) { return x[2]; }), id = 'oc-' + c.n + c.y + k + d.a;
+            return '<details id="t-' + id + '"' + (st.open === id ? ' open' : '') + '><summary class="li" data-tc="' + id + '"><span class="nm">' + ocDist(k, d) + '<small>' + T('應選 ' + won.length, won.length + ' seat' + (won.length > 1 ? 's' : '')) + '</small></span><span class="ld">' +
+              won.map(function (x) { return '<span class="dot" style="background:' + M.color(x[1]) + '"></span>'; }).join('') + '</span></summary>' +
+              '<div class="exp">' + M.rows(d.cands, d.v) + '<div class="meta">' + M.turnout(d.v) + (d.pt ? T('・中選會這一屆的鄉鎮資料不完整', ' · CEC\'s township rows incomplete') : '') + '</div></div></details>';
+          }).join('') + '</div></section>';
+      }).join('') || '<section class="card">' + T('無資料', 'No data') + '</section>';
+    }
     if (st.race === 'council') {
       return '<section class="card"><h2>' + M.county(cc) + T(' 議會席次', ' council seats') + '</h2>' + seatStrip(H.council[st.year][cc] || {}) + '<div class="meta">' + T('含區域、平地與山地原住民議員；中選會當選名單', 'Incl. lowland and highland indigenous seats; CEC elected lists') + '</div></section>';
     }
@@ -163,13 +257,17 @@
         var w = winOf(e), i = e.cands.indexOf(w);
         return '<div class="li" data-ed="' + e.n + '"><span class="nm">' + edName(e) + '</span><span class="ld"><span class="dot" style="background:' + M.color(w[1]) + '"></span>✓ ' + M.person(w[0]) + ' ' + M.pct(e.v[3 + i] / e.v[2]) + ' ›</span></div>';
       }).join('') + '</div></section>';
+    } else if (isOld()) {   // the county's race(s) that cycle
+      H.mayor[st.year].filter(function (x) { return x.cc === cc; }).forEach(function (x) {
+        h += '<section class="card"><h2>' + raceName(x) + ' <small style="color:var(--faint);font-weight:400;font-size:12px">' + raceElec(x) + '</small></h2>' + bars(x) + '<div class="meta">' + M.turnout(x.v) + '・' + Object.keys(x.tc).length + T(' 個鄉鎮市區', ' townships') + '</div></section>';
+      });
     } else {
       var r = countyRec(cc);
       h += '<section class="card"><h2>' + M.county(cc) + '</h2>' + (r ? bars(r) + '<div class="meta">' + M.turnout(r.v) + '</div>' : T('無資料', 'No data')) + '</section>';
     }
     h += '<section class="card"><h2>' + T('各鄉鎮市區', 'By township') + '</h2><div class="list">' + M.townsOf(cc).map(function (tc) {
       var r = townRec(tc), on = st.open === tc;
-      return '<details id="t-' + tc + '"' + (on ? ' open' : '') + '><summary class="li" data-tc="' + tc + '"><span class="nm">' + M.town(tc) + (st.race === 'leg' && r ? '<small>' + M.district(r.ed.n) + '</small>' : '') + '</span>' + leaderCell(r) + '</summary>' +
+      return '<details id="t-' + tc + '"' + (on ? ' open' : '') + '><summary class="li" data-tc="' + tc + '"><span class="nm">' + M.town(tc) + (st.race === 'leg' && r ? '<small>' + M.district(r.ed.n) + '</small>' : r && r.race ? '<small>' + raceName(r.race) + '</small>' : '') + '</span>' + leaderCell(r) + '</summary>' +
         '<div class="exp">' + (r ? bars(r) + '<div class="meta">' + M.turnout(r.v) + '</div>' : '') + '</div></details>';
     }).join('') + '</div></section>';
     return h;
@@ -193,9 +291,10 @@
     return h;
   }
   function render() {
+    if (isOldC() && !needOC()) { controls(); $('panel').innerHTML = '<section class="card">' + T('載入中…', 'Loading…') + '</section>'; return; }
     controls(); map();
     $('panel').innerHTML = st.cc ? panelCounty() : panelTaiwan();
-    $('foot').innerHTML = T('資料：中央選舉委員會選舉資料庫原始檔（縣市、鄉鎮層）；2010 年縣市合併前的舊縣市已換成今天的縣市與鄉鎮。村里層請用', 'Data: CEC election database files (county and township level); pre-2010 counties are mapped to today\'s. For villages, use the ') +
+    $('foot').innerHTML = T('資料：中央選舉委員會選舉資料庫原始檔（縣市、鄉鎮層）；2010 年縣市合併前的舊縣市已換成今天的縣市與鄉鎮（1997–2009 縣市長以今日行政區畫出）。村里層請用', 'Data: CEC election database files (county and township level); pre-2010 counties are mapped to today\'s. For villages, use the ') +
       ' <a href="../history.html">' + T('桌機版', 'desktop page') + '</a>' + T('。', '.');
     M.needPinyin(render);
   }
