@@ -23,13 +23,17 @@
     function refresh() {
       var win = getWin(), doc = win && win.document, nw = doc && doc.getElementById('nav-wrap');
       if (!nw) { box.style.display = 'none'; return; }
-      box.style.display = '';
+      box.style.display = 'inline-flex';   // not '' — that dropped the inline-flex and the buttons wrapped (2026-11-01)
       if (!doc.getElementById('v2-navbar-hide')) { var st = doc.createElement('style'); st.id = 'v2-navbar-hide'; st.textContent = HIDE; doc.head.appendChild(st); }
       if (hooked !== nw && win.MutationObserver) {
         hooked = nw;
         new win.MutationObserver(function () { refresh(); }).observe(nw, { childList: true, subtree: true, characterData: true, attributes: true });
       }
-      box.innerHTML = '';
+      // built off-screen and swapped in at once (2026-10-31, user: 「2022市議員會一直閃然後地圖無法按照位置點亮」): emptying the bar
+      // first let the getComputedStyle below lay the page out with a half-built bar — narrower, so the wrapped top bar
+      // unwrapped and the engine's frame changed height for a moment, firing its resize handler (goED), whose crumb
+      // update ran this again: an endless redraw loop whenever the bar wraps (縣市議員's extra buttons)
+      var frag = document.createDocumentFragment();
       // crumb: 全台 › 縣市 › … — clickable parts keep their engine handler
       var crumb = doc.getElementById('crumb'), cbox = document.createElement('span');
       cbox.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#e7eaf0;padding:0 4px;white-space:nowrap';
@@ -51,21 +55,35 @@
         } else el.style.color = 'rgba(231,234,240,.55)';
         cbox.appendChild(el);
       });
-      box.appendChild(cbox);
+      frag.appendChild(cbox);
+      // 全台鄉鎮市區 / 全台村里 only at the top: hidden once inside a county / township / village layer (user 2026-10-31:
+      // 「全台鄉鎮市區跟全台村里按鈕在鄉鎮市區跟村里層按鈕就隱藏」) — shown on 全台 itself and in those two views
+      var parts = [].map.call(cbox.childNodes, function (n) { return n.textContent; }).join(' ').split('›')
+        .map(function (t) { return t.trim(); }).filter(Boolean);
+      var last = parts.length ? parts[parts.length - 1] : '';
+      // a 2-part crumb whose second part names the whole map (「2022 縣市長選舉」「全台鄉鎮市區總覽」「22 縣市」「不分區（縣市）」「2026 縣市長預測」…) is
+      // still the top; a county / district / township name (「新北市」「臺北市第1選舉區」「新店區」) is not
+      var TOP = /(選舉|Election|總覽|Overview|View|全台鄉鎮市區|全台村里|All Townships|All Villages|22 縣市|22 counties|（縣市）|\(by county\)|總統|Presidential|立委|Legislator|預測|Forecast|Prediction)$/i;
+      var top = parts.length <= 1 || (parts.length === 2 && TOP.test(last));
+      if (!top) { box.replaceChildren(frag); return; }
       // the national-view buttons (hidden ones stay hidden)
       [].forEach.call(nw.querySelectorAll('button[onclick]'), function (b) {
         var cs = win.getComputedStyle(b);
         if (cs.display === 'none' || cs.visibility === 'hidden') return;
         var nb = document.createElement('button');
-        nb.type = 'button'; nb.textContent = (b.textContent || '').trim(); nb.title = b.title || '';
+        // English: 「All Townships」「All Villages」 → 「Townships」「Villages」 (the crumb before them already says 「All」; the bar
+        // stays one row — user 2026-11-01: 「英文的按鈕都還是有擠在一起的問題」)
+        var lbl = (b.textContent || '').trim();
+        nb.type = 'button'; nb.textContent = lbl.replace(/^All (Townships|Villages)$/, '$1'); nb.title = b.title || lbl;
         nb.style.cssText = BTN;
         var on = b.classList.contains('active');
         if (on) nb.style.background = 'rgba(40,200,200,.22)';
         if (b.disabled) { nb.disabled = true; nb.style.opacity = '.35'; nb.style.cursor = 'default'; }
         var oc = b.getAttribute('onclick');
         nb.addEventListener('click', function () { run(getWin(), oc); });
-        box.appendChild(nb);
+        frag.appendChild(nb);
       });
+      box.replaceChildren(frag);
     }
     refresh();
     return { refresh: refresh };

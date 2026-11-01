@@ -132,8 +132,11 @@
     svg.setAttribute('viewBox', [b[0] - pad, b[1] - pad, w, h].map(function (x) { return x.toFixed(1); }).join(' '));
     var sw = Math.max(w, h) / 600;
     svg.innerHTML = items.map(function (x) {
-      return '<path class="mp" data-k="' + x.key + '" d="' + x.d + '" fill="' + x.fill + '" stroke="rgba(8,10,16,.9)" stroke-width="' + sw.toFixed(2) + '"><title>' + (x.title || '') + '</title></path>';
-    }).join('') + (opts.outline ? '<path d="' + opts.outline + '" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="' + (sw * 1.6).toFixed(2) + '" pointer-events="none"/>' : '');
+      return '<path class="mp" data-k="' + x.key + '" d="' + x.d + '" fill="' + x.fill + '" stroke="' + (x.stroke || 'rgba(8,10,16,.9)') + '" stroke-width="' + sw.toFixed(2) + '"><title>' + (x.title || '') + '</title></path>';
+    }).join('') +
+      // opts.lines: faint area lines over the blocks (the engine's 縣市長 county line, rgba(255,255,255,.18))
+      (opts.lines || []).map(function (d) { return '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="' + sw.toFixed(2) + '" pointer-events="none"/>'; }).join('') +
+      (opts.outline ? '<path d="' + opts.outline + '" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="' + (sw * 1.6).toFixed(2) + '" pointer-events="none"/>' : '');
   };
   M.townsOf = function (cc) { return Object.keys(M_TOWNS.t).filter(function (tc) { return tc.indexOf(cc) === 0 && M_TOWNS.t[tc]; }).sort(); };
 

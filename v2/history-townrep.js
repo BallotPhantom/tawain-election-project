@@ -144,7 +144,9 @@
   }
 
   // township panel: each district's candidates (renderCouncilCandRow, ✓ = elected), regular districts first
-  function tcPanelHtml(c, tc) {
+  // hint: the line under the panel (user 2026-10-31: 「鄉鎮市民代表應該要有點擊進入村里的字樣」) — 'enter' on the national map,
+  // 'vill' inside the township
+  function tcPanelHtml(c, tc, hint) {
     var win = c.win, T = win.T, nm = names(win, tc), body = c.data[tc];
     if (!body) return '<div class="t1">' + nm.cn + ' ' + nm.tn + '</div><div style="color:#bbb;font-size:11px;margin-top:4px">' +
       T('直轄市與省轄市的區沒有代表會（直轄市山地原住民區除外）', 'No representative council — appointed district (except the six indigenous districts)') + '</div>';
@@ -158,7 +160,9 @@
     return '<div class="t1">' + nm.cn + ' ' + nm.tn + '</div>' +
       '<div style="font-size:10px;color:#888;margin-top:2px;margin-bottom:5px">' + c.year + T(' 鄉鎮市民代表選舉', ' Township Representative Election') + '</div>' +
       win._glassBadge('#5eead4', T('代表會 ' + seats + ' 席', seats + ' seats')) +
-      '<div style="max-height:320px;overflow-y:auto">' + html + '</div>';
+      '<div style="max-height:320px;overflow-y:auto">' + html + '</div>' +
+      (hint ? '<div class="hint" style="text-align:center;opacity:0.5;margin-top:8px">' + (hint === 'enter' ? T('點擊進入村里層 ▶', 'Click to enter village level ▶')
+        : T('移到各村里查看得票', 'Hover a village for its votes')) + '</div>' : '');
   }
   // village panel: _mayorVillPanelHtml's pieces — this village's votes of its district's candidates, every one on its own row
   function vcPanelHtml(c, tc, vc) {
@@ -226,7 +230,7 @@
       .attr('cursor', function (d) { return c.data[d.properties.tc] ? 'pointer' : 'default'; })
       .on('mouseover', function (e, d) {
         var tc = d.properties.tc;
-        ic(win, tcPanelHtml(c, tc));
+        ic(win, tcPanelHtml(c, tc, 'enter'));
         hemi(c, tc, null);
       })
       .on('click', function (e, d) { if (c.data[d.properties.tc]) township(c, d.properties.tc); });
@@ -288,7 +292,7 @@
       .attr('fill', 'none').attr('stroke', 'rgba(255,255,255,0.9)').attr('stroke-width', 2.5)
       .attr('vector-effect', 'non-scaling-stroke').attr('pointer-events', 'none');
     G(win, 'fitFeats')(feats);
-    ic(win, tcPanelHtml(c, tc));
+    ic(win, tcPanelHtml(c, tc, 'vill'));
     hemi(c, tc, null);
     setCrumb(c, tc);
     setTimeout(function () { if (typeof win.renderLegend === 'function') win.renderLegend(); }, 420);

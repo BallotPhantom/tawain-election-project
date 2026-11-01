@@ -67,7 +67,7 @@
         info.style.display = note ? '' : 'none';
         var can = !!(w && typeof w.setColorblindMode === 'function'), on = can && !!G(w, 'colorblindMode');
         cb.style.display = can ? '' : 'none';
-        cb.textContent = en ? 'Colorblind-friendly' : '色盲友善';
+        cb.textContent = en ? 'Colorblind' : '色盲友善';   // short: the bar stays one row in English (user 2026-11-01)
         cb.title = en ? 'Colour-blind palette: swaps the red / orange / green turnout lights and some chart colours for blue / orange'
                       : '色盲友善模式：把紅／橘／綠的投票率燈號跟部分圖表配色，換成藍／橘的色盲安全配色';
         cb.setAttribute('aria-pressed', String(on));
