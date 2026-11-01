@@ -86,6 +86,10 @@
     }
     var isBlock = function (el) { return el && el.tagName === 'path' && el.classList && (el.classList.contains('ft-tc') || el.classList.contains('ft-pltc') || el.classList.contains('ft-town-baselean') || el.classList.contains('ft-ed')); };
     var isVill = function (el) { return el && el.tagName === 'path' && /(^|\s)(ft-vill\S*|v2-li-blk)(\s|$)/.test(el.getAttribute('class') || ''); };
+    // any other block made of villages (a county / district of a V2 module or page) opts in to the gap fill with the class
+    // v2-gap-owner and its villages' indices in its datum's __v2Vill (user 2026-11-01: 「政黨基本盤的地圖ED層也有不少洞洞」 —
+    // the river beds between two counties are no block's hole, so solid() alone leaves them black)
+    var isOwner = function (el) { return el && el.tagName === 'path' && el.classList && el.classList.contains('v2-gap-owner') && el.__data__ && el.__data__.__v2Vill; };
 
     function apply() {
       st.raf = 0;
@@ -132,7 +136,7 @@
       if (st.lbl) { st.lbl.remove(); st.lbl = null; }
       var m = vmap(win), pathFn = G(win, 'pathFn');
       if (!m || !pathFn) return;
-      var els = [].filter.call(g.querySelectorAll('path'), function (el) { return isBlock(el) || isVill(el); });
+      var els = [].filter.call(g.querySelectorAll('path'), function (el) { return isBlock(el) || isVill(el) || isOwner(el); });
       if (!els.length) return;
       var byTc = m.byTc(), byVc = m.byVc(), owner = new Map();
       els.forEach(function (el) {
@@ -193,10 +197,17 @@
       var is16 = !!(gj16 && f0 && gj16.features.indexOf(f0) >= 0), is24 = !!(gj24 && f0 && gj24.features.indexOf(f0) >= 0);
       if (!is16 && !is24) { if (st.group) { st.group.remove(); st.group = null; st.hov = null; } return; }
       var arr = is16 ? villageEd2016(win) : win.__v2VcEd2024;
+      var early = false;
       eds.forEach(function (el) {
         var fill = el.style.fill || el.getAttribute('fill');   // the engine colours some layers by style (.ft-ed: attr #16161c, style = the colour)
+        // still the engine's placeholder (its colour transition sets style.fill a moment later, and style changes are not
+        // observed): try again shortly — otherwise every block kept a dark #16161c outline (2026-11-01 audit, 2016–2024)
+        if (/^(#16161c|rgb\(22, ?22, ?28\))$/i.test(fill || '')) early = true;
         if (fill) { el.style.stroke = fill; el.style.strokeWidth = '0.6'; el.style.vectorEffect = 'non-scaling-stroke'; }
       });
+      // bounded: a few tries while the transition runs, never a loop (each try re-runs the gap fill)
+      if (early && (st.edTries = (st.edTries || 0) + 1) <= 6) { clearTimeout(st.edRetry); st.edRetry = setTimeout(schedule, 450); }
+      else if (!early) st.edTries = 0;
       [].forEach.call(g.querySelectorAll('path.co-b'), function (el) { el.style.display = 'none'; });
       var grp = doc.createElementNS(SVGNS, 'g');
       grp.setAttribute('class', 'v2-tcb-g');
@@ -231,7 +242,7 @@
       var ours = function (n) { return n === st.group || (st.group && st.group.contains(n)) || n === st.gap || (st.gap && st.gap.contains(n)) || n === st.lbl || (st.lbl && st.lbl.contains(n)) || (n.classList && (n.classList.contains('v2-tcb-g') || n.classList.contains('v2-tcb-gap') || n.classList.contains('v2-blk-hov') || n.classList.contains('v2-p28-hov'))); };
       for (var i = 0; i < muts.length; i++) {
         var m = muts[i];
-        if (m.type === 'attributes') { if (!ours(m.target) && (isBlock(m.target) || isVill(m.target))) { schedule(); return; } continue; }
+        if (m.type === 'attributes') { if (!ours(m.target) && (isBlock(m.target) || isVill(m.target) || isOwner(m.target))) { schedule(); return; } continue; }
         var nodes = [].slice.call(m.addedNodes).concat([].slice.call(m.removedNodes));
         if (nodes.some(function (n) { return !ours(n); })) { schedule(); return; }
       }

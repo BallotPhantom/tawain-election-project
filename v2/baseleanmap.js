@@ -203,10 +203,36 @@
       if (!(key in cache)) { try { cache[key] = win._baseLeanCountyColor(key) || null; } catch (e) { cache[key] = null; } }
       return cache[key];
     };
+    // county name (the engine's, 台 or 臺) → the indices of its villages in VD (the order tcborder.js indexes them in)
+    var vByCounty = null;
+    var countyVillages = function (name) {
+      if (!vByCounty) {
+        vByCounty = {};
+        var CD = win.eval('CD'), VD = win.eval('VD'), cc = {};
+        win.topojson.feature(CD, CD.objects.counties).features.forEach(function (f) { cc[String(f.properties.cn).replace(/台/g, '臺')] = f.properties.cc; });
+        var byCc = {};
+        VD.objects.villages.geometries.forEach(function (g, i) { var vc = g.properties && g.properties.vc; if (vc) (byCc[String(vc).slice(0, 5)] = byCc[String(vc).slice(0, 5)] || []).push(i); });
+        Object.keys(cc).forEach(function (n) { vByCounty[n] = byCc[cc[n]] || []; });
+      }
+      return vByCounty[String(name || '').replace(/台/g, '臺')] || null;
+    };
     var paint = function () {
+      var pathFn = null; try { pathFn = win.eval('pathFn'); } catch (e) {}
       [].forEach.call(gb.querySelectorAll(':scope > .ft-county-baselean'), function (p) {
         var c = color(p.__data__);
         if (c && p.style.fill !== c) p.style.fill = c;
+        // the engine's county blocks are merged villages with the village map's gaps (air bases, river beds) left as
+        // holes — the black dots (user 2026-11-01: 「政黨基本盤的地圖ED層也有不少洞洞」). Filled the shared way
+        // (V2TcBorder.solid, as every other map's county / district level); real enclaves (臺北市 in 新北市, 嘉義市 in
+        // 嘉義縣) stay, their own block covers them
+        var dd = p.__data__;
+        if (dd && dd.geometry && window.V2TcBorder && pathFn) {
+          if (!dd.__v2Solid) { window.V2TcBorder.solid(win, dd.geometry); dd.__v2Solid = true; }
+          // its villages, so tcborder.js fills the gaps between counties (river beds) in the nearest county's colour
+          if (!dd.__v2Vill) dd.__v2Vill = countyVillages(dd.properties && dd.properties.county);
+          if (!p.classList.contains('v2-gap-owner')) p.classList.add('v2-gap-owner');
+          if (p.__v2SolidD !== p.getAttribute('d') || !p.__v2SolidD) { var nd = pathFn(dd); if (nd) { p.setAttribute('d', nd); p.__v2SolidD = nd; } }
+        }
       });
       if (typeof win._baseLeanCountyColor === 'function') {
         [].forEach.call(gb.querySelectorAll(':scope > path.ft-tc, :scope > path.ft-vill'), function (p) {
