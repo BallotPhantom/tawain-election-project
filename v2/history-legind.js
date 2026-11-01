@@ -16,7 +16,7 @@
  *  - no legend (user: 「這個圖利請刪掉」): #legend is hidden while the mode is on;
  *  - data: LEGIND (v2/data_legind.js, build_v2_legind.py, tests/reconcile_v2_legind.py), all three years from CEC files.
  * 總統 (2026-10-31, user: 「好做總統」): also one nationwide race, drawn the same way as a third kind 'pres' — data PRES_HIST
- * (v2/data_pres.js, build_v2_pres.py, tests/reconcile_v2_pres.py), 2008–2024; a row's tooltip names the running mate.
+ * (v2/data_pres.js, build_v2_pres.py, tests/reconcile_v2_pres.py), 1996–2024; a row's tooltip names the running mate.
  * V2LegInd.draw(win, year, kind 'p' | 'm' | 'pres') / V2LegInd.clear(win).
  */
 (function () {

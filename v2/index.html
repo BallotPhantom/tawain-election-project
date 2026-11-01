@@ -173,7 +173,7 @@
         <svg viewBox="0 0 400 112" preserveAspectRatio="none" id="viz-history"></svg>
       </div>
       <p class="q-d" data-zh="總統、立委、縣市長、縣市議員歷屆結果，從全國一路看到村里。" data-en="Presidential, legislative, mayoral and council results, from the national map down to each village.">總統、立委、縣市長、縣市議員歷屆結果，從全國一路看到村里。</p>
-      <div class="q-foot"><span class="chip" data-zh="2014 – 2024" data-en="2014 – 2024">2014 – 2024</span><span class="go" data-zh="進入歷史 →" data-en="Open History →">進入歷史 →</span></div>
+      <div class="q-foot"><span class="chip" data-zh="1995 – 2024" data-en="1995 – 2024">1995 – 2024</span><span class="go" data-zh="進入歷史 →" data-en="Open History →">進入歷史 →</span></div>
     </a>
 
     <!-- 02 · present -->
@@ -308,13 +308,13 @@
 
   // 01 History: one strip of 40 "districts" per election year, the colour mix drifting year to year
   (function () {
-    var svg = document.getElementById('viz-history'), r = rng(7), years = ['2014', '2016', '2018', '2020', '2022', '2024'];
+    var svg = document.getElementById('viz-history'), r = rng(7), years = ['1995', '2000', '2004', '2012', '2018', '2024'];   // the History page's span (user 2026-11-01: 「hist mode要從96?年開始而不是14」 — 1995 第3屆立委 is its first year)
     var share = [0.62, 0.66, 0.4, 0.6, 0.36, 0.52];
     years.forEach(function (y, row) {
       var yy = 6 + row * 17;
       el('text', { x: 0, y: yy + 10, fill: 'rgba(231,234,240,.4)', 'font-size': 9, 'font-family': 'Orbitron, sans-serif' }, svg).textContent = y;
       for (var i = 0; i < 40; i++) {
-        var v = r(), col = v < share[row] ? C.dpp : v < share[row] + (1 - share[row]) * 0.85 ? C.kmt : (row >= 3 && v > 0.97 ? C.tpp : C.other);
+        var v = r(), col = v < share[row] ? C.dpp : v < share[row] + (1 - share[row]) * 0.85 ? C.kmt : (row === 5 && v > 0.97 ? C.tpp : C.other);
         el('rect', { x: 36 + i * 9.1, y: yy, width: 8, height: 12, rx: 1.5, fill: col, opacity: 0.55 + r() * 0.4 }, svg);
       }
     });
