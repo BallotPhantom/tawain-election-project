@@ -212,6 +212,12 @@
       <button class="btn" data-year="2002" data-year-scope="local" data-year-type="councilor" data-zh-title="2002 縣市議員＋直轄市議員（以今日行政區畫出）" data-en-title="2002 county + municipal councils (drawn on today's map)">2002</button>
       <button class="btn" data-year="2005" data-year-scope="local" data-year-type="councilor" data-zh-title="2005 縣市議員＋2006 直轄市議員（以今日行政區畫出）" data-en-title="2005 county + 2006 municipal councils (drawn on today's map)">2005／06</button>
       <button class="btn" data-year="2009" data-year-scope="local" data-year-type="councilor" data-zh-title="2009 縣市議員＋2010 直轄市議員（以今日行政區畫出）" data-en-title="2009 county + 2010 municipal councils (drawn on today's map)">2009／10</button>
+      <button class="btn" data-year="1998" data-year-scope="local" data-year-type="township">1998</button>
+      <button class="btn" data-year="2002" data-year-scope="local" data-year-type="township">2002</button>
+      <button class="btn" data-year="2005" data-year-scope="local" data-year-type="township">2005</button>
+      <button class="btn" data-year="2009" data-year-scope="local" data-year-type="township">2009</button>
+      <button class="btn" data-year="2010" data-year-scope="local" data-year-type="townrep">2010</button>
+      <button class="btn" data-year="2010" data-year-scope="local" data-year-type="villchief">2010</button>
       <button class="btn" data-year="2014" data-year-scope="local">2014</button>
       <button class="btn" data-year="2018" data-year-scope="local">2018</button>
       <button class="btn active" data-year="2022" data-year-scope="local">2022</button>
@@ -258,27 +264,30 @@
 <script src="data_legind.js?v=20261031b"></script>
 <script src="data_pres.js?v=20261031a"></script>
 <script src="tcborder.js?v=20261031a"></script>
-<script src="history-legind.js?v=20261031f"></script>
+<script src="history-legind.js?v=20261101nd"></script>
 <script src="data_legdist.js?v=20261028d"></script>
-<script src="data_career.js?v=20261101a"></script>
+<script src="data_career.js?v=20261101c"></script>
 <script src="career.js?v=20261029a"></script>
-<script src="history-legdist.js?v=20261031c"></script>
+<script src="history-legdist.js?v=20261101nd"></script>
 <script src="data_pl_national.js?v=20261028c"></script>
 <script src="history-plnat.js?v=20261031a"></script>
 <script src="data_township_head.js?v=20261026c"></script>
 <script src="data_township_head_vill.js?v=20261027b"></script>
-<script src="history-townhead.js?v=20261028u"></script>
+<script src="data_township_head_old.js?v=20261101a"></script>
+<script src="history-townhead.js?v=20261101nd"></script>
 <script src="data_village_chief.js?v=20261027a"></script>
-<script src="history-villchief.js?v=20261027h"></script>
+<script src="data_village_chief_old.js?v=20261101a"></script>
+<script src="history-villchief.js?v=20261101nd"></script>
 <script src="data_township_rep.js?v=20261027a"></script>
-<script src="history-townrep.js?v=20261031a"></script>
+<script src="data_township_rep_old.js?v=20261101a"></script>
+<script src="history-townrep.js?v=20261101nd"></script>
 <script src="data_oldmayor.js?v=20261031b"></script>
-<script src="history-oldmayor.js?v=20261101d"></script>
+<script src="history-oldmayor.js?v=20261101nd"></script>
 <script src="data_council_ind.js?v=20261031a"></script>
 <script src="data_oldcouncil.js?v=20261031b"></script>
-<script src="history-oldcouncil.js?v=20261101i"></script>
+<script src="history-oldcouncil.js?v=20261101nd"></script>
 <script src="history-councilterms.js?v=20261101a"></script>
-<script src="history-councilind.js?v=20261101a"></script>
+<script src="history-councilind.js?v=20261101nd"></script>
 <script>
 (function () {
   // Unified History V2 — pure navigation/orchestration shell.
@@ -368,7 +377,9 @@
   var OLD_MAYOR_YEARS = window.V2OldMayor ? window.V2OldMayor.CYCLES : [];
   // 縣市議員 before 2014 (2026-10-31, user: 「縣市議員 1998–2009／10」): history-oldcouncil.js
   var OLD_COUNCIL_YEARS = window.V2OldCouncil ? window.V2OldCouncil.CYCLES : [];
-  var OLD_YEARS = { mayor: OLD_MAYOR_YEARS, councilor: OLD_COUNCIL_YEARS };
+  // 鄉鎮市區長 1998–2009 (2026-11-01): history-townhead.js itself, TOWNSHIP_HEAD_OLD
+  var OLD_YEARS = { mayor: OLD_MAYOR_YEARS, councilor: OLD_COUNCIL_YEARS, township: window.V2TownshipHead ? window.V2TownshipHead.CYCLES : [],
+    townrep: window.V2TownshipRep ? window.V2TownshipRep.CYCLES : [], villchief: window.V2VillageChief ? window.V2VillageChief.CYCLES : [] };   // 2010 (2026-11-01)
 
   function setStatus(text, warn) {
     statusEl.textContent = text;
@@ -564,6 +575,33 @@
   function stripBase5(win) {
     try {
       var doc = win.document;
+      // 圓餅 / 激戰區域 off on History, their legend line too (user 2026-11-01: 「圓餅圖跟激戰區域包括圖例都取消」) — hidden only,
+      // V1 untouched; a legend box left with nothing visible is hidden as well
+      if (!doc.getElementById('v2-nopie')) {
+        var np = doc.createElement('style'); np.id = 'v2-nopie';
+        np.textContent = '#pie-swing-row, #map-legend .ml-swing { display: none !important; }';
+        doc.head.appendChild(np);
+        ['chk-pop', 'chk-swing'].forEach(function (id) {
+          var cb = doc.getElementById(id);
+          if (cb && cb.checked) { cb.checked = false; cb.dispatchEvent(new win.Event('change')); }
+        });
+      }
+      if (typeof win.renderLegend === 'function' && !win.renderLegend.v2NoSwing) {
+        var rl = win.renderLegend, emptyLegend = function () {
+          var L = doc.getElementById('map-legend'); if (!L) return;
+          // not by size (the engine draws the legend while its box may still be hidden): a piece that is not hidden and shows
+          // something — text, a child, or a gradient
+          var any = [].some.call(L.children, function (ch) {
+            if (ch.classList.contains('ml-swing')) return false;
+            var cs = win.getComputedStyle(ch);
+            return cs.display !== 'none' && (ch.textContent.trim() || ch.children.length || cs.backgroundImage !== 'none');
+          });
+          L.style.visibility = any ? '' : 'hidden';
+        };
+        var wl = function () { var r = rl.apply(this, arguments); emptyLegend(); return r; };
+        wl.v2NoSwing = true; win.renderLegend = wl;
+        emptyLegend();
+      }
       watchTitle(win);
       if (window.V2I18n) window.V2I18n.attach(win);   // English safety net (v2/i18n.js)
       // drill-downs centre the map where the first view sits (user 2026-10-31: 「點進縣市…偏左」): the engines centre
@@ -833,21 +871,21 @@
           // 鄉鎮市民代表：V1 setMayorMode(yr) sets up the mode, then V2 redraws the map as 代表會 blocks (the engine's
           // 縣市議員 政黨比例 colouring, no population glow), the hemicycle in the engine's county-council box, click
           // a township → its villages (history-townrep.js)
-          win.setMayorMode(desired.year);
+          win.setMayorMode(window.V2TownshipRep.engineYear(desired.year));
           var nTr = window.V2TownshipRep.draw(win, desired.year);
           setStatus(T('鄉鎮市民代表 ' + desired.year + '：' + nTr + ' 席', 'Township representatives ' + desired.year + ': ' + nTr + ' seats'));
         } else if (desired.type === 'villchief') {
           // 村里長：V1 setMayorMode(yr) sets up the mode (legend, chips, panel), then V2 redraws the map as the
           // engine's 全台村里 view with the village-chief results, no population glow; the lowest level, no
           // drill-down; panels are built from the engine's own pieces (history-villchief.js)
-          win.setMayorMode(desired.year);
+          win.setMayorMode(window.V2VillageChief.engineYear(desired.year));
           var nVc = window.V2VillageChief.draw(win, desired.year);
           setStatus(T('村里長 ' + desired.year + '：' + nVc + ' 個村里', 'Village chiefs ' + desired.year + ': ' + nVc + ' villages'));
         } else if (desired.type === 'township') {
           // 鄉鎮市區長：V1 setMayorMode(yr) sets up the mode (legend, chips, panel), then V2 redraws the map as
           // the engine's 全台鄉鎮市區 view with the township-head results, no population glow; click a
           // township → its village layer; panels are built from the engine's own pieces (history-townhead.js)
-          win.setMayorMode(desired.year);
+          win.setMayorMode(window.V2TownshipHead.engineYear(desired.year));
           var nTh = window.V2TownshipHead.draw(win, desired.year);
           setStatus(T('鄉鎮市區長 ' + desired.year + '：' + nTh + ' 個有選舉的鄉鎮市區', 'Township heads ' + desired.year + ': ' + nTh + ' elected townships'));
         } else if (desired.type === 'councilor' && prev && prev.type === 'councilor' && prev.year === desired.year) {

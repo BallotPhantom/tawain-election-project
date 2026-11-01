@@ -17,15 +17,21 @@
  */
 (function () {
   var NO_DATA = '#aaa';     // fallback party colour only
-  var BLACK = '#0a0d16';    // a village without data takes the map's black background (user 2026-10-27: 「沒資料就反黑吧」;
+  var BLACK = '#0a0d16';
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該跟2014縣市長沒資料村里一樣不是全黑而是灰底…沒有選舉的黑底不必改」):
+  // a place without data takes the engine's own no-data grey — 縣市長 mode's '#aaa' (_mayorVillFill / _mayorTcFillColor)
+  var NO_DATA_FILL = '#aaa';    // a village without data takes the map's black background (user 2026-10-27: 「沒資料就反黑吧」;
                             // mapBgColor()'s base colour — mapBgColor itself returns a CSS gradient, not an SVG fill)
 
   // the engine's top-level const / let bindings are not window properties: read them in its scope
   function G(win, name) { try { return win.eval(name); } catch (e) { return undefined; } }
 
+  // 2010 (2026-11-01): VILLAGE_CHIEF_OLD, the same shape (build_v2_local_2010.py); the engine stays in 2014 underneath
   function dataFor(year) {
-    return (typeof VILLAGE_CHIEF !== 'undefined' ? VILLAGE_CHIEF : {})[year] || null;   // top-level const in data_village_chief.js
+    return (typeof VILLAGE_CHIEF !== 'undefined' ? VILLAGE_CHIEF : {})[year] ||   // top-level const in data_village_chief.js
+      (typeof VILLAGE_CHIEF_OLD !== 'undefined' ? VILLAGE_CHIEF_OLD : {})[year] || null;
   }
+  function engineYear(year) { return +year < 2014 ? '2014' : year; }
   // [valid, elig, cast, [[n, p, v, e], ...]] → {valid, elig, cast, cands: [{n, p, v, e}]} (sorted by votes)
   function rec(row) {
     if (!row) return null;
@@ -41,7 +47,7 @@
   }
   function fill(c, r) {
     var win = c.win, CLR = G(win, 'COUNCIL_CLR');
-    if (!r || !r.valid) return BLACK;
+    if (!r || !r.valid) return NO_DATA_FILL;
     var tie = tieParties(r);
     if (tie) {
       var id = 'v2vc-tie-' + tie.join('-');
@@ -186,7 +192,7 @@
   // put it back to its national state and let setMayorMode tidy its own toolbars before V2 redraws
   function reset(win, year) {
     win.eval("level = 'ed'; curED = null; curTC = null; curVC = null; villAllMode = false;");
-    win.setMayorMode(year);
+    win.setMayorMode(engineYear(year));
   }
 
   // V2's map must stay on top of the engine. The engine can take the map back three ways: its own deferred redraw
@@ -241,5 +247,5 @@
     var svg = G(win, 'svg');
     if (svg) svg.on('mouseleave.v2vc', null);
   }
-  window.V2VillageChief = { draw: draw, clear: clear };
+  window.V2VillageChief = { draw: draw, clear: clear, engineYear: engineYear, CYCLES: ['2010'] };
 })();

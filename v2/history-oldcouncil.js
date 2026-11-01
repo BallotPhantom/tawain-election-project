@@ -18,6 +18,9 @@
  */
 (function () {
   var BLACK = '#0a0d16';
+  // no data ≠ no election (user 2026-11-01: 「沒有資料的村里應該…灰底…沒有選舉的黑底不必改」): a place without data takes the
+  // engine's own no-data grey — '#e0e0e0' (councilVillColor / councilTCTcColor; test.html's vcColor)
+  var NO_DATA_FILL = '#e0e0e0';
   var ENGINE_YEAR = '2014';
   var EN = { '臺北市': 'Taipei City', '高雄市': 'Kaohsiung City', '新北市': 'New Taipei City', '臺中市': 'Taichung City', '臺南市': 'Tainan City',
     '臺北縣': 'Taipei County', '臺中縣': 'Taichung County', '臺南縣': 'Tainan County', '高雄縣': 'Kaohsiung County', '桃園縣': 'Taoyuan County',
@@ -33,9 +36,9 @@
   // ── colours: councilDistColor's two rules on a [elig, cast, valid, v0…] vector ──
   function ranked(d, vec) { return d.cands.map(function (x, i) { return { n: x[0], p: x[1], e: x[2], v: vec[3 + i] }; }).sort(function (a, b) { return b.v - a.v; }); }
   function fill(c, d, vec) {
-    if (!d || !vec || !vec[2]) return BLACK;
+    if (!d || !vec || !vec[2]) return NO_DATA_FILL;
     var s = ranked(d, vec), tot = vec[2], win = c.win;
-    if (!s[0].v) return BLACK;
+    if (!s[0].v) return NO_DATA_FILL;
     if (G(win, 'councilMode') === 'candidate') {
       return win._councilPartyColor(s[0].p, Math.max(0.05, Math.min(0.5, (s[0].v - (s[1] ? s[1].v : 0)) / tot)));
     }
@@ -384,7 +387,7 @@
   function topCand(x, vec) { if (!vec || !vec[2]) return null; var s = ranked(x.d, vec); return s[0] && s[0].v ? s[0] : null; }
   function innerFill(c, x, vec) {   // a township / village inside a district
     if (!candMode(c)) return fill(c, x.d, vec);
-    var t = topCand(x, vec); return t ? (candColors(c, x)[t.n] || clr(c, t.p)) : BLACK;
+    var t = topCand(x, vec); return t ? (candColors(c, x)[t.n] || clr(c, t.p)) : NO_DATA_FILL;
   }
   function candLayer(c, x, feats, vecOf, keyOf) {
     if (!candMode(c)) return;
@@ -466,7 +469,7 @@
     var seen = {}, feats = [];
     c.win.getTCGJ().features.forEach(function (f) { var tc = f.properties.tc; if (seen[tc]) return; seen[tc] = 1; feats.push(tcFeature(c, tc) || f); });
     var xOf = function (tc) { var m = ownerOf(c, 'r', tc + '000'); var t = c.owner.r.tc[tc]; return t ? c.list[t[0]] : null; };
-    blocks(c, feats, function (f) { var x = xOf(f.properties.tc); return x ? fill(c, x.d, x.d.tc[f.properties.tc]) : BLACK; },   // councilTCTcColor: party colour in both modes
+    blocks(c, feats, function (f) { var x = xOf(f.properties.tc); return x ? fill(c, x.d, x.d.tc[f.properties.tc]) : NO_DATA_FILL; },   // councilTCTcColor: party colour in both modes
       function (f) { var x = xOf(f.properties.tc); ic(c, x ? tcPanel(c, x, f.properties.tc) : '<div class="t1">' + tcName(c, f.properties.tc) + '</div><div style="color:#bbb;font-size:11px;margin-top:4px">' + T(c, '無資料', 'No data') + '</div>'); if (x) hemi(c, x.council, x.idx); },
       { can: function (f) { return !!xOf(f.properties.tc); }, go: function (f) { district(c, xOf(f.properties.tc)); } });
     border(c, 'v2-oc-tcb', feats, 'tc');
@@ -479,7 +482,7 @@
   function allVillages(c) {
     begin(c, ['allvill'], 'vill');
     var feats = c.win.topojson.feature(c.VD, c.VD.objects.villages).features.filter(function (f) { return f.properties.vc; });
-    blocks(c, feats, function (f) { var i = ownerOf(c, 'r', f.properties.vc), x = i != null ? c.list[i] : null, r = x && villVec(x.d, f.properties.vc); return x ? fill(c, x.d, r && r.vec) : BLACK; },
+    blocks(c, feats, function (f) { var i = ownerOf(c, 'r', f.properties.vc), x = i != null ? c.list[i] : null, r = x && villVec(x.d, f.properties.vc); return x ? fill(c, x.d, r && r.vec) : NO_DATA_FILL; },
       function (f) { var i = ownerOf(c, 'r', f.properties.vc); if (i != null) ic(c, vcPanel(c, c.list[i], f.properties.vc)); }, null, true);
     engineLines(c);
     ic(c, nationalPanel(c) + (c.cyc === '1998' ? '<div style="color:#bbb;font-size:11px;margin-top:6px">' + T(c, '1998 只有直轄市（臺北市、高雄市）有村里層資料，其餘為黑色', '1998 has village data for Taipei and Kaohsiung only; the rest are black') + '</div>' : ''));
