@@ -139,7 +139,14 @@
     .quad { transition: none; }
   }
 </style>
-<style>a[data-local-only]{display:none!important}</style>
+<style>a[data-local-only]{display:none!important}
+  .m-hint { display: none; }
+  @media (max-width: 700px) {
+    .m-hint { display: block; margin: 4px 0 2px; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 600;
+              color: #e7eaf0; background: rgba(40,200,200,.14); border: 1px solid rgba(40,200,200,.45); }
+    .m-hint a { color: #7de3e3; text-decoration: none; }
+  }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -153,6 +160,8 @@
       <button type="button" data-lang="en" aria-pressed="false">EN</button>
     </div>
   </header>
+  <!-- phones (user 2026-10-31): the map pages are heavy; the light 2026 forecast page is offered up front -->
+  <div class="m-hint"><span data-zh="手機版：" data-en="Phone pages: ">手機版：</span><a href="m/predict.html"><span data-zh="2026 預測" data-en="2026 forecast">2026 預測</span></a>・<a href="m/history.html"><span data-zh="歷屆選舉" data-en="History">歷屆選舉</span></a>・<a href="m/profile.html"><span data-zh="縣市概覽" data-en="Profile">縣市概覽</span></a></div>
 
   <main class="cycle" aria-label="選舉循環 Election cycle">
     <!-- 01 · past -->
@@ -202,6 +211,7 @@
       <p class="q-d" data-zh="2026 縣市長：彙整民調估計得票與勝選機率，民調越少外框虛線越明顯。" data-en="2026 mayors: polls combined into vote shares and win probabilities, with a bolder dashed outline where polls are scarce.">2026 縣市長：彙整民調估計得票與勝選機率，民調越少外框虛線越明顯。</p>
       <div class="q-foot">
         <a class="go-link" href="predict.html"><span data-zh="2026 縣市長預測 →" data-en="2026 mayoral forecast →">2026 縣市長預測 →</span></a>
+        <a class="go-link" href="m/predict.html"><span data-zh="手機版 →" data-en="Mobile version →">手機版 →</span></a>
         <a class="go-link" href="rallies.html" data-local-only><span data-zh="2026 造勢地圖 →" data-en="2026 campaign rallies →">2026 造勢地圖 →</span></a>
         <a class="go-link" href="predict2028.html" data-local-only><span data-zh="2028 大選預測 →" data-en="2028 forecast →">2028 大選預測 →</span></a>
         <a class="go-link" href="byelect.html" data-local-only><span data-zh="2027 立委補選預測 →" data-en="2027 by-election forecast →">2027 立委補選預測 →</span></a>
@@ -373,6 +383,15 @@
 
   applyLang();
 })();
+</script>
+<script>
+  // on a phone the History / Profile tiles open the light phone pages (the desktop ones load ~85–250 MB); each phone page
+  // links back to its desktop page (user 2026-10-31)
+  if (window.matchMedia && matchMedia('(max-width: 700px)').matches) {
+    var qh = document.querySelector('a.q-history'), qp = document.querySelector('a.q-profile');
+    if (qh) qh.setAttribute('href', 'm/history.html');
+    if (qp) qp.setAttribute('href', 'm/profile.html');
+  }
 </script>
 <script>
   // Pages kept on this computer only (user 2026-10-31: 2027/2028 forecasts and the rally map are not published — 「local

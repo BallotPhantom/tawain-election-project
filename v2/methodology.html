@@ -82,13 +82,13 @@
     <ul lang="zh-Hant">
       <li><b>h（委託方與機構）</b>：政黨或候選人陣營委託（競選總部、辦公室、後援會、之友會等）、樣本結構明顯失衡的委託方 = 0.4；過往結果偏藍或偏綠的民調機構（house effect）= 0.7；其他 = 1.0。</li>
       <li><b>r（新舊）</b>：r = e<sup>−d/120</sup>，d = 民調結束日到今天的天數（約 83 天權重減半）；沒有日期 = 0.5。</li>
-      <li><b>m（調查方式 × 縣市年齡結構）</b>：m = 限制在 0.6–1.2 之間的 1 + a·c。網路民調 a = −0.025·Δ，電話民調 a = 0.025·min(0, Δ)；Δ = 該縣市 65 歲以上人口比例 − 全國平均；c = 對該機構調查方式資訊的把握（高 1、中 0.6、低 0.3）。高齡縣市的網路民調因此降權。</li>
+      <li><b>m（調查方式 × 縣市年齡結構）</b>：m = 限制在 0.6–1.2 之間的 1 + a·c。網路民調 a = −0.025·Δ，電話民調 a = 0.025·min(0, Δ)；Δ = 該縣市 65 歲以上人口比例 − 全國平均；c = 對該機構調查方式資訊的把握（高 1、中 0.6、低 0.3）。結果是：網路民調在高齡縣市降權、在年輕縣市加權；電話民調只在年輕縣市降權。這一項影響很小——拿掉它重算，各縣市預估得票率最多只差 0.14 個百分點（新竹市），領先者都不變。</li>
       <li><b>不列入</b>：初選期間的民調、非正式街頭民調，以及少了任何一位曾在某份民調達 10% 的候選人的民調（例如一對一假想對決）。</li>
     </ul>
     <ul lang="en">
       <li><b>h (sponsor and pollster)</b>: commissioned by a party or a campaign (headquarters, office, support or friends' group), or by a sponsor whose samples are clearly unbalanced = 0.4; pollsters whose past results lean blue or green (house effect) = 0.7; otherwise 1.0.</li>
       <li><b>r (age of the poll)</b>: r = e<sup>−d/120</sup>, d = days from the poll's last fieldwork day to today (weight halves in about 83 days); no date = 0.5.</li>
-      <li><b>m (survey mode × county age profile)</b>: m = 1 + a·c, clipped to 0.6–1.2. Online polls a = −0.025·Δ, phone polls a = 0.025·min(0, Δ); Δ = the county's share of residents aged 65+ minus the national average; c = confidence in what we know about the pollster's method (high 1, medium 0.6, low 0.3). Online polls in older counties are therefore down-weighted.</li>
+      <li><b>m (survey mode × county age profile)</b>: m = 1 + a·c, clipped to 0.6–1.2. Online polls a = −0.025·Δ, phone polls a = 0.025·min(0, Δ); Δ = the county's share of residents aged 65+ minus the national average; c = confidence in what we know about the pollster's method (high 1, medium 0.6, low 0.3). So online polls count less in older counties and more in younger ones; phone polls count less only in younger counties. The effect is small: without it, no county's vote-share estimate moves by more than 0.14 points (Hsinchu City), and no leader changes.</li>
       <li><b>Left out</b>: polls taken during a party primary, informal street polls, and any poll missing a candidate who reached 10% in some poll (e.g. one-on-one hypotheticals).</li>
     </ul>
 
