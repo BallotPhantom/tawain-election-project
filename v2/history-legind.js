@@ -67,7 +67,10 @@
       var nm = typeof win.translateCandidate === 'function' ? win.translateCandidate(x.n) : x.n;
       return '<div class="bar-row"><div class="blb" style="border-right:none;' + ns + '" title="' + x.n + (x.m ? '／' + x.m : '') + '">' + check + nm + '</div>' + ico +
         '<div class="bbg"><div class="bfill" style="width:' + pct.toFixed(1) + '%;background:' + partyClr(win, x.p) + ';opacity:' + (x.e ? '1' : '0.4') + '"></div></div>' +
-        '<div class="bpct" style="' + ns + '">' + pct.toFixed(1) + '%</div><div class="bvote" style="' + ns + '" title="' + x.v.toLocaleString() + '">' + votes(win, x.v) + '</div></div>';
+        '<div class="bpct" style="' + ns + '">' + pct.toFixed(1) + '%</div><div class="bvote" style="' + ns + '" title="' + x.v.toLocaleString() + '">' + votes(win, x.v) + '</div></div>' +
+        // 總統副總統: the running mate under the bar (user 2026-11-01: 「總統長條圖應該也要寫出搭檔副總統的名字」)
+        (c.kind === 'pres' && x.m ? '<div style="font-size:9.5px;line-height:1.2;margin:-2px 0 5px 12px;' + (x.e ? 'color:#bbb' : 'color:#666') + '">' +
+          T('副總統 ', 'VP ') + (typeof win.translateCandidate === 'function' ? win.translateCandidate(x.m) : x.m) + '</div>' : '');
     }).join('');
   }
   // the engine's own turnout pills (turnoutBadgeHtml): the same 紅綠燈 dots as every other panel (user 2026-10-31:
@@ -78,7 +81,7 @@
   }
 
   function raceName(c) {
-    if (c.kind === 'pres') return c.year + ' ' + c.win.T('總統', 'Presidential');
+    if (c.kind === 'pres') return c.year + ' ' + c.win.T('總統副總統', 'President & VP');   // CEC's 總統副總統選舉 (user 2026-11-01)
     return c.year + ' ' + (c.kind === 'p' ? c.win.T('平地原住民立委', 'Lowland Indigenous Legislator') : c.win.T('山地原住民立委', 'Highland Indigenous Legislator'));
   }
 
@@ -87,7 +90,7 @@
 
     var T = c.win.T;
     return '<div class="t1">' + T('全台', 'All Taiwan') + '</div>' +
-      '<div style="font-size:10px;color:#888;margin-top:2px">' + raceName(c) + (c.kind === 'pres' ? T('・全國一個選區，應選 1 人', ' · one nationwide race, 1 winner') : T('・全國一個選區，應選 3 席', ' · one nationwide district, 3 seats')) + '</div>' +
+      '<div style="font-size:10px;color:#888;margin-top:2px">' + raceName(c) + (c.kind === 'pres' ? T('・全國一個選區，應選 1 組', ' · one nationwide race, 1 ticket') : T('・全國一個選區，應選 3 席', ' · one nationwide district, 3 seats')) + '</div>' +
       turnoutLine(c.win, c.d.nat) +
       '<div class="sec-title" style="margin-bottom:5px">' + T('候選人得票', 'Candidate Votes') + '</div>' +
       '<div style="max-height:320px;overflow-y:auto">' + rowsHtml(c, c.d.nat) + '</div>' +
@@ -180,9 +183,7 @@
     if (c.tcGeom[tc]) return c.tcGeom[tc];
     var vg = c.VD.objects.villages.geometries.filter(function (g) { var vc = g.properties && g.properties.vc; return vc && vc.indexOf(tc) === 0; });
     if (!vg.length) return null;
-    var m = c.win._cleanMergedGeom(c.win.topojson.merge(c.VD, vg));
-    if (window.V2TcBorder && window.V2TcBorder.solid) window.V2TcBorder.solid(c.win, m.type === 'Feature' ? m.geometry : m);   // VD gaps aren't holes
-    return (c.tcGeom[tc] = { type: 'Feature', properties: { tc: tc }, geometry: m.type === 'Feature' ? m.geometry : m });
+    return (c.tcGeom[tc] = { type: 'Feature', properties: { tc: tc }, geometry: window.V2TcBorder.merged(c.win, c.VD, vg) });   // the shared merge (VD gaps aren't holes)
   }
 
   // 1. 全台: one block
@@ -276,7 +277,9 @@
   function allTowns(c) {
     begin(c, ['alltc']);
     var T = c.win.T, seen = {}, feats = [];
-    c.win.getTCGJ().features.forEach(function (f) { var tc = f.properties.tc; if (seen[tc]) return; seen[tc] = 1; feats.push(f); });
+    // whole townships, merged from their villages (user 2026-11-01: 「全台鄉鎮市區的總統08,12有因為立委選區切割的」): the
+    // engine's TC_GJ splits a township between legislative districts — its first piece alone left the rest blank
+    c.win.getTCGJ().features.forEach(function (f) { var tc = f.properties.tc; if (seen[tc]) return; seen[tc] = 1; feats.push(townshipFeature(c, tc) || f); });
     blocks(c, feats, function (d) { return fill(c, c.d.tc[d.properties.tc]); },
       function (e, d) { var tc = d.properties.tc; ic(c, areaPanel(c, ccName(c, tc.slice(0, 5)) + ' ' + tcName(c, tc), c.d.tc[tc])); },
       function (e, d) { township(c, d.properties.tc); });
@@ -299,6 +302,17 @@
   }
   // the engine calls goED / goTCAllNational / goVillAllNational for its own redraws too (resize, setMode…): only a click
   // in the bar (v2/navbar.js sets __v2NavClick) opens V2's view; any other call keeps V2's current view on screen
+  // a 中↔英 switch: the engine's applyLang rewrites the crumb (「全台 ›」 left without 「2012 總統副總統」) — V2's view is drawn
+  // again in the new language (as history-oldmayor.js does)
+  function hookLang(win) {
+    if (typeof win.setLang !== 'function' || win.setLang.v2LegInd) return;
+    var o = win.setLang, w = function () {
+      var r = o.apply(this, arguments), c = win.__v2LegIndCtx;
+      if (c && win.__v2LegIndKey === c.key) { redraw(c); chrome(c); }
+      return r;
+    };
+    w.v2LegInd = true; win.setLang = w;
+  }
   function hookNav(win) {
     var to = { goED: national, goTCAllNational: allTowns, goVillAllNational: allVillages };
     Object.keys(to).forEach(function (n) {
@@ -372,6 +386,7 @@
     win.__v2LegIndCtx = c;
     hookLegend(win);
     hookNav(win);
+    hookLang(win);
     national(c);
     chrome(c);
     schedule(c);

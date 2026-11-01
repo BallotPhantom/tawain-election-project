@@ -195,7 +195,7 @@
       <button class="btn" data-type="township" data-type-scope="local" data-zh-title="鄉鎮市長＋直轄市山地原住民區長；直轄市、省轄市的一般區區長為官派，地圖畫成黑色底圖；點鄉鎮進入村里層" data-en-title="Township mayors + elected heads of the special-municipality indigenous districts; other district heads are appointed (drawn black); click a township for its villages" data-zh="鄉鎮市區長" data-en="Twp Head">鄉鎮市區長</button>
       <button class="btn" data-type="townrep" data-type-scope="local" data-zh-title="鄉鎮市民代表（含平地原住民代表、直轄市山地原住民區民代表）；全台是代表會色塊，點鄉鎮進入村里層；面板上方半圓圖是代表會席次" data-en-title="Township representatives (incl. lowland-indigenous and indigenous-district representatives); the map shows each council, click a township for its villages; the hemicycle shows the council's seats" data-zh="鄉鎮市民代表" data-en="Twp Rep">鄉鎮市民代表</button>
       <button class="btn" data-type="villchief" data-type-scope="local" data-zh-title="村長／里長；最底層，地圖直接是全台村里，不再往下點" data-en-title="Village / borough chiefs — the lowest level; the map shows every village nationwide" data-zh="村里長" data-en="Village Chief">村里長</button>
-      <button class="btn" data-type="president" data-type-scope="national" data-zh="總統" data-en="President">總統</button>
+      <button class="btn" data-type="president" data-type-scope="national" data-zh="總統副總統" data-en="President &amp; VP">總統副總統</button>
       <button class="btn" data-type="legislative" data-type-scope="national" data-zh="立法委員" data-en="Legislators">立法委員</button>
     </div>
 
@@ -221,6 +221,12 @@
       <button class="btn" data-year="2014" data-year-scope="local">2014</button>
       <button class="btn" data-year="2018" data-year-scope="local">2018</button>
       <button class="btn active" data-year="2022" data-year-scope="local">2022</button>
+      <button class="btn" data-year="1995" data-year-scope="national">1995</button>
+      <button class="btn" data-year="1996" data-year-scope="national">1996</button>
+      <button class="btn" data-year="1998" data-year-scope="national">1998</button>
+      <button class="btn" data-year="2000" data-year-scope="national">2000</button>
+      <button class="btn" data-year="2001" data-year-scope="national">2001</button>
+      <button class="btn" data-year="2004" data-year-scope="national">2004</button>
       <button class="btn" data-year="2008" data-year-scope="national">2008</button>
       <button class="btn" data-year="2012" data-year-scope="national">2012</button>
       <button class="btn" data-year="2016" data-year-scope="national" data-zh-title="區域選區：部分區域無完整資料會顯示灰色" data-en-title="Districts: some areas lack complete data and show grey">2016</button>
@@ -262,32 +268,34 @@
 <script src="legbars.js?v=20261027f"></script>
 <script src="noglow.js?v=20261029f"></script>
 <script src="data_legind.js?v=20261031b"></script>
-<script src="data_pres.js?v=20261031a"></script>
-<script src="tcborder.js?v=20261031a"></script>
-<script src="history-legind.js?v=20261101nd"></script>
+<script src="data_pres.js?v=20261101a"></script>
+<script src="tcborder.js?v=20261101m"></script>
+<script src="history-legind.js?v=20261101m"></script>
 <script src="data_legdist.js?v=20261028d"></script>
 <script src="data_career.js?v=20261101c"></script>
 <script src="career.js?v=20261029a"></script>
-<script src="history-legdist.js?v=20261101nd"></script>
+<script src="history-legdist.js?v=20261101nav"></script>
+<script src="data_oldleg.js?v=20261101c"></script>
+<script src="history-oldleg.js?v=20261101o"></script>
 <script src="data_pl_national.js?v=20261028c"></script>
 <script src="history-plnat.js?v=20261031a"></script>
 <script src="data_township_head.js?v=20261026c"></script>
 <script src="data_township_head_vill.js?v=20261027b"></script>
 <script src="data_township_head_old.js?v=20261101a"></script>
-<script src="history-townhead.js?v=20261101nd"></script>
+<script src="history-townhead.js?v=20261101m"></script>
 <script src="data_village_chief.js?v=20261027a"></script>
 <script src="data_village_chief_old.js?v=20261101a"></script>
 <script src="history-villchief.js?v=20261101nd"></script>
 <script src="data_township_rep.js?v=20261027a"></script>
 <script src="data_township_rep_old.js?v=20261101a"></script>
-<script src="history-townrep.js?v=20261101nd"></script>
+<script src="history-townrep.js?v=20261101m"></script>
 <script src="data_oldmayor.js?v=20261031b"></script>
-<script src="history-oldmayor.js?v=20261101nd"></script>
+<script src="history-oldmayor.js?v=20261101m"></script>
 <script src="data_council_ind.js?v=20261031a"></script>
 <script src="data_oldcouncil.js?v=20261031b"></script>
-<script src="history-oldcouncil.js?v=20261101nd"></script>
+<script src="history-oldcouncil.js?v=20261101m"></script>
 <script src="history-councilterms.js?v=20261101a"></script>
-<script src="history-councilind.js?v=20261101nd"></script>
+<script src="history-councilind.js?v=20261101m"></script>
 <script>
 (function () {
   // Unified History V2 — pure navigation/orchestration shell.
@@ -364,7 +372,8 @@
   // 'sim' (推演) — that is scenario simulation, not a historical result, and
   // belongs to a future Forecast/Simulation area, not History.
   var LEG_YEARS_BY_SUBMODE = {
-    geo: ['2008', '2012', '2016', '2020', '2024'],   // 2008 / 2012: V2 on the 2016 district map (history-legdist.js)
+    // 2008 / 2012: V2 on the 2016 district map (history-legdist.js); 1995–2004 (第3–6屆, 舊制複數選區): history-oldleg.js
+    geo: ['1995', '1998', '2001', '2004', '2008', '2012', '2016', '2020', '2024'],
     'ind-p': ['2008', '2012', '2016', '2020', '2024'],   // V2 draws these from CEC files (history-legind.js); the engine only has 2024 (2008 / 2012 added 2026-10-31)
     'ind-m': ['2008', '2012', '2016', '2020', '2024'],
     pl: ['2008', '2012', '2016', '2020', '2024'],
@@ -372,7 +381,7 @@
   };
 
   // 總統 (2026-10-31, user: 「好做總統」): V2 draws it from CEC files (history-legind.js kind 'pres', v2/data_pres.js)
-  var PRES_YEARS = ['2008', '2012', '2016', '2020', '2024'];
+  var PRES_YEARS = ['1996', '2000', '2004', '2008', '2012', '2016', '2020', '2024'];   // 1996–2004 added 2026-11-01 (「總統我想延伸到1998」)
   // 縣市長 before 2014 (2026-10-31, user: 「要繼續更新縣市長嗎？歷年的…」): V2 draws them from CEC files on today's map
   var OLD_MAYOR_YEARS = window.V2OldMayor ? window.V2OldMayor.CYCLES : [];
   // 縣市議員 before 2014 (2026-10-31, user: 「縣市議員 1998–2009／10」): history-oldcouncil.js
@@ -457,7 +466,7 @@
     compareLink.href = ENGINE_SRC[state.scope];
     compareLink.textContent = T('↗ 對照原始 V1', '↗ Original V1') + ' (' + (state.scope === 'national' ? 'test.html' : 'council.html') + ')';
 
-    var typeLabel = state.scope === 'national' ? (state.type === 'president' ? T('總統', 'President') : T('立法委員', 'Legislators')) : (state.type === 'councilor' ? T('縣市議員', 'Councilors') : state.type === 'township' ? T('鄉鎮市區長', 'Township heads') : state.type === 'villchief' ? T('村里長', 'Village chiefs') : state.type === 'townrep' ? T('鄉鎮市民代表', 'Township representatives') : T('縣市長', 'Mayors'));
+    var typeLabel = state.scope === 'national' ? (state.type === 'president' ? T('總統副總統', 'President & VP') : T('立法委員', 'Legislators')) : (state.type === 'councilor' ? T('縣市議員', 'Councilors') : state.type === 'township' ? T('鄉鎮市區長', 'Township heads') : state.type === 'villchief' ? T('村里長', 'Village chiefs') : state.type === 'townrep' ? T('鄉鎮市民代表', 'Township representatives') : T('縣市長', 'Mayors'));
     document.title = T('歷屆選舉', 'Election History') + ' · V2 — ' + typeLabel;
   }
 
@@ -579,7 +588,8 @@
       // V1 untouched; a legend box left with nothing visible is hidden as well
       if (!doc.getElementById('v2-nopie')) {
         var np = doc.createElement('style'); np.id = 'v2-nopie';
-        np.textContent = '#pie-swing-row, #map-legend .ml-swing { display: none !important; }';
+        // + the 跑馬燈 (#ticker) everywhere on History (user 2026-11-01: 「那個跑馬燈設計應該整個刪掉」)
+        np.textContent = '#pie-swing-row, #map-legend .ml-swing, #ticker { display: none !important; }';
         doc.head.appendChild(np);
         ['chk-pop', 'chk-swing'].forEach(function (id) {
           var cb = doc.getElementById(id);
@@ -597,8 +607,16 @@
             return cs.display !== 'none' && (ch.textContent.trim() || ch.children.length || cs.backgroundImage !== 'none');
           });
           L.style.visibility = any ? '' : 'hidden';
+          // English: the gradient bar longer (user 2026-11-01: 「英文的圖例competitive safe的漸層顏色可以長一點？」) — the
+          // engine's 120 px bar is filled by 「Competitive … Safe seat」; 170 px fits the box's 200 px max. 中文 unchanged
+          var en = false; try { en = win.eval('currentLang') === 'en'; } catch (e) {}
+          [].forEach.call(L.querySelectorAll('.ml-grad, .ml-bar, .ml-row'), function (el) { el.style.width = en ? '170px' : ''; });
         };
         var wl = function () { var r = rl.apply(this, arguments); emptyLegend(); return r; };
+        if (typeof win.setLang === 'function' && !win.setLang.v2LegendW) {   // the bar follows a language switch at once
+          var sl0 = win.setLang, sl1 = function () { var r = sl0.apply(this, arguments); emptyLegend(); return r; };
+          sl1.v2LegendW = true; win.setLang = sl1;
+        }
         wl.v2NoSwing = true; win.renderLegend = wl;
         emptyLegend();
       }
@@ -901,9 +919,12 @@
         }
       } else {
         if (window.V2LegInd) window.V2LegInd.clear(win);
-        var wasLegDist = window.V2LegDist ? window.V2LegDist.clear(win) : false;
-        var oldYear = desired.year === '2008' || desired.year === '2012';
-        var legDist = desired.submode === 'geo' && oldYear;
+        var wasOldLeg = window.V2OldLeg ? window.V2OldLeg.clear(win) : false;
+        var wasLegDist = (window.V2LegDist ? window.V2LegDist.clear(win) : false) || wasOldLeg;
+        var oldYear = +desired.year < 2016;   // 2008 / 2012 (and 總統 1996–2004): the engine underneath stays on 2016
+        // 1995–2004 立委 (舊制, history-oldleg.js) — 總統 1996–2004 go through history-legind.js as the later years
+        var oldLeg = desired.type !== 'president' && desired.submode === 'geo' && +desired.year < 2008;
+        var legDist = desired.submode === 'geo' && oldYear && !oldLeg;
         // 政黨輪替分析 fold: 區域立委 only (user 2026-10-28: 「把政黨輪替分析折疊隱藏」「不分區裡的…也要」「只保留區域立委」).
         // The engine shows / hides #flip-analysis-box itself, so a class on its root wins over its inline display.
         // 不分區: its 跑馬燈 (#ticker) hidden too (user: 「把跑馬燈（不分區的）隱藏」); 原住民: 圓餅 / 激戰區域 buttons hidden
@@ -914,6 +935,10 @@
           fs.id = 'v2-flipfold-style';
           fs.textContent = 'html.v2-noflip #flip-analysis-box { display: none !important; }\n' +
             'html.v2-pl #ticker { display: none !important; }\n' +
+            // the 跑馬燈 is the engine's 區域立委 party totals of its own year: shown in 總統副總統 / 原住民 / 2008 / 2012 after a
+            // 中↔英 switch (the engine's applyLang turns it back on — user 2026-11-01: 「12年的總統英文版…中切英文…突然跑出來的」),
+            // with another race's numbers; hidden there, as for 不分區
+            'html.v2-pres #ticker, html.v2-ind #ticker, html.v2-legdist #ticker { display: none !important; }\n' +
             'html.v2-ind #pie-swing-row { display: none !important; }\n' +
             // its map-legend holds only the 激戰區域 key there, for the overlay the hidden button switched
             'html.v2-ind #map-legend { display: none !important; }\n' +
@@ -939,7 +964,7 @@
           win.setWinnerYear(oldYear ? '2016' : desired.year);
           win.setIndLegMode('p');
           window.V2LegInd.draw(win, desired.year, 'pres');
-          setStatus(T('總統 ' + desired.year, 'President ' + desired.year));
+          setStatus(T('總統副總統 ' + desired.year, 'President & VP ' + desired.year));   // 總統副總統 (user 2026-11-01)
         } else if (desired.submode === 'pl') {
           // the seat cards follow the engine's year (2008 / 2012: 2016 underneath, cards from V2LegDist.cards below)
           win.setWinnerYear(oldYear ? '2016' : desired.year);
@@ -950,7 +975,11 @@
           setStatus(T('不分區 ' + desired.year, 'Party list ' + desired.year));
         } else {
           win.setWinnerYear(oldYear ? '2016' : desired.year);
-          if (legDist) {
+          if (oldLeg) {
+            // 第3–6屆: multi-member districts on today's townships, district level + seat cards only
+            window.V2OldLeg.draw(win, desired.year);
+            setStatus(T('區域立委 ' + desired.year + '（舊制複數選區，僅選區層）', 'District legislators ' + desired.year + ' (old multi-member districts, district level only)'));
+          } else if (legDist) {
             // 2008 / 2012 were fought on the 2016 districts: the engine draws its 2016 map state, V2 the year's results
             window.V2LegDist.draw(win, desired.year);
             setStatus(T('區域立委 ' + desired.year + '（2016 選區圖＋' + desired.year + ' 中選會資料）', 'District legislators ' + desired.year + ' (2016 district map + ' + desired.year + ' CEC data)'));
@@ -1090,6 +1119,11 @@
       var t = b.getAttribute('data-type');
       if (t === state.type) return;
       state.type = t;
+      // 總統 and 立委 hold different early years (1996 / 2000 vs 1995 / 1998 / 2001): a year the new type lacks → its latest
+      if (state.scope === 'national') {
+        var allowedT = t === 'president' ? PRES_YEARS : (LEG_YEARS_BY_SUBMODE[state.legSubmode] || []);
+        if (allowedT.length && allowedT.indexOf(state.legYear) === -1) state.legYear = allowedT[allowedT.length - 1];
+      }
       applyCurrent();
     });
   });

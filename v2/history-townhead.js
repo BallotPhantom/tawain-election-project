@@ -174,9 +174,7 @@
     if (c.merged[tc]) return c.merged[tc];
     var vg = villGeoms(c, tc);
     if (!vg.length) return null;
-    var m = c.win._cleanMergedGeom(c.win.topojson.merge(c.VD, vg));
-    if (window.V2TcBorder && window.V2TcBorder.solid) window.V2TcBorder.solid(c.win, m.type === 'Feature' ? m.geometry : m);   // VD gaps aren't holes
-    return (c.merged[tc] = { type: 'Feature', properties: { tc: tc }, geometry: m.type === 'Feature' ? m.geometry : m });
+    return (c.merged[tc] = { type: 'Feature', properties: { tc: tc }, geometry: window.V2TcBorder.merged(c.win, c.VD, vg) });   // the shared merge (VD gaps aren't holes)
   }
   // re-read the engine's projection and layer handles: it rebuilds them on resize (e.g. when the page's control
   // rows wrap), and drawing with a stale pathFn puts the map off-screen while fitFeats uses the new one

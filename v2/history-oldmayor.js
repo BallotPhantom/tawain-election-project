@@ -223,10 +223,7 @@
   function merged(c, key, geoms) {
     if (c.geom[key]) return c.geom[key];
     if (!geoms.length) return null;
-    var m = c.win._cleanMergedGeom(c.win.topojson.merge(c.VD, geoms));
-    var g = m.type === 'Feature' ? m.geometry : m;
-    if (window.V2TcBorder && window.V2TcBorder.solid) window.V2TcBorder.solid(c.win, g);   // VD gaps aren't holes
-    return (c.geom[key] = { type: 'Feature', properties: {}, geometry: g });
+    return (c.geom[key] = { type: 'Feature', properties: {}, geometry: window.V2TcBorder.merged(c.win, c.VD, geoms) });   // the shared merge (VD gaps aren't holes)
   }
   function tcFeature(c, tc) {
     var f = merged(c, 't' + tc, vgeoms(c, function (t) { return t === tc; }));

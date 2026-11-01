@@ -222,9 +222,7 @@
     if (key in c.geom) return c.geom[key];
     var vg = c.VD.objects.villages.geometries.filter(function (g) { var vc = g.properties && g.properties.vc; return vc && test(vc); });
     if (!vg.length) return (c.geom[key] = null);
-    var m = c.win._cleanMergedGeom(c.win.topojson.merge(c.VD, vg)), g = m.type === 'Feature' ? m.geometry : m;
-    if (window.V2TcBorder && window.V2TcBorder.solid) window.V2TcBorder.solid(c.win, g);
-    return (c.geom[key] = { type: 'Feature', properties: {}, geometry: g });
+    return (c.geom[key] = { type: 'Feature', properties: {}, geometry: window.V2TcBorder.merged(c.win, c.VD, vg) });   // the shared merge
   }
   // which district of a kind a village belongs to: its own row (split townships), else its township's single district
   function ownerOf(c, kind, vc) {

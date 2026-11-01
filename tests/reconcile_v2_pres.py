@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile v2/data_pres.js (build_v2_pres.py) — 總統 2008/2012/2016/2020/2024 — independently of its reader.
+"""Reconcile v2/data_pres.js (build_v2_pres.py) — 總統 1996/2000/2004/2008/2012/2016/2020/2024 — independently of its reader.
 
     python3 tests/reconcile_v2_pres.py
 
@@ -13,6 +13,8 @@
   P5 the engines' own figures, built separately: council.html PRES_TC_2016 / PRES_TC_2020 (township votes, candidate
      number order), PRES_NATIONAL_2020 / PRES_NATIONAL (2024 national votes); test.html PRES_COUNTY_2008 / _2012 (county
      shares, 2 decimals)
+  P6 1996 / 2000 / 2004 (old codes: 臺灣省 03xxx, 臺北縣 …): each of today's 22 counties == the csv's own county rows of
+     that year added up by name (臺北縣 → 新北市, 臺中縣 + 臺中市 → 臺中市, 臺南縣 + 臺南市, 高雄縣 + 高雄市, 桃園縣 → 桃園市)
 Prints one line per failure and a final "N FAIL(s)" like the other reconcile_* tests.
 """
 import collections, json, os, re, sys
@@ -21,9 +23,10 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from cec_lib import read, VD  # noqa: E402
 
-RACES = {'2008': ('20080322-總統', ''), '2012': ('20120114-總統及立委/總統', ''), '2016': ('2016總統立委/總統', '_P1'),
+RACES = {'1996': ('9任總統', ''), '2000': ('2000年10任總統', ''), '2004': ('2004   11任總統', ''), '2008': ('20080322-總統', ''), '2012': ('20120114-總統及立委/總統', ''), '2016': ('2016總統立委/總統', '_P1'),
          '2020': ('2020總統立委/總統', ''), '2024': ('2024總統立委/總統', '')}
-PARTY = {'中國國民黨': 'kmt', '民主進步黨': 'dpp', '親民黨': 'pfp', '台灣民眾黨': 'tpp', '無黨籍及未經政黨推薦': 'ind'}
+PARTY = {'中國國民黨': 'kmt', '民主進步黨': 'dpp', '親民黨': 'pfp', '台灣民眾黨': 'tpp', '無黨籍及未經政黨推薦': 'ind', '連署': 'ind', '新黨': 'np'}
+OLD_CC = {'臺北縣': '新北市', '桃園縣': '桃園市', '臺中縣': '臺中市', '臺南縣': '臺南市', '高雄縣': '高雄市'}
 # test.html PRES_COUNTY_* names counties the old way (台北市 …): today's cc5
 CC_NAME = {'台北市': '63000', '新北市': '65000', '桃園市': '68000', '台中市': '66000', '台南市': '67000', '高雄市': '64000',
            '基隆市': '10017', '新竹市': '10018', '嘉義市': '10020', '新竹縣': '10004', '苗栗縣': '10005', '彰化縣': '10007',
@@ -92,6 +95,16 @@ def main():
             t = [sum(v[i] for tc, v in got['tc'].items() if tc[:5] == cc) for i in range(L)]
             if t != r: fails.append(f'{y}: P3 townships of {cc} {t[:4]} vs {r[:4]}')
         if len(got['cc']) != 22: fails.append(f'{y}: {len(got["cc"])} counties')
+        if y in ('1996', '2000', '2004'):
+            bname = {(r[0] + r[1], r[3], r[4]): r[5].strip().replace('台', '臺') for r in read(f('elbase'))}
+            want = collections.defaultdict(lambda: [0] * L)
+            for k in prof:
+                if k[1] != '000' or k[2] != '0000' or k[0].startswith('00'): continue
+                nm = OLD_CC.get(bname[k], bname[k])
+                cc = CC_NAME.get(nm.replace('臺', '台'))
+                if not cc: fails.append(f'{y}: P6 county {bname[k]} unmapped'); continue
+                want[cc] = [a + b for a, b in zip(want[cc], row(k))]
+            if dict(want) != got['cc']: fails.append(f'{y}: P6 counties differ: {[cc for cc in set(want) | set(got["cc"]) if want.get(cc) != got["cc"].get(cc)]}')
         if y in ('2016', '2020', '2024'):
             for tc, r in got['tc'].items():
                 k = (tc[:5], tc[5:], '0000')
