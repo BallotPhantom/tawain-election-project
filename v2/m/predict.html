@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090f">
+<title>2026 縣市長預測 · 手機版</title>
+<!--
+  Lightweight phone page for the 2026 mayoral forecast (user 2026-10-31: 「好啊先嘗試做輕量手機頁面」).
+  The desktop page loads the whole council.html engine (~126 MB decoded); this one loads ~0.3 MB: the forecast
+  (data_mayor2026_predict.js), the polls (data_polls_2026.js), 22 simplified county outlines and the candidates'
+  English names (m/data_counties_m.js, m/data_names_m.js — build_v2_mobile.py).
+  Win chances: council.html's own _runMC2026 + _gaussianRandom, ported line for line, run with ratings26.js's fixed
+  seed (mulberry32, 20261128) — so every number equals the desktop page's. Ratings: ratings26.js's cut-offs and colours.
+  The forecast model itself is not changed here.
+-->
+<style>
+  :root {
+    --bg: #07090f; --bg2: #0e1320; --card: rgba(255,255,255,.035); --line: rgba(255,255,255,.09);
+    --fg: #e7eaf0; --muted: rgba(231,234,240,.66); --faint: rgba(231,234,240,.42); --cyan: #28c8c8; --toss: #cbbf9f;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; color: var(--fg); background: radial-gradient(ellipse at 50% -10%, #17203a 0%, var(--bg2) 45%, var(--bg) 100%) fixed;
+    font-family: -apple-system, "SF Pro Text", "PingFang TC", "Noto Sans TC", "Segoe UI", sans-serif; font-size: 14px;
+    -webkit-text-size-adjust: 100%; padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html[lang="en"] [lang="zh-Hant"], html[lang="zh-Hant"] [lang="en"] { display: none !important; }
+  .bar {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px; background: rgba(7,9,15,.82);
+    backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); border-bottom: 1px solid var(--line);
+  }
+  .bar a.home { color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 600; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; white-space: nowrap; }
+  .bar .ttl { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .badge { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; color: #c4b5fd; padding: 1px 6px; border-radius: 999px; border: 1px solid rgba(167,139,250,.45); background: rgba(139,92,246,.16); margin-left: 4px; vertical-align: 1px; }
+  .sp { flex: 1; }
+  .disc { width: 28px; height: 28px; flex: none; border-radius: 50%; background: rgba(255,82,82,.18); border: 1.5px solid rgba(255,82,82,.55); color: #ff5252; font-size: 13px; padding: 0; cursor: pointer; }
+  .lang { display: inline-flex; flex: none; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .lang button { font: inherit; font-size: 11.5px; font-weight: 600; color: var(--fg); background: transparent; border: 0; padding: 6px 9px; cursor: pointer; }
+  .lang button[aria-pressed="true"] { background: rgba(40,200,200,.22); }
+  .note { display: none; margin: 8px 16px 0; padding: 10px 12px; font-size: 12px; line-height: 1.6; color: #ff8a8a; background: rgba(40,12,14,.94); border: 1px solid rgba(255,82,82,.45); border-radius: 10px; }
+  .note.on { display: block; }
+  main { max-width: 560px; margin: 0 auto; padding: 14px 16px 24px; display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 2px 0 0; font-size: 21px; letter-spacing: .02em; }
+  .lede { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+  .sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .sum div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px 8px; }
+  .sum b { display: block; font-size: 26px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .sum span { font-size: 11px; color: var(--muted); }
+  .strip { display: flex; height: 22px; border-radius: 6px; overflow: hidden; }
+  .strip i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; font-weight: 700; min-width: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .map svg { display: block; width: 100%; height: auto; max-height: 64vh; touch-action: manipulation; }
+  .map path.c { stroke: rgba(10,12,18,.9); stroke-width: 1.4; cursor: pointer; }
+  .map path.c.sel { stroke: #fff; stroke-width: 3; }
+  .key { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 11px; color: var(--muted); align-items: center; }
+  .key > span { white-space: nowrap; }
+  .chip { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 700; line-height: 17px; white-space: nowrap; }
+  .dash { display: inline-block; width: 18px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: 4px; }
+  .sec { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 4px 2px -4px; }
+  .sec h2 { margin: 0; font-size: 15px; }
+  .sec small { font-size: 11px; color: var(--faint); }
+  .cty { scroll-margin-top: 70px; }
+  .cty .hd { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .cty .nm { font-weight: 700; font-size: 15px; white-space: nowrap; }
+  .cty .lead { margin-left: auto; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .cty .lead b { color: var(--fg); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .rows { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .r { display: grid; grid-template-columns: minmax(0, 6.2em) 1fr 7.6em; gap: 8px; align-items: center; font-size: 12.5px; }
+  .r .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r .who i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .r .rg { position: relative; height: 12px; border-radius: 6px; background: rgba(255,255,255,.06); }
+  .r .rg span { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; }
+  .r .rg em { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: #fff; border-radius: 1px; }
+  .r .v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .r .v small { color: var(--faint); margin-left: 4px; }
+  .meta { margin-top: 8px; font-size: 11px; color: var(--faint); line-height: 1.5; }
+  .meta .warn { color: rgba(255,200,120,.85); }
+  details { margin-top: 8px; }
+  summary { font-size: 12px; color: var(--cyan); cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  .polls { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .poll { font-size: 11.5px; line-height: 1.5; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid var(--line); }
+  .poll .pt { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+  .poll .pv { color: var(--fg); }
+  .poll .pv span { white-space: nowrap; margin-right: 8px; }
+  footer { font-size: 12px; color: var(--muted); line-height: 1.7; display: flex; flex-direction: column; gap: 6px; }
+  footer a { color: var(--cyan); }
+  :is(a, button, summary, .hd):focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <a class="home" href="../index.html"><span lang="zh-Hant">← 首頁</span><span lang="en">← Home</span></a>
+  <span class="ttl"><span lang="zh-Hant">2026 縣市長預測</span><span lang="en">2026 Mayors</span><span class="badge">V2</span></span>
+  <span class="sp"></span>
+  <button class="disc" type="button" id="disc" aria-expanded="false" title="研究性質聲明">⚠</button>
+  <div class="lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+</div>
+<div class="note" id="note" role="note">
+  <span lang="zh-Hant">※本頁面純屬學術性空間資料視覺化與科學模型研究，不代表任何政黨立場，亦不為特定候選人或政黨拉票。資料來源：中央選舉委員會、政府資料開放平台 (data.gov.tw)。實際票數與開票結果請一律以中選會官方公告為準。</span>
+  <span lang="en">※This page is purely an academic exercise in spatial data visualization and scientific modeling. It does not represent any party's position or campaign for any candidate or party. Data sources: Central Election Commission, data.gov.tw. For actual vote counts and results, please refer to official CEC announcements.</span>
+</div>
+
+<main>
+  <div>
+    <h1><span lang="zh-Hant">縣市長預測</span><span lang="en">Mayoral forecast</span></h1>
+    <p class="lede" id="lede"></p>
+  </div>
+  <div class="sum" id="sum"></div>
+  <div class="strip" id="strip" aria-hidden="true"></div>
+  <div class="card map"><svg id="map" role="img" aria-label="縣市地圖"></svg><div class="key" id="key"></div></div>
+  <div class="sec"><h2><span lang="zh-Hant">各縣市</span><span lang="en">By county</span></h2><small><span lang="zh-Hant">由最接近的開始</span><span lang="en">closest first</span></small></div>
+  <div id="list" style="display:flex;flex-direction:column;gap:10px"></div>
+  <footer>
+    <div><span lang="zh-Hant">得票區間＝模擬的第 10–90 百分位，白線＝中位數；勝率＝20,000 次模擬中得票最高的比例。虛線外框＝信任度低於 50%（民調少、舊，或多來自有立場的機構；紅＜15%、橘 15–30%、黃 30–50%）。</span><span lang="en">Bars span the 10th–90th percentile of the simulation, the white tick is the median; win % = share of 20,000 simulations in which the candidate leads. Dashed outline = trust below 50% (few, old or mostly partisan polls; red &lt;15%, orange 15–30%, yellow 30–50%).</span></div>
+    <div><a href="../methodology.html#forecast"><span lang="zh-Hant">模型怎麼算 →</span><span lang="en">How the model works →</span></a>　<a href="../predict.html"><span lang="zh-Hant">完整地圖（桌機版）→</span><span lang="en">Full map (desktop) →</span></a></div>
+  </footer>
+</main>
+
+<script src="../../data_mayor2026_predict.js?v=20261031m"></script>
+<script src="../../data_polls_2026.js?v=20261031m"></script>
+<script src="data_counties_m.js?v=20261031a"></script>
+<script src="data_names_m.js?v=20261031b"></script>
+<script>
+(function () {
+  // ---------- language ----------
+  var lang = 'zh';
+  try { var sv = localStorage.getItem('v2_lang'); if (sv === 'en' || sv === 'zh') lang = sv; } catch (e) {}
+  var T = function (zh, en) { return lang === 'en' ? en : zh; };
+
+  // ---------- the engine's Monte Carlo (council.html _runMC2026 / _gaussianRandom), seeded as ratings26.js ----------
+  var MC_N = 20000, MC_NATIONAL_SWING_SD = 2.94, MC_REGIONAL_SWING_SD = 3.24, MC_COUNTY_SD = 4.41;
+  var MC_REGIONS = {
+    '北北基': ['63', '65', '10017'], '桃竹苗': ['68', '10004', '10018', '10005'],
+    '中彰投': ['66', '10007', '10008'], '雲嘉南': ['10009', '10010', '10020', '67'],
+    '高屏': ['64', '10013'], '宜花東': ['10002', '10015', '10014'],
+    '離島': ['09007', '09020', '10016']
+  };
+  var MC_COUNTY_TO_REGION = {};
+  Object.keys(MC_REGIONS).forEach(function (r) { MC_REGIONS[r].forEach(function (c) { MC_COUNTY_TO_REGION[c] = r; }); });
+  var rnd;
+  function seed() {
+    var a = 20261128 >>> 0;   // ratings26.js: mulberry32, seed = 2026 election day
+    rnd = function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function gauss() {
+    var u = 0, v = 0;
+    while (u === 0) u = rnd();
+    while (v === 0) v = rnd();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+  function runMC() {
+    seed();
+    var P = MAYOR_2026_PREDICT, codes = Object.keys(P), samples = {}, winCount = {};
+    codes.forEach(function (code) {
+      samples[code] = {}; winCount[code] = {};
+      P[code].cands.forEach(function (c) { samples[code][c.n] = []; winCount[code][c.n] = 0; });
+    });
+    for (var i = 0; i < MC_N; i++) {
+      var nationalSwing = gauss() * MC_NATIONAL_SWING_SD, regionalSwing = {};
+      Object.keys(MC_REGIONS).forEach(function (r) { regionalSwing[r] = gauss() * MC_REGIONAL_SWING_SD; });
+      codes.forEach(function (code) {
+        var entry = P[code];
+        var idio = gauss() * MC_COUNTY_SD;
+        var shift = nationalSwing + (regionalSwing[MC_COUNTY_TO_REGION[code]] || 0) + idio;
+        var adjusted = entry.cands.map(function (c) {
+          var pct = c.pct !== undefined ? c.pct : (c.v / entry.tot * 100);
+          if (c.p === 'dpp') pct += shift; else if (c.p === 'kmt') pct -= shift;
+          return Math.max(0.5, pct);
+        });
+        var sum = adjusted.reduce(function (a, b) { return a + b; }, 0);
+        adjusted = adjusted.map(function (p) { return p / sum * 100; });
+        var maxIdx = 0;
+        adjusted.forEach(function (p, idx) { if (p > adjusted[maxIdx]) maxIdx = idx; });
+        entry.cands.forEach(function (c, idx) { samples[code][c.n].push(adjusted[idx]); });
+        winCount[code][entry.cands[maxIdx].n]++;
+      });
+    }
+    var summary = {};
+    codes.forEach(function (code) {
+      summary[code] = P[code].cands.map(function (c) {
+        var arr = samples[code][c.n].slice().sort(function (a, b) { return a - b; });
+        return { n: c.n, p: c.p, pct10: arr[Math.floor(arr.length * 0.1)], pct50: arr[Math.floor(arr.length * 0.5)], pct90: arr[Math.floor(arr.length * 0.9)], winProb: winCount[code][c.n] / MC_N };
+      });
+    });
+    return summary;
+  }
+
+  // ---------- ratings (ratings26.js) and colours (council.html _COUNCIL_CLR_NORMAL) ----------
+  var CLR = { dpp: '#1b9e4b', kmt: '#3b82f6', tpp: '#26b5c4', npp: '#FBBE01', tsr: '#B33A1E', gp: '#7bc142', np: '#FFDA00', sdp: '#D6336C', tsu: '#C69E6A', pfp: '#f06a0a', ind: '#888', other: '#aaa' };
+  var RATE = [['s', 'Solid', 0.95, 1], ['y', 'Likely', 0.80, 0.68], ['n', 'Lean', 0.65, 0.42], ['t', 'Tilt', 0.55, 0.2]];
+  var TOSS = '#cbbf9f';
+  var PARTY = { dpp: ['民進黨', 'DPP'], kmt: ['國民黨', 'KMT'], tpp: ['民眾黨', 'TPP'], ind: ['無黨', 'Ind.'], other: ['其他', 'Other'] };
+  var SIDE = { dpp: ['綠', 'Green'], kmt: ['藍', 'Blue'] };
+  var clr = function (p) { return CLR[p] || '#888'; };
+  function mix(hex, k) {
+    var h = (hex || '#888888').replace('#', ''); if (h.length === 3) h = h.split('').map(function (c) { return c + c; }).join('');
+    var m = function (i) { var c = parseInt(h.substring(i, i + 2), 16) || 0; return ~~(255 - (255 - c) * k); };
+    return 'rgb(' + m(0) + ',' + m(2) + ',' + m(4) + ')';
+  }
+  function band(p) { for (var i = 0; i < RATE.length; i++) if (p >= RATE[i][2]) return RATE[i]; return null; }
+  var fill = function (x) { return x.r ? mix(clr(x.p), x.r[3]) : TOSS; };
+  function rateLabel(x) {
+    if (!x.r) return 'Toss-up';
+    var s = SIDE[x.p] || PARTY[x.p] || PARTY.other;
+    return x.r[1] + ' ' + T(s[0], s[1]);
+  }
+  function chip(x) { var dark = !x.r || x.r[3] < 0.5; return '<span class="chip" style="background:' + fill(x) + ';color:' + (dark ? '#15171f' : '#fff') + '">' + rateLabel(x) + '</span>'; }
+
+  // ---------- names ----------
+  var CN_EN = { '台北市': 'Taipei', '新北市': 'New Taipei', '桃園市': 'Taoyuan', '台中市': 'Taichung', '台南市': 'Tainan', '高雄市': 'Kaohsiung', '基隆市': 'Keelung',
+    '新竹市': 'Hsinchu City', '嘉義市': 'Chiayi City', '新竹縣': 'Hsinchu County', '苗栗縣': 'Miaoli', '彰化縣': 'Changhua', '南投縣': 'Nantou', '雲林縣': 'Yunlin',
+    '嘉義縣': 'Chiayi County', '屏東縣': 'Pingtung', '宜蘭縣': 'Yilan', '花蓮縣': 'Hualien', '台東縣': 'Taitung', '澎湖縣': 'Penghu', '金門縣': 'Kinmen', '連江縣': 'Lienchiang' };
+  var bare = function (n) { return String(n).split(/[（(]/)[0].trim(); };   // the data's names carry poll notes in （…）
+  var who = function (n) { var b = bare(n); return lang === 'en' ? (M_NAMES_EN[b] || b) : b; };
+  var cname = function (zh) { return lang === 'en' ? (CN_EN[zh] || zh) : zh; };
+  var pct = function (x, d) { return x.toFixed(d == null ? 1 : d) + '%'; };
+
+  // ---------- model run (once) ----------
+  var MC = runMC();
+  var P = MAYOR_2026_PREDICT;
+  var ROWS = Object.keys(P).map(function (cc) {
+    var mc = MC[cc], top = mc.slice().sort(function (a, b) { return b.winProb - a.winProb; })[0];
+    return { cc: cc, zh: P[cc].county_zh, p: top.p, top: top, pw: top.winProb, r: band(top.winProb), nopoll: !!P[cc].no_prediction, trust: P[cc].trust, polls: P[cc].poll_count || 0, mc: mc };
+  }).sort(function (a, b) { return a.pw - b.pw; });
+
+  // ---------- render ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var open = {};
+  function render() {
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+    document.title = T('2026 縣市長預測 · 手機版', '2026 Mayoral Forecast · Mobile');
+    [].forEach.call(document.querySelectorAll('.lang button'), function (b) { b.setAttribute('aria-pressed', String(b.dataset.lang === lang)); });
+    $('disc').title = T('研究性質聲明', 'Research disclaimer');
+    var nPolls = Object.keys(POLLS_2026).reduce(function (n, k) { return n + POLLS_2026[k].length; }, 0);
+    var nos = ROWS.filter(function (x) { return x.nopoll; }).map(function (x) { return cname(x.zh); });
+    $('lede').innerHTML = T('彙整 ' + nPolls + ' 筆民調，依機構偏差、委託方與新舊加權，再用 20,000 次模擬估計勝率。' + nos.join('、') + ' 沒有可用的 2026 民調，以歷屆縣市長結果估計。',
+      nPolls + ' polls, weighted for pollster lean, sponsor and age; win chances from 20,000 simulations. ' + nos.join(', ') + ' have no usable 2026 poll and are estimated from past mayoral results.');
+    // summary: seats by likeliest winner
+    var g = ROWS.filter(function (x) { return x.p === 'dpp'; }).length, b = ROWS.filter(function (x) { return x.p === 'kmt'; }).length, o = ROWS.length - g - b;
+    $('sum').innerHTML = '<div><b style="color:' + clr('dpp') + '">' + g + '</b><span>' + T('綠營領先', 'Green lead') + '</span></div>' +
+      '<div><b style="color:' + clr('kmt') + '">' + b + '</b><span>' + T('藍營領先', 'Blue lead') + '</span></div>' +
+      '<div><b style="color:#bbb">' + o + '</b><span>' + T('其他領先', 'Others lead') + '</span></div>';
+    // rating strip: Solid → Tilt green, Toss-up, Tilt → Solid blue / others
+    var order = function (x) { var i = x.r ? RATE.indexOf(x.r) : 4; return x.p === 'dpp' && x.r ? i : !x.r ? 4 : x.p === 'kmt' ? 8 - i : 9 + (3 - i); };
+    var groups = {};
+    ROWS.forEach(function (x) { var k = order(x); (groups[k] = groups[k] || { x: x, n: 0 }).n++; });
+    $('strip').innerHTML = Object.keys(groups).sort(function (a, b) { return a - b; }).map(function (k) {
+      var gr = groups[k], dark = !gr.x.r || gr.x.r[3] < 0.5;
+      return '<i style="flex:' + gr.n + ';background:' + fill(gr.x) + ';color:' + (dark ? '#15171f' : '#fff') + '" title="' + rateLabel(gr.x) + '">' + gr.n + '</i>';
+    }).join('');
+    renderMap(); renderList();
+  }
+  function renderMap() {
+    var svg = $('map'), C = M_COUNTIES, by = {};
+    ROWS.forEach(function (x) { by[x.cc.length === 2 ? x.cc + '000' : x.cc] = x; });
+    svg.setAttribute('viewBox', '0 0 ' + C.w + ' ' + C.h);
+    svg.setAttribute('aria-label', T('縣市地圖，依評級上色', 'County map coloured by rating'));
+    // the desktop's dashed trust outline (<15 % red, 15–30 % orange, 30–50 % yellow), drawn on the INSIDE of the county only
+    // (clipped to its own shape, double width): neighbours' outlines no longer stack on one shared border
+    var clips = '';
+    var trustBorder = function (x) {
+      if (x.nopoll || x.trust == null || x.trust >= 0.5) return '';
+      var k = x.cc.length === 2 ? x.cc + '000' : x.cc, d = C.c[k].d;
+      var c = x.trust < 0.15 ? '#ef4444' : x.trust < 0.3 ? '#f97316' : '#facc15', w = x.trust < 0.15 ? 10 : x.trust < 0.3 ? 8 : 6, da = x.trust < 0.15 ? '7 4' : x.trust < 0.3 ? '10 6' : '14 8';
+      clips += '<clipPath id="tc' + k + '"><path d="' + d + '"/></clipPath>';
+      return '<path d="' + d + '" fill="none" stroke="' + c + '" stroke-width="' + w + '" stroke-dasharray="' + da + '" clip-path="url(#tc' + k + ')" pointer-events="none"/>';
+    };
+    var borders = ROWS.map(trustBorder).join('');
+    svg.innerHTML = '<defs>' + clips + '<pattern id="np" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="12" height="12" fill="#3a3f4b"/><line x1="0" y1="0" x2="0" y2="12" stroke="#6b7280" stroke-width="5"/></pattern></defs>' +
+      Object.keys(C.c).map(function (k) {
+        var x = by[k]; if (!x) return '<path class="c" d="' + C.c[k].d + '" fill="#2a2f3a"/>';
+        return '<path class="c" data-cc="' + x.cc + '" d="' + C.c[k].d + '" fill="' + (x.nopoll ? 'url(#np)' : fill(x)) + '"><title>' + cname(x.zh) + ' · ' + rateLabel(x) + '</title></path>';
+      }).join('') + borders;
+    $('key').innerHTML = RATE.map(function (r) { return '<span class="chip" style="background:' + mix('#9aa3b2', r[3]) + ';color:' + (r[3] < 0.5 ? '#15171f' : '#fff') + '">' + r[1] + '</span>'; }).join('') +
+      '<span class="chip" style="background:' + TOSS + ';color:#15171f">Toss-up</span>' +
+      '<span><svg width="14" height="10" style="vertical-align:-1px;margin-right:3px"><rect width="14" height="10" fill="url(#np)"/></svg>' + T('無民調', 'no poll') + '</span>' +
+      '<span><span class="dash" style="color:#ef4444"></span><span class="dash" style="color:#f97316"></span><span class="dash" style="color:#facc15"></span>' + T('信任度＜50%', 'trust <50%') + '</span>';
+  }
+  function pollsHtml(zh) {
+    var end = function (p) { return (String(p.date).match(/\d{4}-\d{2}-\d{2}/g) || ['']).pop(); };   // undated polls last
+    var L = (POLLS_2026[zh] || []).slice().sort(function (a, b) { return end(b) < end(a) ? -1 : end(b) > end(a) ? 1 : 0; });
+    if (!L.length) return '';
+    var shown = L.slice(0, 6);
+    return '<details><summary>' + T('最近民調（共 ' + L.length + ' 筆）', 'Latest polls (' + L.length + ' in all)') + ' ▾</summary><div class="polls">' + shown.map(function (p) {
+      var d = end(p) || T('日期不明', 'date unknown');
+      var sp = p.sponsor && p.sponsor !== 'unknown' ? '・' + T('委託：', 'for ') + p.sponsor : '';
+      var cs = p.candidates.filter(function (c) { return c.pct != null; }).sort(function (a, b) { return b.pct - a.pct; });
+      return '<div class="poll"><div class="pt"><span>' + p.pollster + sp + '</span><span>' + d + '</span></div><div class="pv">' +
+        cs.map(function (c) { return '<span>' + who(c.name) + ' ' + c.pct + '%</span>'; }).join('') +
+        (p.undecided_pct != null ? '<span style="color:var(--faint)">' + T('未表態', 'undecided') + ' ' + p.undecided_pct + '%</span>' : '') + '</div></div>';
+    }).join('') + '</div></details>';
+  }
+  function renderList() {
+    $('list').innerHTML = ROWS.map(function (x) {
+      var all = x.mc.slice().sort(function (a, b) { return b.pct50 - a.pct50; });
+      // a candidate the simulation keeps at its 0.5 % floor (no poll support) and never wins: one 「其他 N 位」 line
+      var minor = all.filter(function (c) { return c.pct50 < 1 && c.winProb === 0; }), cands = all.filter(function (c) { return minor.indexOf(c) === -1; });
+      var max = Math.min(100, Math.max(60, Math.ceil(Math.max.apply(null, cands.map(function (c) { return c.pct90; })) / 10) * 10));
+      var rows = cands.map(function (c) {
+        var L = c.pct10 / max * 100, R = c.pct90 / max * 100, M = c.pct50 / max * 100;
+        return '<div class="r"><span class="who"><i style="background:' + clr(c.p) + '"></i>' + who(c.n) + '</span>' +
+          '<span class="rg" title="' + pct(c.pct10) + '–' + pct(c.pct90) + '"><span style="left:' + L + '%;width:' + Math.max(1, R - L) + '%;background:' + clr(c.p) + ';opacity:.55"></span><em style="left:' + M + '%"></em></span>' +
+          '<span class="v">' + pct(c.pct50) + '<small>' + T('勝', 'win') + ' ' + Math.round(c.winProb * 100) + '%</small></span></div>';
+      }).join('') + (minor.length ? '<div class="r" style="color:var(--faint)"><span class="who" style="grid-column:1/3">' + T('其他 ' + minor.length + ' 位（各不到 1%）', minor.length + ' others (each under 1%)') + '</span><span class="v"></span></div>' : '');
+      var meta = x.nopoll
+        ? '<span class="warn">' + T('無可用的 2026 民調：以 2014–2022 縣市長結果估計，僅供參考', 'No usable 2026 poll: estimated from the 2014–2022 mayoral results, for reference only') + '</span>'
+        : T(x.polls + ' 筆民調・信任度 ' + Math.round(x.trust * 100) + '%', x.polls + ' polls · trust ' + Math.round(x.trust * 100) + '%') +
+          (x.trust < 0.5 ? '　<span class="warn">' + T('信任度低於 50%（民調少、舊，或多來自有立場的機構）', 'trust below 50% (few, old or mostly partisan polls)') + '</span>' : '');
+      return '<section class="card cty" id="c-' + x.cc + '"><div class="hd"><span class="nm">' + cname(x.zh) + '</span>' + chip(x) +
+        '<span class="lead">' + who(x.top.n) + ' <b>' + Math.round(x.pw * 100) + '%</b></span></div>' +
+        '<div class="rows">' + rows + '</div><div class="meta">' + meta + '</div>' + pollsHtml(x.zh) + '</section>';
+    }).join('');
+  }
+
+  // ---------- interaction ----------
+  $('map').addEventListener('click', function (e) {
+    var p = e.target.closest && e.target.closest('path.c[data-cc]'); if (!p) return;
+    [].forEach.call(document.querySelectorAll('path.c.sel'), function (q) { q.classList.remove('sel'); });
+    p.classList.add('sel');
+    var el = $('c-' + p.getAttribute('data-cc')); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('disc').addEventListener('click', function () { var on = $('note').classList.toggle('on'); this.setAttribute('aria-expanded', String(on)); });
+  document.querySelector('.lang').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-lang]'); if (!b || b.dataset.lang === lang) return;
+    lang = b.dataset.lang; try { localStorage.setItem('v2_lang', lang); } catch (er) {}
+    render();
+  });
+  render();
+  window.__mPredict = { MC: MC, ROWS: ROWS };   // for checking against the desktop page
+})();
+</script>
+</body>
+</html>

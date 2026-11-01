@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090f">
+<title>縣市概覽 · 手機版</title>
+<!--
+  Phone page of 縣市概覽 / Profile (user 2026-10-31: 「都做」). All 22 counties and their townships (villages stay on the
+  desktop page): population (內政部戶政 115年9月), the latest results, the 2012–2024 history, the CIP-recognised
+  communities — from m/data_hist_m.js, m/data_place_m.js (build_v2_mobile.py, tests/reconcile_v2_mobile.py).
+  ~0.7 MB instead of the desktop page's ~85 MB.
+-->
+<link rel="stylesheet" href="m.css?v=20261031a">
+</head>
+<body>
+<div class="bar" id="mbar"></div>
+<div class="note" id="mnote" role="note"></div>
+<main>
+  <div class="crumb" id="crumb"></div>
+  <div id="head"></div>
+  <div class="card map"><svg id="map" role="img"></svg><div class="hint" id="hint"></div></div>
+  <div id="panel" style="display:flex;flex-direction:column;gap:12px"></div>
+  <footer id="foot"></footer>
+</main>
+
+<script src="data_counties_m.js?v=20261031a"></script>
+<script src="data_geo_m.js?v=20261031a"></script>
+<script src="data_place_m.js?v=20261031a"></script>
+<script src="data_hist_m.js?v=20261031b"></script>
+<script src="data_names_m.js?v=20261031b"></script>
+<script src="m-common.js?v=20261031a"></script>
+<script>
+(function () {
+  var T = M.T, H = M_HIST, PL = M_PLACE;
+  var st = { cc: null, tc: null };
+  var $ = function (id) { return document.getElementById(id); };
+  var TRIBE_EN = { '阿美': 'Amis', '泰雅': 'Atayal', '排灣': 'Paiwan', '布農': 'Bunun', '卑南': 'Puyuma', '魯凱': 'Rukai', '鄒': 'Tsou', '賽夏': 'Saisiyat', '雅美': 'Tao',
+    '達悟': 'Tao', '邵': 'Thao', '噶瑪蘭': 'Kavalan', '太魯閣': 'Truku', '撒奇萊雅': 'Sakizaya', '賽德克': 'Seediq', '拉阿魯哇': "Hla'alua", '卡那卡那富': 'Kanakanavu' };
+  var tribe = function (g) { return M.lang === 'en' ? (TRIBE_EN[g] || g) : g + '族'; };
+
+  // ---------- records at a place (cc or tc) ----------
+  var LAST = { pres: '2024', pl: '2024', leg: '2024', mayor: '2022', council: '2022' };
+  function rec(race, y, cc, tc) {
+    var d = H[race][y]; if (!d) return null;
+    if (race === 'pres' || race === 'pl') { var v = tc ? d.tc[tc] : d.cc[cc]; return v ? { cands: d.cands, v: v } : null; }
+    if (race === 'mayor') { var c = d.filter(function (x) { return x.cc === cc; })[0]; if (!c) return null; return tc ? (c.tc[tc] ? { cands: c.cands, v: c.tc[tc] } : null) : { cands: c.cands, v: c.v }; }
+    return null;
+  }
+  // 區域立委 districts of a county, or the one a township voted in (the larger fragment if split)
+  function eds(y, cc, tc) {
+    var L = H.leg[y] || [];
+    if (!tc) return L.filter(function (e) { return e.cc === cc; }).map(function (e) { return { e: e, v: e.v }; });
+    var best = null; L.forEach(function (e) { var v = e.tc[tc]; if (v && (!best || v[2] > best.v[2])) best = { e: e, v: v }; });
+    return best ? [best] : [];
+  }
+  var winnerOf = function (e) { return e.cands.filter(function (c) { return c[2]; })[0]; };
+
+  // ---------- pieces ----------
+  function timeline(label, cells) {
+    return '<div style="margin-top:10px"><div style="font-size:12px;color:var(--muted)">' + label + '</div><div class="tl">' + cells.map(function (c) {
+      return '<div>' + c.y + (c.p ? '<b style="background:' + M.color(c.p) + '" title="' + (c.t || '') + '">' + c.l + '</b>' : '<b style="background:rgba(255,255,255,.06);color:var(--faint)">—</b>') + '</div>';
+    }).join('') + '</div></div>';
+  }
+  var short = function (c) { return c[1] === 'ind' || c[1] === 'other' ? M.person(c[0]) : M.party(c[1]); };
+  function leadCell(y, r, list) { var l = r && M.lead(r.cands, r.v); return { y: y, p: l && l.c[1], l: l ? (list ? (l.c[1] !== 'other' ? M.party(l.c[1]) : M.listName(l.c[0], l.c[1])) : short(l.c)) : '', t: l ? (list ? M.listName(l.c[0], l.c[1]) : M.person(l.c[0])) + ' ' + M.pct(l.share) : '' }; }
+  function seatStrip(by) {
+    var ks = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }), tot = ks.reduce(function (s, k) { return s + by[k]; }, 0);
+    return '<div class="seats">' + ks.map(function (k) { return '<i style="flex:' + by[k] + ';background:' + M.color(k) + '" title="' + M.party(k) + '">' + (by[k] / tot > 0.07 ? by[k] : '') + '</i>'; }).join('') + '</div>' +
+      '<div class="meta">' + ks.map(function (k) { return '<span style="white-space:nowrap;margin-right:10px"><span class="dot" style="background:' + M.color(k) + ';margin-right:4px"></span>' + M.party(k) + ' ' + by[k] + '</span>'; }).join('') + '</div>';
+  }
+  function latest(cc, tc) {
+    var h = '<section class="card"><h2>' + T('最近一次選舉', 'Latest elections') + (tc ? T('（' + M.town(tc) + '自己的得票）', ' (votes in ' + M.town(tc) + ')') : '') + '</h2>';
+    var sub = function (zh, en, y) { return '<div style="margin-top:12px;font-size:13px;font-weight:700">' + T(zh, en) + ' <span style="color:var(--faint);font-weight:400">' + y + '</span></div>'; };
+    var r = rec('pres', LAST.pres, cc, tc); if (r) h += sub('總統', 'President', LAST.pres) + M.rows(r.cands, r.v) + '<div class="meta">' + M.turnout(r.v) + '</div>';
+    r = rec('mayor', LAST.mayor, cc, tc); if (r) h += sub(cc.charAt(0) === '6' || cc === '10017' || cc === '10018' || cc === '10020' ? '市長' : '縣長', 'Mayor / magistrate', LAST.mayor) + M.rows(r.cands, r.v);
+    var E = eds(LAST.leg, cc, tc);
+    if (E.length) h += sub('區域立委', 'District legislator', LAST.leg) + (tc ? '<div class="meta" style="margin-top:2px">' + M.district(E[0].e.n) + '</div>' + M.rows(E[0].e.cands, E[0].v)
+      : '<div class="list">' + E.map(function (x) {
+        var w = winnerOf(x.e), i = x.e.cands.indexOf(w);
+        return '<details><summary class="li"><span class="nm">' + M.district(x.e.n) + '</span><span class="ld"><span class="dot" style="background:' + M.color(w[1]) + '"></span>✓ ' + M.person(w[0]) + ' ' + M.pct(x.v[3 + i] / x.v[2]) + '</span></summary><div class="exp">' + M.rows(x.e.cands, x.v) + '</div></details>';
+      }).join('') + '</div>');
+    r = rec('pl', LAST.pl, cc, tc); if (r) h += sub('不分區政黨', 'Party list', LAST.pl) + M.rows(r.cands, r.v, { list: true, top: 5 });
+    if (!tc && H.council[LAST.council][cc]) h += sub(cc.charAt(0) === '6' || cc === '10017' || cc === '10018' || cc === '10020' ? '市議會席次' : '縣議會席次', 'Council seats', LAST.council) + seatStrip(H.council[LAST.council][cc]);
+    return h + '</section>';
+  }
+  function history(cc, tc) {
+    var Y = ['2012', '2016', '2020', '2024'], h = '<section class="card"><h2>' + T('選舉簡史', 'Election history') + '</h2><div class="meta" style="margin-top:-2px">' + T('每格＝該年得票最多的政黨（無黨籍顯示姓名）', 'Each cell = the party with the most votes that year (independents by name)') + '</div>';
+    h += timeline(T('總統', 'President'), Y.map(function (y) { return leadCell(y, rec('pres', y, cc, tc)); }));
+    h += timeline(T('不分區政黨', 'Party list'), Y.map(function (y) { return leadCell(y, rec('pl', y, cc, tc), true); }));
+    h += timeline(T('縣市長', 'Mayor / magistrate'), ['2014', '2018', '2022'].map(function (y) { return leadCell(y, rec('mayor', y, cc, tc)); }));
+    if (tc) h += timeline(T('區域立委', 'District legislator'), Y.map(function (y) { var x = eds(y, cc, tc)[0]; return leadCell(y, x && { cands: x.e.cands, v: x.v }); }));
+    else {
+      var names = []; Y.forEach(function (y) { eds(y, cc).forEach(function (x) { if (names.indexOf(x.e.n) === -1) names.push(x.e.n); }); });
+      h += '<div style="margin-top:12px;font-size:12px;color:var(--muted)">' + T('區域立委（各選區當選人的政黨）', 'District legislators (the winner\'s party, by district)') + '</div>';
+      h += names.map(function (n) {
+        return timeline(M.district(n), Y.map(function (y) { var x = eds(y, cc).filter(function (z) { return z.e.n === n; })[0], w = x && winnerOf(x.e); return w ? { y: y, p: w[1], l: short(w), t: M.person(w[0]) } : { y: y }; }));
+      }).join('');
+    }
+    return h + '</section>';
+  }
+  function tribes(key) {
+    var t = PL.tribes[key] || {}, ks = Object.keys(t).sort(function (a, b) { return t[b] - t[a]; });
+    var h = '<section class="card"><h2>' + T('原住民族核定部落', 'Recognised Indigenous communities') + '</h2>';
+    if (!ks.length) h += '<div class="meta">' + T('沒有原民會核定部落。', 'No CIP-recognised community here.') + '</div>';
+    else h += '<div class="list">' + ks.map(function (g) { return '<div class="li" style="cursor:default"><span class="nm">' + tribe(g) + '</span><span class="ld">' + t[g] + T(' 個部落', ' communities') + '</span></div>'; }).join('') + '</div>';
+    return h + '<div class="meta">' + T('原民會「原住民族部落位置GIS點位表」（data.gov.tw，2022-07 版），依部落所在鄉鎮計；多族部落各族都算一次。平埔族群請見桌機版。', "CIP 'Indigenous community GIS points' (data.gov.tw, 2022-07), counted where each community lies; a community of several peoples counts once for each. Pingpu groups: see the desktop page.") + '</div></section>';
+  }
+
+  // ---------- render ----------
+  function render() {
+    document.title = T('縣市概覽 · 手機版', 'Profile · Mobile');
+    var cc = st.cc, tc = st.tc;
+    $('crumb').innerHTML = !cc ? '<b>' + T('全台', 'Taiwan') + '</b>' :
+      '<button type="button" data-go="tw">' + T('全台', 'Taiwan') + '</button> › ' + (tc ? '<button type="button" data-go="cc">' + M.county(cc) + '</button> › <b>' + M.town(tc) + '</b>' : '<b>' + M.county(cc) + '</b>');
+    var pop = PL.pop[tc || cc];
+    $('head').innerHTML = !cc
+      ? '<h1>' + T('縣市概覽', 'Profile') + '</h1><p class="lede">' + T('點縣市看人口、最近一次選舉、2012 年以來的選舉簡史與原住民族部落；再點鄉鎮看該鄉鎮自己的得票。', 'Tap a county for its population, latest elections, history since 2012 and Indigenous communities; then a township for its own votes.') + '</p>'
+      : '<h1>' + (tc ? M.town(tc) : M.county(cc)) + '</h1><p class="lede">' + (tc ? M.county(cc) + '・' : '') + T('人口 ', 'Pop. ') + '<b style="color:var(--fg)">' + (pop ? M.fmt(pop) : '—') + '</b>' + T('（內政部戶政，115 年 9 月）', ' (MOI household registration, Sep 2026)') +
+        (tc ? '' : '・' + M.townsOf(cc).length + T(' 個鄉鎮市區', ' townships')) + '</p>';
+    // map: Taiwan → counties; a county → its townships (the open one outlined)
+    var svg = $('map');
+    if (!cc) M.map(svg, M.ccs.map(function (k) { return { key: k, d: M_COUNTIES.c[k].d, fill: '#2b3448', title: M.county(k) }; }));
+    else M.map(svg, M.townsOf(cc).map(function (k) { return { key: k, d: M_TOWNS.t[k], fill: k === tc ? '#3f8f8f' : '#2b3448', title: M.town(k) }; }), { fit: true, outline: M_COUNTIES.c[cc].d });
+    svg.setAttribute('aria-label', T('地圖', 'Map'));
+    $('hint').textContent = !cc ? T('點縣市進入', 'Tap a county') : T('點鄉鎮進入', 'Tap a township');
+    var h = '';
+    if (!cc) {
+      h = '<section class="card"><h2>' + T('22 縣市', '22 counties') + '</h2><div class="list">' + M.ccs.map(function (k) {
+        return '<div class="li" data-cc="' + k + '"><span class="nm">' + M.county(k) + '</span><span class="ld" style="color:var(--muted)">' + T('人口 ', 'Pop. ') + M.fmt(PL.pop[k] || 0) + '</span></div>';
+      }).join('') + '</div></section>';
+    } else {
+      h = latest(cc, tc) + history(cc, tc) + tribes(tc || cc);
+      if (!tc) h += '<section class="card"><h2>' + T('鄉鎮市區', 'Townships') + '</h2><div class="list">' + M.townsOf(cc).map(function (k) {
+        return '<div class="li" data-tc="' + k + '"><span class="nm">' + M.town(k) + '</span><span class="ld" style="color:var(--muted)">' + M.fmt(PL.pop[k] || 0) + '</span></div>';
+      }).join('') + '</div></section>';
+    }
+    $('panel').innerHTML = h;
+    $('foot').innerHTML = T('資料：中選會選舉資料庫原始檔、內政部戶政村里人口（115 年 9 月）、原民會核定部落。村里層、政治家族與平埔族群請用', 'Data: CEC election files, MOI village population (Sep 2026), CIP recognised communities. For villages, political families and Pingpu groups, use the ') +
+      ' <a href="../profile.html">' + T('桌機版', 'desktop page') + '</a>' + T('。', '.');
+    M.needPinyin(render);
+  }
+
+  // ---------- interaction ----------
+  var go = function (cc, tc) { st.cc = cc; st.tc = tc || null; render(); window.scrollTo(0, 0); };
+  $('crumb').addEventListener('click', function (e) { var b = e.target.closest('[data-go]'); if (!b) return; if (b.dataset.go === 'tw') go(null); else go(st.cc); });
+  $('panel').addEventListener('click', function (e) {
+    var a = e.target.closest('.li[data-cc]'); if (a) return go(a.dataset.cc);
+    var b = e.target.closest('.li[data-tc]'); if (b) return go(st.cc, b.dataset.tc);
+  });
+  $('map').addEventListener('click', function (e) {
+    var p = e.target.closest && e.target.closest('path.mp'); if (!p) return;
+    var k = p.getAttribute('data-k');
+    if (!st.cc) go(k); else go(st.cc, k);
+  });
+  M.bar('縣市概覽', 'Profile', render);
+  render();
+})();
+</script>
+</body>
+</html>
