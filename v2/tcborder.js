@@ -495,6 +495,13 @@
     });
     return geom;
   }
+  // ONE way to merge villages into a block, for every V2 layer (user 2026-11-01: 「整個system的應該要所有地圖統一」): the
+  // engine's own merge (topojson.merge + _cleanMergedGeom, as _mayorGoVill) with VD's gaps filled (solid — no holes)
+  function merged(win, VD, geoms) {
+    var m = win.topojson.merge(VD, geoms);
+    if (typeof win._cleanMergedGeom === 'function') m = win._cleanMergedGeom(m);
+    return solid(win, m && m.type === 'Feature' ? m.geometry : m);
+  }
   function inRing(pt, ring) {
     var c = false;
     for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -636,5 +643,5 @@
     wrapped.v2Tc = true;
     win.getTCGJ = wrapped;
   }
-  window.V2TcBorder = { lines: lines, solid: solid, hover: hover, attach: attach, unifyBadges: unifyBadges, fixEd2016: fixEd2016, fixTownships: fixTownships, TC: TC, OUTLINE: OUTLINE };
+  window.V2TcBorder = { lines: lines, solid: solid, merged: merged, hover: hover, attach: attach, unifyBadges: unifyBadges, fixEd2016: fixEd2016, fixTownships: fixTownships, TC: TC, OUTLINE: OUTLINE };
 })();

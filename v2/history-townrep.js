@@ -204,9 +204,7 @@
     if (c.merged[tc]) return c.merged[tc];
     var vg = c.VD.objects.villages.geometries.filter(function (g) { var vc = g.properties && g.properties.vc; return vc && vc.indexOf(tc) === 0; });
     if (!vg.length) return null;
-    var m = c.win._cleanMergedGeom(c.win.topojson.merge(c.VD, vg));
-    if (window.V2TcBorder && window.V2TcBorder.solid) window.V2TcBorder.solid(c.win, m.type === 'Feature' ? m.geometry : m);   // VD gaps aren't holes
-    return (c.merged[tc] = { type: 'Feature', properties: { tc: tc }, geometry: m.type === 'Feature' ? m.geometry : m });
+    return (c.merged[tc] = { type: 'Feature', properties: { tc: tc }, geometry: window.V2TcBorder.merged(c.win, c.VD, vg) });   // the shared merge (VD gaps aren't holes)
   }
   // crumb: 全台 › 鄉鎮 — no 縣市 level in these modes, 全台 goes straight back to the national map
   // (user 2026-10-27: 「把縣市那層隱藏…點進去出來回全台地圖是直接回到全台的」)

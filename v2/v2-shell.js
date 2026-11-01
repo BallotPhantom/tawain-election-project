@@ -40,7 +40,9 @@
     // view buttons and the ⚠ disclaimer move into the bar (navbar.js / disclaimer.js, mounted below).
     '#left-rail', '#map-title', '#sidebar-toggle', '.zbts',
     // the 「｜」 divider in council.html's map-corner toolbar (user 2026-10-31: 「把｜這個刪掉（所有版本）」)
-    '#council-ticker-toolbar > span'
+    '#council-ticker-toolbar > span',
+    // the 跑馬燈 (the engines' party-total ticker) on every page (user 2026-11-01: 「那個跑馬燈設計應該整個刪掉」)
+    '#ticker'
   ];
   // Hover outline on every engine page = the 2027 補選預測 page's (user 2026-10-28: 「黃框…改成跟2027立委補選一樣」):
   // #f5c518, 2.2 px, no glow. The engines (V1, untouched) draw it as stroke="#ffcd78" + drop-shadow filters (counties

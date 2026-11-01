@@ -147,7 +147,9 @@
     if (opts.top) idx = idx.slice(0, opts.top);
     return '<div class="rows">' + idx.map(function (i) {
       var c = cands[i], s = v[2] ? v[3 + i] / v[2] : 0, nm = opts.list ? M.listName(c[0], c[1]) : M.person(c[0]);
-      return '<div class="r' + (c[2] ? ' won' : '') + '"><span class="who"><i style="background:' + M.color(c[1]) + '"></i>' + (c[2] && !opts.noTick ? '✓ ' : '') + nm + '</span>' +
+      // a president's running mate (c[3]) on a second line under the name
+      var mate = typeof c[3] === 'string' && c[3] ? '<small style="display:block;font-size:10px;color:var(--faint);font-weight:400;margin-left:13px">' + M.T('副 ', 'VP ') + M.person(c[3]) + '</small>' : '';
+      return '<div class="r' + (c[2] ? ' won' : '') + '"><span class="who"><i style="background:' + M.color(c[1]) + '"></i>' + (c[2] && !opts.noTick ? '✓ ' : '') + nm + mate + '</span>' +
         '<span class="bg"><span style="width:' + (s * 100).toFixed(1) + '%;background:' + M.color(c[1]) + '"></span></span>' +
         '<span class="v">' + M.pct(s) + '<small>' + M.fmt(v[3 + i]) + '</small></span></div>';
     }).join('') + '</div>';

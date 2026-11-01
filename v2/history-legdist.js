@@ -360,6 +360,21 @@
       if (b.id === 'btn-tc-nat') natTownships(c); else natVillages(c);
     };
     win.document.addEventListener('click', win.__v2LegDistBtn, true);   // capture: before the buttons' own onclick
+    // the bar's copies of those buttons (navbar.js, 2026-10-30) run goTCAllNational() / goVillAllNational() directly, never
+    // clicking the engine's buttons: with 2008 / 2012 on screen the engine then drew its own 2016 view and hid 政黨輪替分析
+    // (user 2026-11-01: 「政黨輪替分析在全台村里跟全台鄉鎮市區就被隱藏且不能用了（區域立委的）」「在12年就是這樣」).
+    // A bar click (__v2NavClick) opens this year's view; the engine's own calls keep the view on screen
+    ['goTCAllNational', 'goVillAllNational'].forEach(function (n) {
+      var o = win[n]; if (typeof o !== 'function' || o.v2LegDistNav) return;
+      var w = function () {
+        var c = win.__v2LegDistCtx;
+        if (!c) return o.apply(this, arguments);
+        if (win.__v2NavClick) return n === 'goTCAllNational' ? natTownships(c) : natVillages(c);
+        return redraw(c);
+      };
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) w[k] = o[k];
+      w.v2LegDistNav = true; win[n] = w;
+    });
   }
   // ── 圓餅 / 激戰區域 (2008, 2012) and 政黨輪替分析 (2012 vs 2008; user 2026-10-28: 「政黨輪替分析加在2012(2008隱藏），
   // 圓餅、激戰區域加入08,12」). The engine's own controls and drawing are reused — #chk-pop / #chk-swing set its showPop /

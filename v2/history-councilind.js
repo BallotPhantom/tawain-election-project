@@ -73,9 +73,7 @@
     if (c.geom[tc]) return c.geom[tc];
     var VD = c.VD, vg = VD.objects.villages.geometries.filter(function (g) { var vc = g.properties && g.properties.vc; return vc && vc.indexOf(tc) === 0; });
     if (!vg.length) return null;
-    var m = c.win._cleanMergedGeom(c.win.topojson.merge(VD, vg)), g = m.type === 'Feature' ? m.geometry : m;
-    if (window.V2TcBorder && window.V2TcBorder.solid) window.V2TcBorder.solid(c.win, g);
-    return (c.geom[tc] = { type: 'Feature', properties: { tc: tc }, geometry: g });
+    return (c.geom[tc] = { type: 'Feature', properties: { tc: tc }, geometry: window.V2TcBorder.merged(c.win, VD, vg) });   // the shared merge
   }
   function ic(win, html) { var el = win.document.getElementById('ic'); if (el) el.innerHTML = html; }
   function draw(c) {
