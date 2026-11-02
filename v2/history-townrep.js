@@ -391,5 +391,20 @@
     // hand the county-council box back to the engine (its own empty state)
     if (was && typeof win.drawCountyHemiForED === 'function') { try { win.drawCountyHemiForED(null); } catch (e) {} }
   }
-  window.V2TownshipRep = { draw: draw, clear: clear, engineYear: engineYear, CYCLES: ['2010'] };
+  // the same box for 鄉鎮市區長 mode (history-townhead.js): as 縣市長 mode shows the hovered county's 縣市議會, it shows
+  // the hovered township's 代表會 (user 2026-11-02: 「左邊的席次半圓形圖沒跟滑鼠同步還停在縣市長」). A year without
+  // 代表會 data says so instead of 「沒有代表會」
+  function hemiFor(win, year, tc) {
+    var data = repData(year);
+    if (data) { hemi({ win: win, year: year, data: data }, tc, null); return; }
+    var doc = win.document, T = win.T;
+    var panel = doc.getElementById('county-council-panel'); if (panel) panel.style.display = '';
+    var b5 = doc.getElementById('council-base5-toggle-row'); if (b5) b5.style.display = 'none';
+    var b5c = doc.getElementById('ccp-base5-compare'); if (b5c) b5c.innerHTML = '';
+    var titleEl = doc.getElementById('ccp-county-title');
+    if (titleEl) { titleEl.textContent = T('本屆沒有鄉鎮市民代表資料', 'No township representative data for this cycle'); titleEl.style.color = '#bbb'; }
+    ['ccp-seat-ratio', 'ccp-hemi-center'].forEach(function (id) { var el = doc.getElementById(id); if (el) el.innerHTML = ''; });
+    win.d3.select('#ccp-hemi-svg').selectAll('*').remove();
+  }
+  window.V2TownshipRep = { draw: draw, clear: clear, engineYear: engineYear, hemiFor: hemiFor, CYCLES: ['2010'] };
 })();

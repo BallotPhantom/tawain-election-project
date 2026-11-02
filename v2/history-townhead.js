@@ -182,6 +182,14 @@
     c.pathFn = G(c.win, 'pathFn'); c.gBase = G(c.win, 'gBase'); c.gBg = G(c.win, 'gBg'); c.svg = G(c.win, 'svg');
   }
   function ic(win, html) { var el = win.document.getElementById('ic'); if (el) el.innerHTML = html; }
+  // the left seat box follows the mouse, as in 縣市長 mode (hovered county → its 縣市議會): hovered township → its
+  // 代表會 (history-townrep.js; user 2026-11-02: 「左邊的席次半圓形圖沒跟滑鼠同步還停在縣市長」). 2009's heads
+  // served with the 代表會 elected in June 2010; 1998–2005 have no 代表會 data yet
+  var REP_YEAR = { '2009': '2010' };
+  function repHemi(c, tc) {
+    c.win.__v2ThHemiTC = tc;
+    if (window.V2TownshipRep && window.V2TownshipRep.hemiFor) window.V2TownshipRep.hemiFor(c.win, REP_YEAR[c.year] || c.year, tc);
+  }
 
   // crumb: 全台 › 鄉鎮 — no 縣市 level in these modes, 全台 goes straight back to the national map
   // (user 2026-10-27: 「把縣市那層隱藏…點進去出來回全台地圖是直接回到全台的」)
@@ -226,6 +234,7 @@
       .on('mouseover', function (e, d) {
         var tc = d.properties.tc;
         ic(win, tcPanelHtml(win, c.year, tc, c.data, c.tl));
+        repHemi(c, tc);
       })
       .on('click', function (e, d) {
         if (c.data[d.properties.tc]) township(c, d.properties.tc);   // no race → nothing below to show
@@ -238,6 +247,7 @@
     ic(win, '<div class="t1">' + T(c.year + ' 鄉鎮市區長選舉', c.year + ' Township Head Election') + '</div>' +
       '<div style="color:#bbb;font-size:11px;margin-top:4px">' + T('移到各鄉鎮查看資料，點選進入村里層', 'Hover over a township to view data; click to enter its villages') + '</div>');
     setCrumb(c, null);
+    repHemi(c, null);
     if (c.svg) {
       c.svg.transition().duration(380).call(G(win, 'zm').transform, d3.zoomIdentity);
       try { win.eval('curK = 1'); } catch (e) {}
@@ -270,6 +280,7 @@
     G(win, 'fitFeats')(feats);
     ic(win, tcPanelHtml(win, c.year, tc, c.data, c.tl));
     setCrumb(c, tc);
+    repHemi(c, tc);
     setTimeout(function () { if (typeof win.renderLegend === 'function') win.renderLegend(); }, 420);
   }
 
@@ -323,6 +334,7 @@
       return;
     }
     if (moved || glowBack || gB.select('.ft-tc.v2-own').empty()) { if (moved) reset(win, year); national(c); }
+    else repHemi(c, win.__v2ThHemiTC || null);   // the engine's setMayorMode redraws its own box: keep what the mouse last showed
   }
   function schedule(c, year) {
     (c.win.__v2TownHeadTimers || []).forEach(clearTimeout);
@@ -354,6 +366,7 @@
     win.__v2TownHeadTimers = [];
     win.__v2TownHeadYear = null;
     win.__v2ThTC = null;
+    win.__v2ThHemiTC = null;
     var svg = G(win, 'svg');
     if (svg) svg.on('mouseleave.v2th', null);
   }
