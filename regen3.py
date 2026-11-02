@@ -30,7 +30,7 @@ BASE_MODEL_FALLBACK_WEIGHT = 0.6  # 民調稀疏時，base model佔的權重(0~1
 BASE_MODEL_FALLBACK_EXCLUDE = {'雲林縣'}
 BASE_MODEL_SPARSE_THRESHOLD = 2   # 民調筆數<=這個數字才算「稀疏」，才觸發備援
 
-REF_DATE = datetime(2026, 11, 1)
+REF_DATE = datetime(2026, 11, 2)
 METHOD_K = 0.025
 
 # 新竹縣2026-08-23移出排除名單：查證後發現徐欣瑩2022根本沒參選新竹縣長（2022贏家楊文科不在
@@ -89,7 +89,9 @@ def is_self_commissioned(sponsor):
 # 2022、2026兩度出書質疑蔣萬安家族血緣；自承與曹興誠私交密切、幫曹辦過記者會，但否認曹與協會有關，
 # 被問經費來源答「我沒有必要去講」（風傳媒10/21）。「曹興誠金援」只有藍營評論（陳朝平專欄）的指控、
 # 無證據；「曹的秘書擔任發布窗口」「震央與震源」說法查無新聞出處。降權的主要依據仍是樣本結構。
-SKEWED_SAMPLE_SPONSORS = {'信民協會'}
+# 鋒燦傳媒（2026-11-02，使用者：「要不要比照信民協會…再降到0.4？ ok」）：10/16～21 高雄民調樣本民進黨46.6%、國民黨16.7%、
+# 民眾黨6.2%，未依政黨傾向加權；三立舊部 2023 年成立（中天 2023/3/1）。之後的鋒燦自辦民調要逐筆確認樣本結構再決定是否沿用。
+SKEWED_SAMPLE_SPONSORS = {'信民協會', '鋒燦傳媒'}
 
 def house_weight(pollster, sponsor):
     if sponsor and sponsor != 'unknown' and '黨' in sponsor:
