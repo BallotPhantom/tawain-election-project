@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2026 縣市長最終預測 · V2</title>
+<link rel="stylesheet" href="v2-shell.css?v=20261022b">
+<!--
+  2026 縣市長最終預測總表 (user 2026-11-01: 「最後一次預測跟民調更新就是美國時間16號，然後就直接把網站從公開的關掉，然後先做預測總表
+  做預備」). One table of all 22 counties: each candidate's 80 % range (10th–90th percentile), median and win chance, the
+  county's rating — straight from the latest daily snapshot (data_mc2026_snapshot_log.js: the fixed-seed Monte Carlo of
+  the forecast page, the same numbers its county panels show), with the forecast file (poll counts, no-poll counties) and
+  the poll file (total). No engine, no new model: ratings and colours as ratings26.js (Solid ≥ 95 %, Likely 80–95, Lean
+  65–80, Tilt 55–65, Toss-up < 55; side = the likeliest winner's party). Draft until the last update (US 11/16); after the
+  election the frozen table is the thing to check the results against.
+-->
+<style>
+  html, body { height: auto; overflow: auto; }
+  body { background: #0a0d16; color: #e7eaf0; margin: 0; }
+  #f26 { max-width: 1180px; margin: 0 auto; padding: 18px 16px 48px; }
+  .f-head h1 { font-size: 20px; margin: 4px 0 4px; }
+  .f-meta { font-size: 12px; color: #9aa1b2; line-height: 1.7; }
+  .f-draft { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9px; background: rgba(245, 197, 24, .16); color: #f5c518; margin-left: 6px; vertical-align: middle; }
+  .f-sum { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 6px; }
+  .f-sum > div { flex: 1 1 140px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08); }
+  .f-sum b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .f-sum span { display: block; font-size: 11px; color: #9aa1b2; }
+  .f-bar { display: flex; height: 22px; border-radius: 5px; overflow: hidden; margin: 10px 0 18px; font-size: 10px; font-weight: 700; }
+  .f-bar div { display: flex; align-items: center; justify-content: center; min-width: 0; }
+  .f-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+  .f-card { padding: 10px 12px; border-radius: 10px; background: rgba(17, 21, 32, .92); border: 1px solid rgba(255, 255, 255, .08); min-width: 0; }
+  .f-card h2 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .f-card .sub { font-size: 10.5px; color: #8b93a6; margin: 3px 0 8px; }
+  .chip { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 10px; font-weight: 700; line-height: 16px; white-space: nowrap; }
+  .c-row { display: grid; grid-template-columns: 84px 1fr 44px; gap: 8px; align-items: center; font-size: 11.5px; margin: 5px 0; }
+  .c-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c-row .wp { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .trk { position: relative; height: 12px; background: rgba(255, 255, 255, .06); border-radius: 3px; }
+  .trk .band { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; opacity: .55; }
+  .trk .med { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; }
+  .trk .half { position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px dashed rgba(255, 255, 255, .22); }
+  .c-num { grid-column: 2 / 4; font-size: 10px; color: #9aa1b2; margin-top: -3px; font-variant-numeric: tabular-nums; }
+  .more { font-size: 10.5px; color: #8b93a6; margin-top: 4px; }
+  .f-note { font-size: 11.5px; color: #9aa1b2; line-height: 1.8; margin-top: 18px; border-top: 1px solid rgba(255, 255, 255, .08); padding-top: 12px; }
+  .f-note b { color: #cfd4de; }
+</style>
+</head>
+<body>
+<div id="v2-bar">
+  <a class="v2-home" href="predict.html" data-zh="← 預測地圖" data-en="← Forecast map">← 預測地圖</a>
+  <span class="v2-title"><span data-zh="2026 縣市長最終預測" data-en="2026 Mayoral Forecast — Final Table">2026 縣市長最終預測</span><span class="v2-badge">V2</span></span>
+  <span class="v2-spacer"></span>
+  <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+</div>
+<div id="f26"></div>
+
+<script src="../data_mc2026_snapshot_log.js?v=20261102d"></script>
+<script src="../data_mayor2026_predict.js?v=20261102d"></script>
+<script src="../data_polls_2026.js?v=20261102d"></script>
+<script src="m/data_names_m.js?v=20261101p96"></script>
+<script>
+(function () {
+  'use strict';
+  // the draft label goes when the table is frozen (the last update, US 11/16)
+  var FINAL = false;
+  var lang = 'zh';
+  try { lang = localStorage.getItem('v2_lang') === 'en' ? 'en' : 'zh'; } catch (e) {}
+  var T = function (zh, en) { return lang === 'en' ? en : zh; };
+  // the engine's party colours (council.html _COUNCIL_CLR_NORMAL)
+  var CLR = { dpp: '#1b9e4b', kmt: '#3b82f6', tpp: '#26b5c4', npp: '#FBBE01', tsr: '#B33A1E', tsu: '#C69E6A', pfp: '#f06a0a', ind: '#888888', other: '#aaaaaa' };
+  var PN = { dpp: ['民進黨', 'DPP'], kmt: ['國民黨', 'KMT'], tpp: ['民眾黨', 'TPP'], tsu: ['台聯', 'TSU'], ind: ['無黨', 'Ind.'], other: ['其他', 'Other'] };
+  var CN_EN = { '台北市': 'Taipei', '新北市': 'New Taipei', '桃園市': 'Taoyuan', '台中市': 'Taichung', '台南市': 'Tainan', '高雄市': 'Kaohsiung',
+    '基隆市': 'Keelung', '新竹市': 'Hsinchu City', '嘉義市': 'Chiayi City', '新竹縣': 'Hsinchu County', '苗栗縣': 'Miaoli', '彰化縣': 'Changhua',
+    '南投縣': 'Nantou', '雲林縣': 'Yunlin', '嘉義縣': 'Chiayi County', '屏東縣': 'Pingtung', '宜蘭縣': 'Yilan', '花蓮縣': 'Hualien',
+    '台東縣': 'Taitung', '澎湖縣': 'Penghu', '金門縣': 'Kinmen', '連江縣': 'Lienchiang' };
+  // north → south, then the east and the islands (m-common.js's county order)
+  var ORDER = ['63', '65', '10017', '68', '10018', '10004', '10005', '66', '10007', '10008', '10009', '10020', '10010', '67', '64', '10013',
+               '10002', '10015', '10014', '10016', '09020', '09007'];
+  // ratings26.js
+  var RATE = [['Solid', 0.95, 1], ['Likely', 0.80, 0.68], ['Lean', 0.65, 0.42], ['Tilt', 0.55, 0.2]], TOSS = '#cbbf9f';
+  function band(p) { for (var i = 0; i < RATE.length; i++) if (p >= RATE[i][1]) return RATE[i]; return null; }
+  function mix(hex, k) {
+    var h = hex.replace('#', ''), m = function (i) { var c = parseInt(h.substring(i, i + 2), 16); return ~~(255 - (255 - c) * k); };
+    return 'rgb(' + m(0) + ',' + m(2) + ',' + m(4) + ')';
+  }
+  var nm = function (n) { n = String(n).split(/[（(]/)[0].trim(); return lang === 'en' && typeof M_NAMES_EN !== 'undefined' && M_NAMES_EN[n] ? M_NAMES_EN[n] : n; };
+  var cname = function (cc, P) { var n = (P[cc].county_zh || cc).replace('臺', '台'); return lang === 'en' ? (CN_EN[n] || n) : n; };
+  var pct = function (x) { return (+x).toFixed(1) + '%'; };
+
+  function render() {
+    var snap = MC2026_SNAPSHOT_LOG[MC2026_SNAPSHOT_LOG.length - 1], P = MAYOR_2026_PREDICT;
+    var nPolls = Object.keys(POLLS_2026).reduce(function (a, k) { return a + POLLS_2026[k].length; }, 0);
+    var counties = ORDER.filter(function (cc) { return snap.counties[cc] && P[cc]; }).map(function (cc) {
+      var cs = snap.counties[cc].cands.slice().sort(function (a, b) { return b.pct50 - a.pct50; });
+      var top = cs.slice().sort(function (a, b) { return b.winProb - a.winProb; })[0];
+      var side = top.p === 'dpp' ? 'G' : top.p === 'kmt' ? 'B' : 'O';
+      return { cc: cc, cands: cs, top: top, side: side, r: band(top.winProb), nopoll: !!P[cc].no_prediction, polls: P[cc].poll_count || 0 };
+    });
+    var ahead = { G: 0, B: 0, O: 0 }, exp = { G: 0, B: 0, O: 0 };
+    counties.forEach(function (x) {
+      ahead[x.side]++;
+      x.cands.forEach(function (c) { exp[c.p === 'dpp' ? 'G' : c.p === 'kmt' ? 'B' : 'O'] += c.winProb; });
+    });
+    var chip = function (x) {
+      var s = x.side === 'O' ? (PN[x.top.p] || PN.other) : x.side === 'G' ? ['綠', 'Green'] : ['藍', 'Blue'];
+      var bg = x.r ? mix(CLR[x.top.p] || CLR.other, x.r[2]) : TOSS, dark = !x.r || x.r[2] < 0.5;
+      return '<span class="chip" style="background:' + bg + ';color:' + (dark ? '#15171f' : '#fff') + '">' + (x.r ? x.r[0] + ' ' + T(s[0], s[1]) : 'Toss-up') + '</span>';
+    };
+    // the 22-seat bar: 綠 Solid … Tilt, Toss-up, 其他, 藍 Tilt … Solid (ratings26.js)
+    var key = function (x) {
+      if (!x.r) return 4;                       // every Toss-up together, whichever side leads
+      var k = RATE.indexOf(x.r);
+      return x.side === 'G' ? k : x.side === 'B' ? 9 - k : 5;
+    };
+    var bar = counties.slice().sort(function (a, b) { return key(a) - key(b); });
+    var cells = [], run = null;
+    bar.forEach(function (x) {
+      var id = x.r ? x.r[0] + x.side + (x.side === 'O' ? x.top.p : '') : 'Toss';
+      if (run && run.id === id) { run.n++; return; }
+      run = { id: id, n: 1, x: x }; cells.push(run);
+    });
+    var html = '<div class="f-head"><h1>' + T('2026 縣市長選舉 · 最終預測總表', '2026 Mayoral Elections · Final Forecast Table') +
+      (FINAL ? '' : '<span class="f-draft">' + T('草稿｜預計美國時間 11/16 最後更新後定稿', 'Draft — frozen after the last update (US Nov 16)') + '</span>') + '</h1>' +
+      '<div class="f-meta">' + T('資料日期 ', 'As of ') + snap.date + T('・民調 ', ' · ') + nPolls + T(' 筆・蒙地卡羅模擬 20,000 次（固定種子，與預測地圖各縣市面板相同）', ' polls · 20,000 Monte Carlo runs (fixed seed — the same numbers as the forecast map’s county panels)') + '</div></div>';
+    var cG = CLR.dpp, cB = CLR.kmt;
+    html += '<div class="f-sum">' +
+      '<div><b style="color:' + cG + '">' + ahead.G + '</b><span>' + T('綠營領先・預期 ', 'Green ahead · expected ') + exp.G.toFixed(1) + '</span></div>' +
+      '<div><b style="color:' + cB + '">' + ahead.B + '</b><span>' + T('藍營領先・預期 ', 'Blue ahead · expected ') + exp.B.toFixed(1) + '</span></div>' +
+      '<div><b style="color:#cfd4de">' + ahead.O + '</b><span>' + T('其他領先・預期 ', 'Others ahead · expected ') + exp.O.toFixed(1) + '</span></div>' +
+      '<div><b style="color:' + TOSS + '">' + counties.filter(function (x) { return !x.r; }).length + '</b><span>Toss-up' + T('（領先者勝率 < 55%）', ' (leader under 55 %)') + '</span></div></div>';
+    html += '<div class="f-bar">' + cells.map(function (c) {
+      var x = c.x, bg = x.r ? mix(CLR[x.top.p] || CLR.other, x.r[2]) : TOSS, dark = !x.r || x.r[2] < 0.5;
+      return '<div style="flex:' + c.n + ';background:' + bg + ';color:' + (dark ? '#15171f' : '#fff') + '" title="' + (x.r ? x.r[0] : 'Toss-up') + '">' + c.n + '</div>';
+    }).join('') + '</div>';
+    html += '<div class="f-grid">' + counties.map(function (x) {
+      var shown = x.cands.filter(function (c, i) { return i < 3 || c.winProb >= 0.01; }), rest = x.cands.length - shown.length;
+      var sub = x.nopoll ? T('無 2026 民調：以 2014–2022 縣長選舉實績估計', 'No 2026 poll: estimated from the 2014–2022 county races')
+                         : T(x.polls + ' 筆民調加權', x.polls + ' polls, weighted');
+      return '<div class="f-card"><h2>' + cname(x.cc, P) + ' ' + chip(x) + '</h2><div class="sub">' + sub + '</div>' +
+        shown.map(function (c) {
+          var col = CLR[c.p] || CLR.other;
+          return '<div class="c-row"><span class="nm" style="color:' + col + '" title="' + nm(c.n) + '">' + nm(c.n) + '</span>' +
+            '<span class="trk"><span class="half"></span><span class="band" style="left:' + c.pct10 + '%;width:' + Math.max(0.6, c.pct90 - c.pct10) + '%;background:' + col + '"></span>' +
+            '<span class="med" style="left:' + c.pct50 + '%;background:' + col + '"></span></span>' +
+            '<span class="wp" style="color:' + col + '">' + (c.winProb * 100).toFixed(0) + '%</span>' +
+            '<span class="c-num">' + T('中位數 ', 'median ') + pct(c.pct50) + T('・80% 區間 ', ' · 80% range ') + pct(c.pct10) + '–' + pct(c.pct90) + '</span></div>';
+        }).join('') +
+        (rest > 0 ? '<div class="more">' + T('另有 ' + rest + ' 位候選人（當選率 < 1%）', rest + ' more candidate(s) under 1 %') + '</div>' : '') + '</div>';
+    }).join('') + '</div>';
+    html += '<div class="f-note">' + T(
+      '<b>怎麼讀</b>：長條是各候選人得票率的 80% 區間（模擬結果的第 10 到第 90 百分位），粗線是中位數，虛線是 50%；右邊是當選率。評級依領先者的當選率：Solid ≥95%、Likely 80–95%、Lean 65–80%、Tilt 55–65%、Toss-up 低於 55%。<br>' +
+      '<b>這是研究性質的推估</b>，以公開民調（依機構傾向與委託方降權、時間衰減加權、未表態平分給主要候選人）與部分候選人的歷史得票推算，不是官方數字，也不代表選舉結果。80% 區間代表大約每 5 個縣市就有 1 個的結果會落在區間外。<br>' +
+      '依選罷法，投票日前十日起不得發布、報導、散布、評論或引述民調資料；本表在禁制期開始前定稿，選後公開與實際結果對照。',
+      '<b>How to read</b>: each bar is the candidate’s 80 % range (10th to 90th percentile of the simulations), the thick line the median, the dashed line 50 %; the right column is the win chance. Ratings follow the leader’s win chance: Solid ≥ 95 %, Likely 80–95 %, Lean 65–80 %, Tilt 55–65 %, Toss-up under 55 %.<br>' +
+      '<b>A research estimate</b> from public polls (discounted by pollster lean and sponsor, weighted by recency, undecided split between the main candidates) and some candidates’ past results — not official figures and not a result. An 80 % range means roughly one county in five should land outside it.<br>' +
+      'Taiwan’s election law bars publishing, reporting, spreading, commenting on or quoting polls from ten days before election day; this table is frozen before that and will be compared with the results after the election.') + '</div>';
+    document.getElementById('f26').innerHTML = html;
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+    [].forEach.call(document.querySelectorAll('[data-zh]'), function (e) { e.textContent = lang === 'en' ? e.dataset.en : e.dataset.zh; });
+    [].forEach.call(document.querySelectorAll('.v2-lang button'), function (b) { b.setAttribute('aria-pressed', String(b.dataset.lang === lang)); });
+  }
+  [].forEach.call(document.querySelectorAll('.v2-lang button'), function (b) {
+    b.onclick = function () { lang = b.dataset.lang; try { localStorage.setItem('v2_lang', lang); } catch (e) {} render(); };
+  });
+  render();
+})();
+</script>
+</body>
+</html>

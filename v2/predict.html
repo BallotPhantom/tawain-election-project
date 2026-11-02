@@ -14,6 +14,7 @@
   <a class="v2-home" href="index.html" data-zh="← 首頁" data-en="← Home">← 首頁</a>
   <span class="v2-title"><span data-zh="2026 縣市長預測" data-en="2026 Mayoral Forecast">2026 縣市長預測</span><span class="v2-badge">V2</span></span>
   <a class="v2-btn" href="rallies.html" data-local-only style="text-decoration:none" data-zh="造勢地圖 →" data-en="Campaign rallies →">造勢地圖 →</a>
+  <a class="v2-btn" href="final26.html" style="text-decoration:none" data-zh="最終預測總表 →" data-en="Final table →">最終預測總表 →</a>
   <span id="v2-status"></span>
   <span class="v2-spacer"></span>
   <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
@@ -44,7 +45,7 @@
   V2Shell.boot({
     // &v=: the engine page carries the township forecast (MAYOR_2026_PREDICT_TC) inline, and browsers kept serving a
     // cached copy after a poll update (2026-10-29: transferSize 0 even on a hard reload) — bump it with every data update
-    engine: '../council.html?goto=2026predict&v=20261101',
+    engine: '../council.html?goto=2026predict&v=20261102d',
     needs: ['setMayor2026PredictMode'],
     title: { zh: '2026 縣市長預測', en: '2026 Mayoral Forecast' },
     // #county-council-panel: the 縣市議會席次 card — empty here (mayors only); the engine hides it only on the first
