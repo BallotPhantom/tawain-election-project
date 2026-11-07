@@ -132,14 +132,23 @@ CC_MAP = {
     '基隆市': '10017', '新竹市': '10018', '新竹縣': '10004', '苗栗縣': '10005', '花蓮縣': '10015',
     '宜蘭縣': '10002', '金門縣': '09020', '連江縣': '09007', '彰化縣': '10007', '南投縣': '10008',
     '雲林縣': '10009', '嘉義縣': '10010', '屏東縣': '10013', '台東縣': '10014', '澎湖縣': '10016',
+    '嘉義市': '10020',
 }
 # 來源類型標記——2026-09-11使用者提供的背景資料：台灣開票報導有兩種本質不同的來源，文字/網路
 # 媒體(自由時報、聯合報、中央社、關鍵評論網等)幾乎全部只轉載中選會官方系統的數字，慢但準；電視台
 # (TVBS、三立、東森、民視、台視等)開票前段主要靠自己派工讀生「報票」，快但可能被等比例灌票/事後
 # 校正回歸。這個欄位純粹是說明來源類型，寫進data_live2026.js給前端顯示用，不影響任何抓取/驗證/
 # 計算邏輯。自由時報屬於前者('net')；FETCHERS之後如果真的加了電視台來源，記得標'tv'。
+ONLY_COUNTIES = None   # --county：只抓指定縣市（測試用）
 LTN_SOURCE_LABEL = '自由時報(即時)'
 LTN_SOURCE_TYPE = 'net'
+# 黨籍：LTN 每位候選人後面有政黨圖示 assets/images/politicalParty/t{N}_m.png（2026-11-05 加，使用者：「政黨還是要
+# 自動分類啦」）。對照表是拿 2022 年 21 縣市議員頁（1,638 位候選人）逐一對中選會黨籍（council_2022.js＋原住民選區）
+# 得出來的：對得上名冊的 1,597 位裡 1,592 位一致（99.7%），5 位不一致（t99 標無黨但中選會是國民黨 2、時代力量 1；
+# t2 標國民黨但中選會是無黨 1；t5 對無黨 1）。這是 LTN 自己的編號，2026 開票網站上線後要再對一次。
+# 沒有圖示或代碼不在表裡的候選人 → 'other'（不猜）。
+LTN_PARTY = {'t1': 'dpp', 't2': 'kmt', 't99': 'ind', 't11': 'tpp', 't7': 'npp', 't8': 'tsr', 't13': 'spgp', 't6': 'np',
+             't5': 'npa', 't16': 'gp', 't4': 'pfp', 't3': 'tsu', 't10': 'lp', 't17': 'sdp', 't12': 'szmd'}
 LTN_SLUGS = {
     '台北市': 'Taipei', '新北市': 'NewTaipei', '桃園市': 'Taoyuan', '台中市': 'Taichung',
     '台南市': 'Tainan', '高雄市': 'Kaohsiung', '基隆市': 'Keelung', '新竹市': 'HsinchuCity',
@@ -147,6 +156,9 @@ LTN_SLUGS = {
     '金門縣': 'Jinmen', '連江縣': 'LianJiang', '彰化縣': 'Changhua', '南投縣': 'Nantou',
     '雲林縣': 'Yunlin', '嘉義縣': 'ChiayiCounty', '屏東縣': 'Pingtung', '台東縣': 'Taitung',
     '澎湖縣': 'Penghu',
+    # 嘉義市 2026-11-05 補上（原本漏掉：2022 嘉義市長延期改選，當初建清單時沒放，連帶 2022 嘉義市議員 23 席也沒抓）。
+    # 網址 election.ltn.com.tw/2022/realtime/ChiayiCity/parliamentary 實測可用（第1、2選舉區、40 位候選人）
+    '嘉義市': 'ChiayiCity',
 }
 
 
@@ -242,8 +254,31 @@ def _parse_cec_table(table):
         m = re.match(r'^([\d,]+)', tds[2].get_text(strip=True))
         if not m:
             continue
-        cands.append({'name': name, 'votes': int(m.group(1).replace(',', ''))})
+        # 黨籍圖示與當選標記（見 LTN_PARTY 的註解）；沒有就是 None / False，不影響原本的姓名與票數
+        img = tds[1].find('img', class_='pp')
+        pm = re.search(r'politicalParty/([^/_.]+)', img.get('src', '')) if img else None
+        party = LTN_PARTY.get(pm.group(1), 'other') if pm else None
+        elected = bool(tds[0].find('span', class_='elected'))
+        cands.append({'name': name, 'votes': int(m.group(1).replace(',', '')), 'party': party, 'elected': elected})
     return cands
+
+
+def _parse_prog(text):
+    """「98 / 98 （已開 / 應開）投開票所」→ [98, 98]；找不到就 None"""
+    m = re.search(r'(\d+)\s*/\s*(\d+)\s*（已開\s*/\s*應開）', text or '')
+    return [int(m.group(1)), int(m.group(2))] if m else None
+
+
+def _build_council_seats_2026():
+    """2026（115年）的應選席次表（一般＋原住民，{dk: 應選席次}）——v2/data_council_seats_2026.js，由
+    build_v2_council_seats_2026.py 從中選會 115/8/20 中選務字第1153150253號公告產生（使用者 2026-11-07 要求核對
+    2026 席次）。2026 跟 2022 不同：新北 66→68、桃園 63→65、彰化 54→55、雲林 43→45、基隆 31→32、新竹市 34→35，
+    新竹縣竹北市拆成兩區、之後的選區全部重編號，多個縣市選區間席次移動，新增彰化山地、雲林平地／山地、基隆山地、
+    新竹市山地原住民選區。拿 2022 的表比對 2026 頁面會把這些選區當成「應選席次對不起來」整區跳過。"""
+    s = (PROJ / 'v2' / 'data_council_seats_2026.js').read_text(encoding='utf-8')
+    i = s.index('const COUNCIL_SEATS_2026 = ') + len('const COUNCIL_SEATS_2026 = ')
+    table = json.loads(s[i:s.index(';\n', i)])
+    return {dk: v[1] for dk, v in table.items()}
 
 
 def _parse_council_page(html, cc, council_seats, now_label):
@@ -277,7 +312,8 @@ def _parse_council_page(html, cc, council_seats, now_label):
             continue
         cands = _parse_cec_table(table)
         if cands:
-            out[dk] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label}
+            out[dk] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label,
+                       'prog': _parse_prog(box.get_text(' ', strip=True))}
     return out
 
 
@@ -286,64 +322,188 @@ def _parse_council_page(html, cc, council_seats, now_label):
 #   cc_data = { cc: {'cands':[...], 'source_label', 'ts'} }          縣市長
 #   tc_data = { tc: {'cands':[...], 'source_label', 'ts'} }          鄉鎮市長(從縣市長頁面附帶抓到)
 #   ed_data = { dk: {'cands':[...], 'source_label', 'ts'} }          縣市議員(SNTV選區，另一個頁面)
+# 2026-11-07 改版（使用者 2026-11-07 要求拿 2022 開票數字測整條 pipeline 時發現）：自由時報開票頁改成「網頁只是空殼，
+# 票數由頁面自己的 JS 去讀 /{year}/ajax_vote/outer/cecVote_{1 縣市長|2 縣市議員}_{縣市編號}.txt」（頁面 assets/js/
+# realtime_open_index.js 的 getCectimeHtml）；11/05 還在 HTML 表格裡的 2022 數字，11/07 已經從 HTML 跟這些檔案都拿掉
+# （回 {"code":200,"data":null}）。格式用 web.archive.org 存的 2022 年 12 月檔案確認：
+#   縣市長 data.cec.mayor = {over_all:[候選人], other:{NowPoNumber, AllPoNumber}, area:{R_No:{des 鄉鎮名, other, data:[候選人]}}}
+#   縣市議員 data.cec = {R_No:{data:[候選人 (RName「第N選舉區」)], other:{NowPoNumber, AllPoNumber, range_detail「應選出名額：N席…」}}}
+#   候選人 = {Name, V_Num, PNo（政黨圖示編號，同 LTN_PARTY 的 t{N}）, Elected (1 當選), …}
+# 讀的是頁面本身公開讀取的同一批檔案，沒有繞過任何防護；縣市編號（pageRno）從縣市頁面讀一次後記住，之後每輪每縣市
+# 只抓兩個小檔。檔案讀不到（data null／404）時退回原本解析 HTML 表格的做法。
+LTN_RNO = {}   # 縣市 -> 自由時報的縣市編號（頁面 let pageRno = 'N'）
+
+
+def _ltn_rno(html):
+    m = re.search(r"pageRno\s*=\s*'(\d+)'", html or '')
+    return m.group(1) if m else None
+
+
+def _ltn_feed(year, kind, rno):
+    """kind 1 縣市長／2 縣市議員；有資料回傳 data.cec，沒有（data null、非 JSON、404）回傳 None"""
+    try:
+        txt = http_get(f'https://election.ltn.com.tw/{year}/ajax_vote/outer/cecVote_{kind}_{rno}.txt')
+        d = json.loads(txt)
+    except Exception:
+        return None
+    return (d.get('data') or {}).get('cec') or None
+
+
+def _feed_cands(rows):
+    out = []
+    for x in rows or []:
+        try:
+            v = int(str(x.get('V_Num', '')).replace(',', ''))
+        except ValueError:
+            continue
+        pno = str(x.get('PNo') or '').strip()
+        out.append({'name': (x.get('Name') or '').strip(), 'votes': v,
+                    'party': LTN_PARTY.get('t' + pno, 'other') if pno else None, 'elected': str(x.get('Elected')) == '1'})
+    return [c for c in out if c['name']]
+
+
+def _feed_prog(other):
+    try:
+        return [int(other['NowPoNumber']), int(other['AllPoNumber'])]
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _parse_feed_mayor(cec, cc, pool, now_label):
+    m = cec.get('mayor') or {}
+    cc_entry, tcs = None, {}
+    cands = _feed_cands(m.get('over_all'))
+    if cands:
+        cc_entry = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label,
+                    'prog': _feed_prog(m.get('other'))}
+    for area in (m.get('area') or {}).values():
+        tc = pool.get(_norm((area.get('des') or '').strip()))
+        if not tc:
+            continue
+        cands = _feed_cands(area.get('data'))
+        if cands:
+            tcs[tc] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label,
+                       'prog': _feed_prog(area.get('other'))}
+    return cc_entry, tcs
+
+
+def _parse_feed_council(cec, cc, council_seats, now_label):
+    out = {}
+    for d in cec.values():
+        rows = d.get('data') or []
+        if not rows:
+            continue
+        m = re.match(r'第(\d+)選舉區', rows[0].get('RName') or '')
+        if not m:
+            continue
+        dk = f'{cc}_{int(m.group(1)):02d}'
+        expected = council_seats.get(dk)
+        if expected is None:
+            print(f'  [ltn] {dk} 不在席次表裡，跳過', file=sys.stderr)
+            continue
+        sm = re.search(r'應選出名額[：:]\s*(\d+)\s*席', (d.get('other') or {}).get('range_detail') or '')
+        if sm and int(sm.group(1)) != expected:
+            print(f'  [ltn] {dk} 應選席次對不起來(抓到{sm.group(1)}，app預期{expected})，跳過', file=sys.stderr)
+            continue
+        cands = _feed_cands(rows)
+        if cands:
+            out[dk] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label,
+                       'prog': _feed_prog(d.get('other'))}
+    return out
+
+
+def _parse_mayor_page(html, county, cc, pool, now_label):
+    """舊版做法：縣市頁面 HTML 裡的中選會表格（2022 年 11/05 以前的頁面）"""
+    cc_entry, tcs = None, {}
+    soup = BeautifulSoup(html, 'html.parser')
+    h5s = soup.find_all('h5', class_='TIT')
+    target = next((h for h in h5s if '中選會' in h.get_text()), None)
+    if target:
+        container = target.find_parent(['div', 'section'])
+        county_table = container.find('table') if container else None
+        if county_table:
+            cands = _parse_cec_table(county_table)
+            if cands:
+                cc_entry = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label,
+                            'prog': _parse_prog(container.get_text(' ', strip=True))}
+    else:
+        print(f'  [ltn] {county} 找不到中選會開票結果區塊——網站結構可能變了，需要重新檢查', file=sys.stderr)
+    for dtable in soup.select('table[class*="cecArea"]'):
+        caption = dtable.find('caption')
+        b = caption.find('b') if caption else None
+        if not b:
+            continue
+        tc = pool.get(_norm(b.get_text(strip=True)))
+        if not tc:
+            continue  # 名稱對不到，跳過這個鄉鎮，不影響其他鄉鎮/縣市層資料
+        cands = _parse_cec_table(dtable)
+        if cands:
+            tcs[tc] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label,
+                       'prog': _parse_prog(dtable.get_text(' ', strip=True))}
+    return cc_entry, tcs
+
+
 def fetch_ltn(tc_pool, council_seats, year=2026):
     now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
     cc_out, tc_out, ed_out = {}, {}, {}
-    for county, slug in LTN_SLUGS.items():
+    slugs = {k: v for k, v in LTN_SLUGS.items() if not ONLY_COUNTIES or k in ONLY_COUNTIES}
+    for n_county, (county, slug) in enumerate(slugs.items()):
+        if n_county:
+            time.sleep(random.uniform(0.8, 1.6))   # 縣市之間稍停，不連續快速打同一個網站
         cc = CC_MAP[county]
-        # --year 2022可以拿已經驗證過的2022真實資料測試整條fetch/驗證/寫入流程，不用等到
-        # 2026年10/11月網站真的上線才能測——縣市頁面本身同時含縣市層總表跟逐鄉鎮市區
-        # table.cecArea_*，一次fetch兩層資料都拿得到
+        pool = tc_pool.get(cc, {})
         url = f'https://election.ltn.com.tw/{year}/realtime/{slug}'
-        try:
-            html = http_get(url)
-        except Exception as e:
-            print(f'  [ltn] {county} fetch失敗: {e}', file=sys.stderr)
-            continue
-
-        # 解析邏輯本身原本沒有try/except——只有上面的http_get()有包。網路請求失敗是意料中的事
-        # （逐一guard），但「網站改版/CSS class名稱換了」這種解析階段的意外例外(AttributeError/
-        # IndexError等)完全沒被擋，一旦某個縣市的頁面結構跟預期不同就會直接往上炸穿整個for迴圈，
-        # 連還沒抓到的其他二十幾個縣市都會被拖累——這才是真正該擋的「單一媒體改版不能拖垮其他
-        # 縣市」情境，不是網路逾時那種已經處理過的情況。這裡不用continue：即使縣市長/鄉鎮層解析
-        # 失敗，下面縣市議員頁面是完全獨立的另一個fetch，還是要繼續嘗試，不要整個縣市都放棄。
-        try:
-            soup = BeautifulSoup(html, 'html.parser')
-
-            h5s = soup.find_all('h5', class_='TIT')
-            target = next((h for h in h5s if '中選會' in h.get_text()), None)
-            if target:
-                container = target.find_parent(['div', 'section'])
-                county_table = container.find('table') if container else None
-                if county_table:
-                    cands = _parse_cec_table(county_table)
-                    if cands:
-                        cc_out[cc] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label}
+        html = None
+        rno = LTN_RNO.get(county)
+        if not rno:   # 第一輪：縣市頁面讀一次縣市編號
+            try:
+                html = http_get(url)
+            except Exception as e:
+                print(f'  [ltn] {county} fetch失敗: {e}', file=sys.stderr)
+                continue
+            rno = _ltn_rno(html)
+            if rno:
+                LTN_RNO[county] = rno
             else:
-                print(f'  [ltn] {county} 找不到中選會開票結果區塊——網站結構可能變了，需要重新檢查', file=sys.stderr)
-
-            pool = tc_pool.get(cc, {})
-            for dtable in soup.select('table[class*="cecArea"]'):
-                caption = dtable.find('caption')
-                b = caption.find('b') if caption else None
-                if not b:
-                    continue
-                tc = pool.get(_norm(b.get_text(strip=True)))
-                if not tc:
-                    continue  # 名稱對不到，跳過這個鄉鎮，不影響其他鄉鎮/縣市層資料
-                cands = _parse_cec_table(dtable)
-                if cands:
-                    tc_out[tc] = {'cands': cands, 'source_label': LTN_SOURCE_LABEL, 'source_type': LTN_SOURCE_TYPE, 'ts': now_label}
-        except Exception as e:
-            print(f'  [ltn] {county} 縣市長/鄉鎮層解析失敗(網站結構可能變了): {e}', file=sys.stderr)
-
-        # 縣市議員是完全不同的頁面(不是縣市長頁面的分頁/AJAX局部更新，是獨立URL)，另外抓一次
-        council_url = f'https://election.ltn.com.tw/{year}/realtime/{slug}/parliamentary'
-        try:
-            council_html = http_get(council_url)
-            ed_out.update(_parse_council_page(council_html, cc, council_seats, now_label))
-        except Exception as e:
-            print(f'  [ltn] {county} 縣市議員頁面fetch/解析失敗: {e}', file=sys.stderr)
+                print(f'  [ltn] {county} 頁面找不到縣市編號(pageRno)——網站結構可能變了', file=sys.stderr)
+        # 單一縣市的解析意外（網站改版）不能拖垮其他縣市：每一段各自 try
+        got_mayor = False
+        if rno:
+            try:
+                cec = _ltn_feed(year, 1, rno)
+                if cec:
+                    c1, t1 = _parse_feed_mayor(cec, cc, pool, now_label)
+                    if c1:
+                        cc_out[cc] = c1; got_mayor = True
+                    tc_out.update(t1)
+            except Exception as e:
+                print(f'  [ltn] {county} 縣市長資料檔解析失敗: {e}', file=sys.stderr)
+        if not got_mayor:   # 退回 HTML 表格
+            try:
+                if html is None:
+                    html = http_get(url)
+                c1, t1 = _parse_mayor_page(html, county, cc, pool, now_label)
+                if c1:
+                    cc_out[cc] = c1
+                tc_out.update(t1)
+            except Exception as e:
+                print(f'  [ltn] {county} 縣市長/鄉鎮層解析失敗(網站結構可能變了): {e}', file=sys.stderr)
+        got_council = False
+        if rno:
+            try:
+                cec = _ltn_feed(year, 2, rno)
+                if cec:
+                    e1 = _parse_feed_council(cec, cc, council_seats, now_label)
+                    ed_out.update(e1); got_council = bool(e1)
+            except Exception as e:
+                print(f'  [ltn] {county} 縣市議員資料檔解析失敗: {e}', file=sys.stderr)
+        if not got_council:   # 退回縣市議員頁面 HTML
+            council_url = f'https://election.ltn.com.tw/{year}/realtime/{slug}/parliamentary'
+            try:
+                council_html = http_get(council_url)
+                ed_out.update(_parse_council_page(council_html, cc, council_seats, now_label))
+            except Exception as e:
+                print(f'  [ltn] {county} 縣市議員頁面fetch/解析失敗: {e}', file=sys.stderr)
     return cc_out, tc_out, ed_out
 
 
@@ -401,10 +561,13 @@ def _merge_layer(varname, fresh, allow_all_zero, source_key='auto_poll'):
             continue
         accepted.append(key)
         entry = current.setdefault(key, {'sources': {}, 'final': False})
+        won = [c['name'] for c in info['cands'] if c.get('elected')]
         entry['sources'][source_key] = {
             'label': info['source_label'], 'type': info.get('source_type'), 'ts': info['ts'],
-            'cands': [{'n': c['name'], 'v': c['votes']} for c in info['cands']],
-            'elected': None,
+            'cands': [{'n': c['name'], 'v': c['votes'], 'p': c.get('party'), 'e': 1 if c.get('elected') else 0} for c in info['cands']],
+            # 單一席（縣市長、鄉鎮層的縣市長票）：來源標了當選才填姓名；多席（議員）看各候選人的 e
+            'elected': won[0] if len(won) == 1 and varname != 'LIVE_TRACK_ED' else None,
+            'prog': info.get('prog'),
         }
     if accepted:
         _write_block(varname, current)
@@ -421,10 +584,13 @@ def _write_block(varname, data):
     for key, entry in data.items():
         src_strs = []
         for skey, s in entry['sources'].items():
-            cand_str = ', '.join(f"{{ n: '{esc(c['n'])}', v: {c['v']} }}" for c in s['cands'])
+            cand_str = ', '.join(
+                f"{{ n: '{esc(c['n'])}', v: {c['v']}" + (f", p: '{esc(c['p'])}'" if c.get('p') else '') + (", e: 1" if c.get('e') else '') + " }"
+                for c in s['cands'])
+            prog = f", prog: [{s['prog'][0]}, {s['prog'][1]}]" if s.get('prog') else ''
             elected = f"'{esc(s['elected'])}'" if s.get('elected') else 'null'
             src_type = f"'{esc(s['type'])}'" if s.get('type') else 'null'
-            src_strs.append(f"{skey}: {{ label: '{esc(s['label'])}', type: {src_type}, ts: '{esc(s['ts'])}', cands: [{cand_str}], elected: {elected} }}")
+            src_strs.append(f"{skey}: {{ label: '{esc(s['label'])}', type: {src_type}, ts: '{esc(s['ts'])}', cands: [{cand_str}], elected: {elected}{prog} }}")
         lines.append(f'  "{key}": {{ sources: {{ {", ".join(src_strs)} }}, final: {str(entry.get("final", False)).lower()} }},')
     lines[-1] = lines[-1].rstrip(',')
     lines.append('};')
@@ -483,7 +649,9 @@ def _append_margin_log(cc_fresh, accepted_keys, source_key='auto_poll'):
         top = cands_sorted[0]
         second_votes = cands_sorted[1]['votes'] if len(cands_sorted) > 1 else 0
         margin_pct = round((top['votes'] - second_votes) / total * 100, 2)
-        entry = {'ts': ts, 'ldrName': top['name'], 'marginPct': margin_pct}
+        # 2026-11-07：每位候選人當時的累計票數也記下（使用者：舊版的折線圖改成長條圖，按照進來的票數累積看 pattern）
+        entry = {'ts': ts, 'ldrName': top['name'], 'marginPct': margin_pct,
+                 'cands': [{'n': c['name'], 'v': c['votes'], 'p': c.get('party')} for c in cands_sorted]}
         log.setdefault(key, {}).setdefault(source_key, []).append(entry)
         changed = True
 
@@ -497,7 +665,13 @@ def _append_margin_log(cc_fresh, accepted_keys, source_key='auto_poll'):
     for key, by_source in log.items():
         src_strs = []
         for skey, entries in by_source.items():
-            entry_strs = [f"{{ ts: '{esc(e['ts'])}', ldrName: '{esc(e['ldrName'])}', marginPct: {e['marginPct']} }}" for e in entries]
+            def cands_js(e):
+                cs = e.get('cands')
+                if not cs:
+                    return ''
+                return ', cands: [' + ', '.join(
+                    f"{{ n: '{esc(c['n'])}', v: {int(c['v'])}" + (f", p: '{esc(c['p'])}'" if c.get('p') else '') + ' }' for c in cs) + ']'
+            entry_strs = [f"{{ ts: '{esc(e['ts'])}', ldrName: '{esc(e['ldrName'])}', marginPct: {e['marginPct']}{cands_js(e)} }}" for e in entries]
             src_strs.append(f'{skey}: [{", ".join(entry_strs)}]')
         lines.append(f'  "{key}": {{ {", ".join(src_strs)} }},')
     lines[-1] = lines[-1].rstrip(',')
@@ -553,7 +727,16 @@ if __name__ == '__main__':
     ap.add_argument('--year', type=int, default=2026,
                      help='election.ltn.com.tw的年份路徑，預設2026；用--year 2022可以拿已驗證的'
                           '2022真實資料測試整條流程，不用等網站真的上線')
+    ap.add_argument('--data-file', default=None,
+                     help='寫入的資料檔（預設 data_live2026.js）；測試時指到暫存副本，正式檔不會被動到。'
+                          '領先幅度紀錄跟著放在同一個資料夾（<檔名>_margin_log.js）')
+    ap.add_argument('--county', action='append', default=None, help='只抓這個縣市（可重複），測試用，例如 --county 嘉義市')
     args = ap.parse_args()
+    ONLY_COUNTIES = set(args.county) if args.county else None
+    if args.data_file:
+        DATA_FILE = Path(args.data_file).resolve()
+        MARGIN_LOG_FILE = DATA_FILE.with_name(DATA_FILE.stem + '_margin_log.js')
+        print(f'資料檔：{DATA_FILE}（領先幅度紀錄：{MARGIN_LOG_FILE.name}）')
 
     print('載入鄉鎮市區代碼對照表跟縣市議員選區席次表...')
     tc_pool = _build_tc_pool()
@@ -561,7 +744,8 @@ if __name__ == '__main__':
     # 席次表成同一張——兩者key(dk格式)不重疊(LTN選區編號一般選區排完接著繼續編原住民選區)，
     # 合併後_parse_council_page()不用改，兩種選區都能查得到ground truth，原住民選區不再被
     # 跳過(舊版本的council_seats.get(dk)對原住民選區永遠是None，全部continue掉)
-    council_seats = {**_build_council_seats(), **_build_ind_council_seats()}
+    # 2026：中選會 2026 公告的席次表（_build_council_seats_2026）；--year 2022 排練：2022 的表
+    council_seats = _build_council_seats_2026() if args.year >= 2026 else {**_build_council_seats(), **_build_ind_council_seats()}
     print(f'  共{sum(len(v) for v in tc_pool.values())}個鄉鎮市區、{len(council_seats)}個縣市議員選區(含原住民選區)')
 
     if args.once:

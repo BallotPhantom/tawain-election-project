@@ -31,6 +31,11 @@
 <script src="toolbtns.js?v=20261101a"></script>
 <script src="navbar.js?v=20261101b"></script>
 <script src="disclaimer.js?v=20261031d"></script>
+<script src="data_council_seats_2026.js?v=20261107a"></script>
+<script src="live-seats2026.js?v=20261107b"></script>
+<script src="live-councilhemi.js?v=20261107c"></script>
+<script src="live-councilind.js?v=20261107b"></script>
+<script src="live-panel.js?v=20261107e"></script>
 <script src="v2-shell.js?v=20261101tk"></script>
 <script>
   // Election night only: V1's setLiveTrack2026Mode('mayor' | 'council').
@@ -45,10 +50,27 @@
     needs: ['setLiveTrack2026Mode'],
     title: { zh: '2026 即時開票', en: '2026 Election Night' },
     onReady: function (win) {
+      // the real night: the engine's council districts / seats switched to 2026 (CEC 115/8/20 announcement) before the
+      // first draw; ?demo=1 keeps the 2022 districts of its rehearsal data (live-seats2026.js)
+      if (window.V2LiveSeats2026) window.V2LiveSeats2026.attach(win);
+      // county panel: the margin line → cumulative vote bars; no 政黨基本盤天花板 line (live-panel.js) — before setSub,
+      // whose setLiveTrack2026Mode starts the 30 s poll timer with whatever _liveTrack26Poll is then
+      if (window.V2LivePanel) window.V2LivePanel.attach(win);
       setSub(win, 'mayor');
       // population glow hidden, colour on the blocks — as History and the 2026 forecast (noglow.js; user 2026-10-29:
       // 「把開票的系統把人口光暈隱藏」)
       if (window.V2NoGlow) window.V2NoGlow.attach(win);
+      // the 總統／行政院支持率 strip and its fold-out (the engine's predict-mode #seat-summary-float) hidden on election night
+      // (user 2026-11-07: 「要把總統行政院支持率的折疊隱藏」); V1 untouched — a style tag in this iframe only
+      var st = win.document.createElement('style');
+      // + the 圓餅／激戰區域 toggles of the township level (#pie-swing-row; user 2026-11-07: 「舊版的鄉鎮市區層要把圓餅圖激戰區域
+      // 關掉」) — off by default, now not offered at all
+      st.textContent = '#seat-summary-float,#pie-swing-row{display:none!important}';
+      win.document.head.appendChild(st);
+      // 縣市議員 seat box: the whole county council, the hovered district lit, coloured by the live leaders (live-councilhemi.js)
+      if (window.V2LiveCouncilHemi) window.V2LiveCouncilHemi.attach(win);
+      // 平地／山地原住民 drawn solid at 全台, as History (live-councilind.js)
+      if (window.V2LiveCouncilInd) window.V2LiveCouncilInd.attach(win);
       subButtons.forEach(function (b) { b.addEventListener('click', function () { setSub(win, b.dataset.sub); }); });
     }
   });
