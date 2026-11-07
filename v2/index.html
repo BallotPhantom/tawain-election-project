@@ -189,14 +189,14 @@
     </a>
 
     <!-- 04 · election night (bottom-left, closes the loop back to 01) -->
-    <a class="quad q-night" href="live.html" id="q-night">
+    <a class="quad q-night" href="live-flow.html" id="q-night">
       <div class="q-head"><span class="q-num">04</span><span class="q-when" data-zh="選舉當晚" data-en="Election night">選舉當晚</span></div>
       <h2 class="q-title"><span data-zh="即時開票" data-en="Election Night">即時開票</span><small>LIVE</small></h2>
       <p class="q-q" data-zh="選票正在如何改變結果？" data-en="How are the votes changing the result right now?">選票正在如何改變結果？</p>
       <div class="viz" aria-hidden="true">
         <svg viewBox="0 0 400 112" preserveAspectRatio="none" id="viz-night"></svg>
       </div>
-      <p class="q-d" id="night-desc" data-zh="2026 縣市長與縣市議員開票，多個來源的票數並列比對；開票結束後，結果併入「歷史」。" data-en="2026 mayoral and council counts, several sources side by side; once counting ends, the results join History.">2026 縣市長與縣市議員開票，多個來源的票數並列比對；開票結束後，結果併入「歷史」。</p>
+      <p class="q-d" id="night-desc" data-zh="2026 縣市長與議員即時開票動畫，各來源分頁呈現；開票結束後，結果併入「歷史」。" data-en="2026 mayoral and council election-night animation, one tab per source; once counting ends, the results join History.">2026 縣市長與議員即時開票動畫，各來源分頁呈現；開票結束後，結果併入「歷史」。</p>
       <div class="q-foot"><span class="chip" id="night-chip">11/28</span><span class="go" id="night-go" data-zh="開票頁 →" data-en="Open live page →">開票頁 →</span></div>
     </a>
 
@@ -270,16 +270,16 @@
       var days = Math.ceil((POLLS_CLOSE - Date.now()) / 864e5);
       chip.textContent = t('11/28 16:00 開票 · 倒數 ' + days + ' 天', 'Counting 28 Nov 16:00 · ' + days + (days === 1 ? ' day' : ' days') + ' to go');
       go.textContent = t('開票頁（預覽）→', 'Live page (preview) →');
-      a.href = 'live.html';
+      a.href = 'live-flow.html';   // the election-night entry opens the animation page (user 2026-11-07)
     } else if (s === 'live') {
       chip.className = 'chip live';
       chip.textContent = t('開票中', 'Counting now');
       go.textContent = t('看即時開票 →', 'Watch the count →');
-      a.href = 'live.html';
+      a.href = 'live-flow.html';   // the election-night entry opens the animation page (user 2026-11-07)
     } else {
       chip.textContent = t('2026 開票已結束 · 結果將併入「歷史」', '2026 count finished · results join History');
       go.textContent = t('看開票紀錄 →', 'See the count →');
-      a.href = 'live.html';
+      a.href = 'live-flow.html';   // the election-night entry opens the animation page (user 2026-11-07)
     }
   }
 
