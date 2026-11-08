@@ -703,6 +703,13 @@ def _merge_layer(varname, fresh, allow_all_zero, source_key='auto_poll'):
 
     accepted, rejected = [], []
     for key, info in fresh.items():
+        # the same candidate twice from a source (2022 自由時報 屏東縣第1選區: 梁育慈 7,559 listed twice): drop the repeat
+        seen, uniq = set(), []
+        for c in info['cands']:
+            k = (c['name'], c['votes'])
+            if k not in seen:
+                seen.add(k); uniq.append(c)
+        info['cands'] = uniq
         ok, reason = validate(key, info['cands'], prev.get(key), allow_all_zero)
         if not ok:
             rejected.append((key, reason))
