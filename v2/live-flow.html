@@ -52,6 +52,9 @@
   .lf-mid .gain { display: grid; grid-template-columns: repeat(5, 68px); gap: 0 9px; justify-content: center; font-weight: 700; font-size: 10px; }
   .lf-mid .gain span { display: flex; justify-content: space-between; gap: 4px; }
   .lf-mid .gain span + span { border-left: 1px solid rgba(255,255,255,.14); padding-left: 9px; }
+  /* English county names are much longer (Kaohsiung, Changhua…): wider columns, a touch smaller (user 2026-11-08: 「英文版的開票數字都有跑版」) */
+  .lf-mid .gain.en { grid-template-columns: repeat(4, 96px); font-size: 9.5px; }   /* 4 columns: five reached into the hemicycle */
+  .lf-mid .gain b, .lf-mid .gain i { white-space: nowrap; }
   .lf-mid .gain b { font-weight: 700; } .lf-mid .gain i { font-style: normal; }
   .lf-mid .prog { margin-top: 5px; }
   /* desktop: the box sits at the top right under the controls, so the island can run down to the bottom (user 2026-11-08:
@@ -80,6 +83,10 @@
   .cb { position: relative; border: 1px solid transparent; border-radius: 5px; padding: 2px 4px 1px; font-size: 9.5px; line-height: 11px;
         color: transparent; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cb .hd { display: flex; justify-content: space-between; font-weight: 700; }
+  /* a long English county name gets an ellipsis instead of crowding the ☆ / ▸ toggle (user 2026-11-08: 英文版縣市小卡跑版);
+     the toggle reads 「Dist.」 in English */
+  .cb .hd .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cb .hd .tg, .cb .hd .pin { flex: 0 0 auto; }
   .cb .tg { cursor: pointer; font-weight: 400; }
   .cb { min-width: 0; }
   .cb .cn { display: flex; justify-content: space-between; gap: 4px; overflow: hidden; }
@@ -1360,7 +1367,7 @@
     if (CROWS[cc]) return CROWS[cc];
     var el = document.createElement('div'); el.className = 'cb';
     var dks = districtsOf(cc); CDIST[cc] = dks[0];
-    el.innerHTML = '<div class="hd"><span class="nm"></span><span class="pin"></span><span class="tg">▸ ' + T('選區', 'Districts') + '</span></div>' +
+    el.innerHTML = '<div class="hd"><span class="nm"></span><span class="pin"></span><span class="tg">▸ ' + T('選區', 'Dist.') + '</span></div>' +
       '<div class="cn c0"><span></span><span></span></div><div class="bt"><div class="bar b0"></div></div>' +
       '<div class="cn c1"><span></span><span></span></div><div class="bt"><div class="bar b1"></div></div>' +
       '<div class="det"><select>' + dks.map(function (dk) {
@@ -1368,7 +1375,7 @@
       '</select><div class="list"></div></div>';
     el.querySelector('select').onchange = function () { CDIST[cc] = this.value; lastHud = 0; };
     el.querySelector('.tg').onclick = function () {   // 選區 opens / closes (user: 「選區的filter可以開跟關」)
-      el.classList.toggle('open'); this.textContent = (el.classList.contains('open') ? '▾ ' : '▸ ') + T('選區', 'Districts'); };
+      el.classList.toggle('open'); this.textContent = (el.classList.contains('open') ? '▾ ' : '▸ ') + T('選區', 'Dist.'); };
     el.querySelector('.nm').textContent = ccName(cc);
     var pin = el.querySelector('.pin');
     var showPin = function () { var on = PINS.indexOf(cc) >= 0; el.classList.toggle('pin-on', on); pin.textContent = on ? '★' : '☆'; pin.title = on ? T('取消關注', 'Unfollow') : T('關注（常駐顯示）', 'Follow (keep shown)'); };
@@ -1567,7 +1574,7 @@
     var pct = f.sim && fin ? Math.round(all / fin * 100) : null, wide = SW > 640;
     m.innerHTML = '<div class="clk">' + (f.sim ? hhmm(CLOCK) + T('（模擬）', ' (simulated)') : (f.ts ? T('最後更新 ', 'Updated ') + f.ts : T('尚無資料', 'No data yet'))) +
       (wide && pct != null ? '<span class="pg">' + T('・縣市長票已開出 ' + pct + '%', ' · ' + pct + '% of mayoral votes counted') + '</span>' : '') + '</div>' +
-      '<div class="gain">' + gains.slice(0, wide ? 5 : 3).map(function (g) { var top = snap.M[g[0]].slice().sort(function (a, b) { return b.v - a.v; })[0], p = pc('M', g[0], top, f.year); return '<span style="color:' + colorOf(p) + '"><b>' + ccName(g[0]) + '</b><i>+' + kfmt(g[1]) + '</i></span>'; }).join('') + '</div>' +
+      '<div class="gain' + (lang === 'en' ? ' en' : '') + '">' + gains.slice(0, wide ? (lang === 'en' ? 4 : 5) : 3).map(function (g) { var top = snap.M[g[0]].slice().sort(function (a, b) { return b.v - a.v; })[0], p = pc('M', g[0], top, f.year); return '<span style="color:' + colorOf(p) + '"><b>' + ccName(g[0]) + '</b><i>+' + kfmt(g[1]) + '</i></span>'; }).join('') + '</div>' +
       (!wide && pct != null ? '<div class="prog">' + T('縣市長票已開出 ' + Math.round(all / fin * 100) + '%（以這個來源的最終票數計）', Math.round(all / fin * 100) + '% of this source\'s final mayoral count') + '</div>' : '');   // (the 「來源：…」 line removed, user 2026-11-08: 「來源：自由時報.....刪掉」)
   }
 
@@ -1609,7 +1616,7 @@
       var note = f.sim ? (ts != null ? T(n + ' 縣市・' + hhmm(ts) + ' 截圖', n + ' counties · snapshot ' + hhmm(ts)) : T(n + ' 縣市', n + ' counties')) : (ts || '');
       return '<button type="button" data-src="' + k + '" aria-pressed="' + (k === SRC) + '" title="' + (srcLabel(f) + (note ? '・' + note : '')).replace(/"/g, '&quot;') + '">' + srcShort(f) + '</button>';
     }).join('');
-    if (!PHONE) html += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / lying') + '">' + (LIE ? T('平躺', 'Lying') : T('平面', 'Flat')) + '</button>' +
+    if (!PHONE) html += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / 3D') + '">' + (LIE ? T('平躺', '3D') : T('平面', 'Flat'))   /* EN 「Lying」 → 「3D」 (user 2026-11-08: 「平躺模式應該英文不叫lying吧」) */ + '</button>' +
       (LIE ? '<button type="button" data-pil="1" title="' + T('光柱：平滑＝高度相近（每個人口點一根）；高低＝人口集中區較高（約 3 公里一根）', 'Pillars: smooth = similar heights (one per population point); relief = crowded areas taller (one per ~3 km)') + '">' +
         T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth')) + '</button>' +
         '<button type="button" data-cam0="1" title="' + T('回到預設角度', 'Reset view') + '">⟲</button>' : '');
@@ -1673,7 +1680,7 @@
   })();
   function legendText() {   // the ⓘ tooltip in the tab row (the legend used to sit at the top right)
     return [T('內圈 縣市長 22 席・外圈 縣市議員 910 席', 'Inner ring: 22 mayors · outer ring: 910 councillors'),
-      T('空心＝目前領先・實心＝確定', 'Hollow = leading · solid = final'), T('平躺視角：拖曳轉角度・滾輪拉近拉遠', 'Lying view: drag to turn · wheel to zoom'), T('線越粗＝那個鄉鎮這一批開出的票越多', 'Thicker line = a bigger batch of votes from that township')]
+      T('空心＝目前領先・實心＝確定', 'Hollow = leading · solid = final'), T('平躺視角：拖曳轉角度・滾輪拉近拉遠', '3D view: drag to turn · wheel to zoom'), T('線越粗＝那個鄉鎮這一批開出的票越多', 'Thicker line = a bigger batch of votes from that township')]
       .concat(LIE ? [] : [T('光點＝鄉鎮已開票的比例亮起，顏色＝該鄉鎮目前領先的政黨；灰線＝縣市界', 'Lights = the share of a township already counted, in the colour of the party leading it; grey lines = county borders')])
       .concat(LIE ? [T('光柱＝鄉鎮已開出的縣市長票，鄉鎮內依人口平均分配（示意）', 'Pillars = a township\'s counted mayoral votes, spread by population (illustrative)')] : [])
       .concat(LIE ? [] : [T('滑過縣市或圓點＝點亮該縣市；點圓點＝選取（再點一次取消）', 'Hover a county or a seat = light that county; click a seat = select it (click again to clear)')])
@@ -1718,7 +1725,7 @@
     Object.keys(CROWS).forEach(function (cc) {
       var el = CROWS[cc]; if (el.__showPin) el.__showPin();
       el.querySelector('.nm').textContent = ccName(cc);
-      el.querySelector('.tg').textContent = (el.classList.contains('open') ? '▾ ' : '▸ ') + T('選區', 'Districts');
+      el.querySelector('.tg').textContent = (el.classList.contains('open') ? '▾ ' : '▸ ') + T('選區', 'Dist.');
       [].forEach.call(el.querySelectorAll('select option'), function (o) {
         var dk = o.value, n = LF_SEATS.council[dk] ? LF_SEATS.council[dk][1] : '';
         o.textContent = T('第' + (+dk.split('_')[1]) + '選區（應選' + n + '席）', 'District ' + (+dk.split('_')[1]) + ' (' + n + ' seats)');
