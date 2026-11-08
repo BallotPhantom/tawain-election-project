@@ -436,7 +436,7 @@
   }
   buildSeatList();
   // read-only peek for checks in the browser console (seat count / table year); draws nothing
-  window.__lfSeats = function () { return { year: SEAT_YEAR, mayor: SEATS.filter(function (s) { return s.ring === 'M'; }).length, council: SEATS.filter(function (s) { return s.ring === 'C'; }).length, districts: Object.keys(LF_SEATS.council).length }; };
+  window.__lfSeats = function () { return { year: SEAT_YEAR, mayor: SEATS.filter(function (s) { return s.ring === 'M'; }).length, council: SEATS.filter(function (s) { return s.ring === 'C'; }).length, districts: Object.keys(LF_SEATS.council).length, st: SEATS.reduce(function (m, x) { var k = x.ring + ':' + x.st; m[k] = (m[k] || 0) + 1; return m; }, {}), clock: CLOCK, simT: simT }; };
   function useSeats(year) {
     if (year === SEAT_YEAR || (year === '2026' && !Object.keys(COUNCIL_2026).length)) return;
     SEAT_YEAR = year; LF_SEATS.council = year === '2026' ? COUNCIL_2026 : COUNCIL_2022;
@@ -502,6 +502,12 @@
     var m = /(\d{1,2}):(\d{2})/.exec(ts || ''); return m ? +m[1] * 60 + +m[2] : null;
   }
 
+  // the same candidate listed twice by a source (2022 自由時報 屏東縣第1選區: 梁育慈 7,559 twice — 13 marks for 12 seats, and
+  // ranking by votes then pushed the real 12th winner 張平原 out): a repeat of the same name and votes is dropped
+  function dedupe(cands) {
+    var seen = {};
+    return (cands || []).filter(function (c) { var k = c.n + '|' + c.v; if (seen[k]) return false; seen[k] = 1; return true; });
+  }
   // rehearsal: per township a start time and a duration (seeded); a district / county follows its townships
   function buildRehearsal() {
     var R = LF_R2022, rnd = mulberry32(20221126), prog = {};
@@ -522,15 +528,15 @@
     // townships (mayor race) and counties
     Object.keys(R.LIVE_TRACK_TC).forEach(function (tc) {
       var srcs = R.LIVE_TRACK_TC[tc].sources;
-      Object.keys(srcs).forEach(function (k) { var f = feed(k); f.label = srcs[k].label; f.T[tc] = srcs[k].cands; });
+      Object.keys(srcs).forEach(function (k) { var f = feed(k); f.label = srcs[k].label; f.T[tc] = dedupe(srcs[k].cands); });
     });
     Object.keys(R.LIVE_TRACK_CC).forEach(function (cc) {
       var srcs = R.LIVE_TRACK_CC[cc].sources;
-      Object.keys(srcs).forEach(function (k) { var f = feed(k); f.label = srcs[k].label; f.M[cc] = { cands: srcs[k].cands, at: parseTs(srcs[k].ts), final: R.LIVE_TRACK_CC[cc].final && parseTs(srcs[k].ts) == null }; });
+      Object.keys(srcs).forEach(function (k) { var f = feed(k); f.label = srcs[k].label; f.M[cc] = { cands: dedupe(srcs[k].cands), at: parseTs(srcs[k].ts), final: R.LIVE_TRACK_CC[cc].final && parseTs(srcs[k].ts) == null }; });
     });
     Object.keys(R.LIVE_TRACK_ED).forEach(function (dk) {
       var srcs = R.LIVE_TRACK_ED[dk].sources;
-      Object.keys(srcs).forEach(function (k) { var f = feed(k); f.label = srcs[k].label; f.C[dk] = { cands: srcs[k].cands, final: R.LIVE_TRACK_ED[dk].final }; });
+      Object.keys(srcs).forEach(function (k) { var f = feed(k); f.label = srcs[k].label; f.C[dk] = { cands: dedupe(srcs[k].cands), final: R.LIVE_TRACK_ED[dk].final }; });
     });
     // the CEC-final source's township split, reused to spread a snapshot-only source (TVBS / SETN, county level) over townships
     var base = feeds.ltn_cec;
@@ -625,13 +631,16 @@
           var e = tab[key], srcs = (e && e.sources) || {};
           Object.keys(srcs).forEach(function (k) {
             var s = srcs[k], f = feed(k); f.label = s.label; if (s.ts && (!f.ts || s.ts > f.ts)) f.ts = s.ts;
-            f[pair[1]][key] = s.cands;
+            s.cands = dedupe(s.cands); f[pair[1]][key] = s.cands;
             if (s.prog) f.prog[key] = s.prog;
             var ne = (s.cands || []).filter(function (c) { return c.e; }).length;
             if (pair[1] === 'C') {
               var seats = LF_SEATS.council[key] ? LF_SEATS.council[key][1] : null;
               if (e.final || (ne && ne === seats)) f.fin[key] = true;
-              else if (ne) f.warn[key] = [ne, seats];   // the source's marks do not add up (2022: 新竹縣第8選區 5 of 6): stays 'leading'
+              else if (ne) {   // the source's marks do not add up (2022: 新竹縣第8選區 5 of 6): 'leading' until fully counted,
+                f.warn[key] = [ne, seats];   // then final by the vote order (applySnap)
+                if (s.prog && s.prog[1] && s.prog[0] >= s.prog[1]) f.fin[key] = true;
+              }
             } else if (pair[1] === 'M' && (e.final || s.elected)) f.fin[key] = true;
           });
         });
@@ -669,8 +678,14 @@
       var fin = leaders.length && f.finalAt('C', dk, snap);
       // final: the source's own elected marks (their count equals the seats — checked in loadLive), not the vote order
       var marked = fin ? cs.filter(function (c) { return c.e; }) : [];
-      if (marked.length === seats.length) leaders = marked;
-      else if (fin && marked.length) fin = false;   // marks that do not add up to the seats: stay 'leading' (live: f.warn says so)
+      // marks that do not add up to the seats (2022: 新竹縣第8選區 5 of 6, 屏東縣第1選區 13 of 12) once the district is fully
+      // counted: final by the vote order, noted in the district list (user 2026-11-07: 「…空心市議員點沒改成實心…」→「ok改」;
+      // they used to stay 'leading' for good and looked uncounted). A women's-quota seat could make the real winners differ
+      // from the top n — the note says the call is by votes
+      f.byv = f.byv || {};
+      if (marked.length === seats.length) { leaders = marked; delete f.byv[dk]; }
+      else if (fin && marked.length) f.byv[dk] = [marked.length, seats.length];
+      else delete f.byv[dk];
       var ps = leaders.map(function (c) { return pc('C', dk, c, f.year); }).sort(function (a, b) { return orderOf(a) - orderOf(b); });
       seats.forEach(function (s, i) {
         var st = i < leaders.length ? (fin ? 'final' : 'lead') : 'none', p = i < ps.length ? ps[i] : null;
@@ -892,7 +907,7 @@
       html += '<div class="k">' + T('縣市長', 'Mayor') + '</div><div>' + mline + '</div>' + thrLine(f, FILTER, top) +
         '<div class="k" style="margin-top:6px">' + T('議會 ' + tot + ' 席：空心＝目前領先、實心＝確定', 'Council, ' + tot + ' seats — hollow = leading, solid = final') + '</div>' +
         '<canvas class="mini" style="width:100%;height:104px;display:block;margin:4px 0 2px"></canvas>' +
-        (warnN ? '<div class="k" style="color:#f5c518">' + T(warnN + ' 個選區的當選標記跟應選席次對不上，維持「領先」', warnN + ' district(s): elected marks do not match the seats, kept as leading') + '</div>' : '') +
+        (warnN ? '<div class="k" style="color:#f5c518">' + T(warnN + ' 個選區的當選標記跟應選席次對不上：開完前維持「領先」，開完後依票數排名判定', warnN + ' district(s): elected marks do not match the seats — leading until fully counted, then called by the vote order') + '</div>' : '') +
         (rows || '<div>' + T('尚無資料', 'No data') + '</div>');
     }
     box.hidden = !html;
@@ -1233,14 +1248,15 @@
         var remain = pr && pr > 0 ? (pr >= 0.999 ? 0 : counted * (1 / pr - 1)) : null;
         var gap = all.length > seats && seats ? all[seats - 1].v - all[seats].v : null;
         var fin = f.finalAt('C', dk, snap), marked = cd.filter(function (c) { return c.e; }).length === seats;
-        var calledBy = fin && marked ? 'final' : (remain != null && gap != null && gap > remain && !qt.ins.length ? 'est' : null);
+        var byv = !!(f.byv && f.byv[dk]);
+        var calledBy = fin && (marked || byv) ? 'final' : (remain != null && gap != null && gap > remain && !qt.ins.length ? 'est' : null);
         list.innerHTML = srt.map(function (c) {
           var i = all.indexOf(c), notes = [];
           if (i === seats - 1) notes.push(T('最後一席', 'last seat'));
           if (i === seats) notes.push(T('落選頭', 'first loser'));
           if (qt.ins.indexOf(c.n) >= 0) notes.push(qlab + T('可能當選', ' — would win'));
           if (qt.outs.indexOf(c.n) >= 0) notes.push(T('可能被', 'may lose to the ') + qlab + T('擠下', ''));
-          if (i < seats && calledBy === 'final' && c.e) notes.push(T('確定', 'final'));
+          if (i < seats && calledBy === 'final' && (c.e || byv)) notes.push(T('確定', 'final'));
           else if (i < seats && calledBy === 'est') notes.push(T('推定當選', 'projected'));
           // the name in its party colour (user 2026-11-07: 「市議員還是要按照黨籍給文字顏色」); no party known: the default text colour
           var cp = pc('C', dk, c, f.year), nmc = ' style="font-weight:400' + (cp ? ';color:' + colorOf(cp) : '') + '"';
@@ -1249,6 +1265,7 @@
         (gap != null ? '<div class="gap">' + T('最後一席與落選頭差 ' + fmt(gap) + ' 票', 'Edge gap ' + fmt(gap)) + '</div>' : '') +
         (remain != null && remain > 0 ? '<div>' + T('尚未開出約 ' + fmt(Math.round(remain)) + ' 票（依開票所比例估）', '~' + fmt(Math.round(remain)) + ' votes to come (from the share of stations counted)') + '</div>' : '') +
         (qt.na ? '<div>' + T('2026 尚無候選人性別資料，無法判斷婦女保障', 'No 2026 candidate gender data yet: women\'s quota not checked') + '</div>' : '') +
+        (f.byv && f.byv[dk] ? '<div class="gap">' + T('來源當選標記有誤（標 ' + f.byv[dk][0] + ' 位、應選 ' + f.byv[dk][1] + ' 席），已開完，依票數排名判定確定', 'The source marks ' + f.byv[dk][0] + ' winners for ' + f.byv[dk][1] + ' seats; fully counted, called by the vote order') + '</div>' : '') +
         (qt.grp ? '<div>' + T('原住民婦女保障以全縣市平地／山地合計計算，不在單一選區判斷', 'Indigenous women\'s quota counts the county\'s whole plains / mountain group, not one district') + '</div>' : '');
       } else list.innerHTML = '<div>' + T('這個選區尚無資料', 'No data for this district') + '</div>';
       var side = top ? (p === 'dpp' ? 'l' : 'r') : null;   // ruling DPP left; an opposition party or an independent right
