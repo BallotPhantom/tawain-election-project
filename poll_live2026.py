@@ -653,9 +653,86 @@ def fetch_tvbs(tc_pool, council_seats, year=2026):
     return cc_out, tc_out, ed_out
 
 
-FETCHERS = {'ltn': fetch_ltn, 'cna': fetch_cna, 'tvbs': fetch_tvbs}
+# ETtoday（備案 2，2026-11-07）：media.ettoday.net/events/election{year}/data/html/ 的 HTML 片段（中選會數字）——
+#   縣市長 ballotreport_html_3_cec.html（六都）、_4_（其他縣市），每縣市一張 table id="b{代碼}"；
+#   議員 alderman_html_2_cec_{代碼}.html（各選區「第N選區（…）應選N人」＋候選人表），政黨圖示 p{pid} 的名稱從同縣市
+#   alderman_html_1_cec_{代碼}.html 的席次 JSON（"pid":1,"name":"中國國民黨"）對出來。議員 22 個檔，最快 ETT_COUNCIL_EVERY
+#   秒抓一次。縣市代碼 100–121（2022 年嘉義市 113 延期改選沒有）。無鄉鎮、無投開票所進度。
+ETT_CODE = {'100': '63', '101': '65', '102': '68', '103': '66', '104': '67', '105': '64', '106': '10017', '107': '10004',
+            '108': '10018', '109': '10005', '110': '10007', '111': '10008', '112': '10009', '113': '10020', '114': '10010',
+            '115': '10013', '116': '10002', '117': '10015', '118': '10014', '119': '10016', '120': '09020', '121': '09007'}
+ETT_COUNCIL_EVERY = 180
+_ETT_LAST_COUNCIL = [0.0]
+_ETT_PID = {'1': 'kmt', '16': 'dpp', '999': 'ind'}
+
+
+def fetch_ettoday(tc_pool, council_seats, year=2026):
+    now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    base = f'https://media.ettoday.net/events/election{year}/data/html/'
+    label = 'ETtoday(中選會數字)'
+    cc_out, tc_out, ed_out = {}, {}, {}
+    only = {CC_MAP[c] for c in ONLY_COUNTIES} if ONLY_COUNTIES else None
+    def rows_of(table):
+        out = []
+        for tr in table.find_all('tr'):
+            tds = tr.find_all('td')
+            if len(tds) < 3:
+                continue
+            img = tds[0].find('img')
+            pm = re.search(r'/p(\d+)\.png', img.get('src', '')) if img else None
+            nm = re.sub(r'^\d+\.', '', tds[1].get_text(strip=True))
+            vm = re.match(r'([\d,]+)', tds[2].get_text(strip=True))
+            if not nm or not vm:
+                continue
+            party = _ETT_PID.get(str(int(pm.group(1))), 'other') if pm else None   # 圖示 p016.png ↔ pid 16
+            out.append({'name': _clean_name(nm), 'votes': int(vm.group(1).replace(',', '')), 'party': party,
+                        'elected': bool(tds[1].find('i', class_='icon_win'))})
+        return out
+    if time.time() - _ETT_LAST_COUNCIL[0] >= ETT_COUNCIL_EVERY:   # council first: it also fills the party-icon map
+        _ETT_LAST_COUNCIL[0] = time.time()
+        for code, cc in ETT_CODE.items():
+            if only and cc not in only:
+                continue
+            time.sleep(random.uniform(0.3, 0.8))
+            try:
+                head = http_get(base + f'alderman_html_1_cec_{code}.html')
+                for pid, pname in re.findall(r'"pid":(\d+),"name":"([^"]+)"', head):
+                    _ETT_PID[pid] = _party_code(pname)
+                body = http_get(base + f'alderman_html_2_cec_{code}.html')
+            except Exception as e:
+                if '404' not in str(e):
+                    print(f'  [ettoday] {code} 議員片段讀取失敗: {e}', file=sys.stderr)
+                continue
+            # 每個選區的表格包在 <!--第N區 開始-->…<!--第N區 結束--> 裡；應選席次在頁尾「選擇選區」清單 <li data-no data-stotal>
+            need = {int(n): int(t) for n, t in re.findall(r"data-no='(\d+)'[^>]*?data-stotal='(\d+)'", body)}
+            for n, chunk in re.findall(r'<!--第(\d+)區 開始-->(.*?)<!--第\1區 結束-->', body, flags=re.S):
+                n = int(n)
+                dk = f'{cc}_{n:02d}'
+                if council_seats.get(dk) is None:
+                    print(f'  [ettoday] {dk} 不在席次表裡，跳過', file=sys.stderr); continue
+                if need.get(n) != council_seats[dk]:
+                    print(f'  [ettoday] {dk} 應選席次對不起來(抓到{need.get(n)}，app預期{council_seats[dk]})，跳過', file=sys.stderr); continue
+                cs = [c for t in BeautifulSoup(chunk, 'html.parser').find_all('table') for c in rows_of(t)]
+                if cs:
+                    ed_out[dk] = _entry(cs, label, 'net', now_label, None)
+    for frag in (3, 4):
+        try:
+            soup = BeautifulSoup(http_get(base + f'ballotreport_html_{frag}_cec.html'), 'html.parser')
+        except Exception as e:
+            print(f'  [ettoday] 縣市長片段 {frag} 讀取失敗: {e}', file=sys.stderr); continue
+        for table in soup.find_all('table', id=re.compile(r'^b\d+$')):
+            cc = ETT_CODE.get(table['id'][1:])
+            if not cc or (only and cc not in only):
+                continue
+            cs = rows_of(table)
+            if cs:
+                cc_out[cc] = _entry(cs, label, 'net', now_label, None)
+    return cc_out, tc_out, ed_out
+
+
+FETCHERS = {'ltn': fetch_ltn, 'cna': fetch_cna, 'tvbs': fetch_tvbs, 'ettoday': fetch_ettoday}
 # 每個來源在 data_live2026.js 的 source key（自由時報沿用原本的 auto_poll，頁面與紀錄檔已經用這個名字）
-SOURCE_KEY = {'ltn': 'auto_poll', 'cna': 'cna', 'tvbs': 'tvbs'}
+SOURCE_KEY = {'ltn': 'auto_poll', 'cna': 'cna', 'tvbs': 'tvbs', 'ettoday': 'ettoday'}
 
 
 # ── 驗證層：跟來源網站無關，CC層/TC層共用同一套規則 ──

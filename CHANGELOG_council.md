@@ -1078,3 +1078,14 @@ On the UI side, indigenous districts use a structurally different nav path (`cou
 - 使用者同意在 Mac 上裝排程。新增 `check_live_sites.py`（只留本機，發佈白名單外）：檢查自由時報（realtime/Taipei 存在且有 pageRno）、中央社（猜的資料夾 20261128-election-live）、TVBS（json/2026.json）、三立（「開票實況」選單出現連結）、中天（選舉頁出現「開票」）；每天約 5 個小請求，不抓票數。某來源由未上線→上線時跳 macOS 通知；結果寫 `logs/live_check.log`，狀態 `logs/live_check_state.json`。
 - `~/Library/LaunchAgents/com.pvimap.livecheck.plist`：每天 09:00、登入時各跑一次（/opt/anaconda3/bin/python3）。已 `launchctl bootstrap` 載入，首跑結束代碼 0、紀錄寫入正常（2026-11-07 19:14：五家皆未上線）。
 - 移除方法：`launchctl bootout gui/$(id -u)/com.pvimap.livecheck` 並刪除該 plist。
+
+## 2026-11-07 開票夜自動化：ETtoday 第二備案、開票夜總指揮、公開網站定時推數字
+- 使用者：「都做」（開票夜自動執行、公開網站每 7 分鐘推數字、ETtoday 備案、改名）。
+- `fetch_ettoday`（source key `ettoday`，網路媒體・中選會數字）：`media.ettoday.net/events/election{year}/data/html/`——縣市長 `ballotreport_html_3/4_cec.html`（表格 `id="b{代碼}"`，代碼 100–121 對照縣市＝`ETT_CODE`）；議員 `alderman_html_2_cec_{代碼}.html`，每個選區包在 `<!--第N區 開始-->…<!--第N區 結束-->`，應選席次讀頁尾選區清單 `<li data-no data-stotal>`（原住民選區接在一般選區之後編號，與自由時報相同）；政黨圖示 `p016.png` 對 `alderman_html_1_cec_{代碼}.html` 的 `"pid":16,"name":…`（去前導 0）。議員最快每 180 秒抓一次（22 縣市×2 個片段）。
+  - 第一版只抓到每縣市第 1 選區（找「第N選區」標題，但標題只寫第 1 區）、政黨多半變 other（pid 前導 0），已修。
+  - 實測 2022（`--source ettoday --year 2022 --once`，寫暫存檔）：縣市長 21（嘉義市延期）、議員 215 區、零拒絕；票數 215 區、21 縣市全部等於中選會；當選人民進黨 277、國民黨 367、無黨 227 與中選會相同。已知：50 區有異體字姓名（溫／温、傑／杰，ETtoday 自己的寫法，各來源分開顯示不影響）；小黨（基進、綠黨、台聯、親民黨等）ETtoday 只給主要政黨對照，歸為 other。
+  - 2026 路徑照 2022 猜（election2026 資料夾目前 403、片段 404）；已加入 `check_live_sites.py` 每日檢查。
+- `election_night.py`：只在 2026-11-28 執行，到本機 11:00（台灣 24:00）收工；caffeinate 防睡；`poll_live2026.py --source ltn,cna,tvbs --interval 60`，掛掉 30 秒後重啟；每 7 分鐘 `push_live_data.sh`；03:20 起超過 10 分鐘沒接受到新數字跳通知。測試參數 `--now --minutes --dry-push --sources --extra`。冒煙測試（90 秒、dry-run）通過。要加 ETtoday 改 `--sources ltn,cna,tvbs,ettoday`。
+- `push_live_data.sh`：只把 data_live2026.js、data_live2026_margin_log.js 推到 origin/main（暫時 worktree，不動 v2-dev 工作區；數字沒變不 commit）；每 7 分鐘＝GitHub Pages 每小時約 10 次發佈軟上限之內。`--dry-run` 測試通過。
+- `com.pvimap.electionnight.plist`（放專案資料夾，未安裝）：每年 11/28 02:45 叫起 election_night.py。由我寫入 LaunchAgents 被安全機制擋下（未經授權常駐），改由使用者自行安裝。
+- 以上腳本與紀錄檔皆只留本機（發佈白名單外）。

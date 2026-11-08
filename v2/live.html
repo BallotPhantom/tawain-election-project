@@ -4,13 +4,13 @@
 <meta name="robots" content="noindex, nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>2026 即時開票 · V2</title>
+<title>舊版開票頁 · V2</title>
 <link rel="stylesheet" href="v2-shell.css?v=20261022b">
 </head>
 <body>
 <div id="v2-bar">
   <a class="v2-home" href="index.html" data-zh="← 首頁" data-en="← Home">← 首頁</a>
-  <span class="v2-title"><span data-zh="2026 即時開票" data-en="2026 Election Night">2026 即時開票</span><span class="v2-badge">V2</span></span>
+  <span class="v2-title"><span data-zh="舊版開票頁" data-en="Classic Election Night">舊版開票頁</span><span class="v2-badge">V2</span></span>
   <div class="v2-controls">
     <div class="v2-seg" role="group" aria-label="選舉 Race">
       <button type="button" data-sub="mayor" aria-pressed="true" data-zh="縣市長" data-en="Mayors">縣市長</button>
@@ -48,7 +48,7 @@
     // ?demo=1 → 引擎改讀2022彩排資料，開票前預覽「開票中」版面（見live2026.html的_LIVE26_DEMO）
     engine: '../live2026.html' + (/[?&]demo=1(&|$)/.test(location.search) ? '?demo=1' : ''),
     needs: ['setLiveTrack2026Mode'],
-    title: { zh: '2026 即時開票', en: '2026 Election Night' },
+    title: { zh: '舊版開票頁', en: 'Classic Election Night' },
     onReady: function (win) {
       // the real night: the engine's council districts / seats switched to 2026 (CEC 115/8/20 announcement) before the
       // first draw; ?demo=1 keeps the 2022 districts of its rehearsal data (live-seats2026.js)
