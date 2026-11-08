@@ -195,6 +195,8 @@
 <script src="data_liveflow.js?v=20261108b"></script>
 <script src="data_liveflow_r2022.js?v=20261105b"></script>
 <script src="data_council_seats_2026.js?v=20261107a"></script>
+<script src="data_turnout_prior.js?v=20261108a"></script>
+<script src="live-turnout.js?v=20261108a"></script>
 <script>
 (function () {
   'use strict';
@@ -1084,9 +1086,13 @@
       }
     });
     gTop.globalAlpha = 1;
-    gTop.fillStyle = '#cfd4de'; gTop.font = '600 ' + Math.max(10, L.R * 0.05) + 'px system-ui, sans-serif'; gTop.textAlign = 'center';
-    if (LIE) { var lc = ringW(Math.PI / 2, 0.12), lq = proj3(lc[0], lc[1], lc[2]); if (lq) gTop.fillText(T('縣市長', 'Mayors'), lq[0], lq[1]); }
-    else gTop.fillText(T('縣市長', 'Mayors'), L.cx, L.cy - L.R * 0.08);
+    // the label reads 地方選舉 / Local Elections, smaller, and in the flat view sits just under the hemicycle's base line
+    // (the empty gap above the map) so it never covers a seat (user 2026-11-08: 「mayor 的中英文都要改成地方選舉」「要能縮小」
+    // 「不要蓋住圖表」)
+    var lfs = Math.max(9, L.R * 0.038);
+    gTop.fillStyle = '#9aa1b2'; gTop.font = '600 ' + lfs + 'px system-ui, sans-serif'; gTop.textAlign = 'center';
+    if (LIE) { var lc = ringW(Math.PI / 2, 0.12), lq = proj3(lc[0], lc[1], lc[2]); if (lq) gTop.fillText(T('地方選舉', 'Local Elections'), lq[0], lq[1]); }
+    else gTop.fillText(T('地方選舉', 'Local Elections'), L.cx, L.cy + lfs + 8);
   }
 
   // ---------- HUD ----------
@@ -1098,11 +1104,15 @@
   // 縣市長當選門檻 (選罷法第67條: the most votes win, no floor; 第70條: a sole candidate needs 20% of the electorate):
   // two or more candidates → 「過半保證當選 ≈ expected total ÷ 2」; a sole candidate → the legal rule (no electorate
   // numbers on this page)
-  function thrLine(f, cc, top) {
+  // read-only peek for browser checks: a county's turnout estimate on the current snapshot (draws nothing)
+  window.__lfTurnout = function (cc) { var f = FEEDS[SRC]; return f && PREV ? turnoutOf(f, PREV, cc) : null; };
+  function thrLine(f, snap, cc, top) {
     if (!top) return '';
     if (top.length < 2) return '<div class="k">' + T('唯一候選人：得票須達選舉人總數 20% 才當選（選罷法第70條）', 'Sole candidate: needs 20% of the electorate to win (Election Act art. 70)') + '</div>';
-    var e = expTotOf(f, cc, sumC(top));
-    return '<div class="k">' + T('過半保證當選 ≈ ' + fmt(Math.ceil(e / 2)) + ' 票（預估總票數 ' + fmt(Math.round(e)) + ' ÷ 2）', 'Certain win past half ≈ ' + fmt(Math.ceil(e / 2)) + ' (expected total ' + fmt(Math.round(e)) + ' ÷ 2)') + '</div>';
+    var r = turnoutOf(f, snap, cc); if (!r) return '';
+    var half = fmt(Math.ceil(r.upper / 2)), est = fmt(Math.round(r.est / 100) * 100), mg = Math.round(r.margin * 100);
+    return '<div class="k">' + T('過半保證當選 ≈ ' + half + ' 票（預估總票數約 ' + est + (mg ? '，含 +' + mg + '% 安全邊際' : '') + '）',
+      'Certain win past half ≈ ' + half + ' (expected total ~' + est + (mg ? ', with a +' + mg + '% safety margin' : '') + ')') + '</div>';
   }
   function ctyPanel(f, snap) {
     ctySelect();
@@ -1122,7 +1132,7 @@
         var c = p === '?' ? '#e8ebf2' : colorOf(p), nm = p === '?' ? T('黨籍待補', 'Party n/a') : (PN[p] ? T(PN[p][0], PN[p][1]) : p);
         return '<div class="row"><span><span class="dot" style="background:' + c + '"></span>' + nm + '</span><span title="' + T('領先', 'leading') + '"><span class="ring" style="border-color:' + c + '"></span> ' + by[p][0] + '</span><span title="' + T('確定', 'final') + '"><span class="dot" style="background:' + c + '"></span>' + by[p][1] + '</span></div>';
       }).join('');
-      html += '<div class="k">' + T('縣市長', 'Mayor') + '</div><div>' + mline + '</div>' + thrLine(f, FILTER, top) +
+      html += '<div class="k">' + T('縣市長', 'Mayor') + '</div><div>' + mline + '</div>' + thrLine(f, snap, FILTER, top) +
         '<div class="k" style="margin-top:6px">' + T('議會 ' + tot + ' 席：空心＝目前領先、實心＝確定', 'Council, ' + tot + ' seats — hollow = leading, solid = final') + '</div>' +
         '<canvas class="mini" style="width:100%;height:104px;display:block;margin:4px 0 2px"></canvas>' +
         (warnN ? '<div class="k" style="color:#f5c518">' + T(warnN + ' 個選區的當選標記跟應選席次對不上：開完前維持「領先」，開完後依票數排名判定', warnN + ' district(s): elected marks do not match the seats — leading until fully counted, then called by the vote order') + '</div>' : '') +
@@ -1260,15 +1270,21 @@
     var ccs = FILTER ? (LF_COUNTY[FILTER] ? [FILTER] : []) : Object.keys(LF_COUNTY);
     gPil.globalCompositeOperation = 'source-over';
     if (FILTER && LF_TOWNLINE[FILTER]) {   // the picked county's townships, faint (user 2026-11-08: 「縣市filter在某縣市時要畫出鄉鎮市區邊界但是顏色較淡」)
-      gPil.globalAlpha = 0.35; gPil.strokeStyle = '#8f98a8'; gPil.lineWidth = 0.6; gPil.beginPath();
+      // a little brighter, with a faint glow, so the districts' shapes (左營、三民、旗山…) read while turning the 3D view
+      // (user 2026-11-08: 「背景的行政區界線可以微幅加上 5% 的發光或更亮一點點的灰色線條…這個加進 3D filter」)
+      // the glow is a wide faint stroke under the line, not shadowBlur — a blurred shadow over lines that fill the zoomed-in
+      // view cost ~1.6 s a frame
+      var tl = new Path2D();
       LF_TOWNLINE[FILTER].forEach(function (r) {
         var first = true;
         for (var i = 0; i < r.length; i += 2) {
           var q = P(r[i], r[i + 1]); if (q[2] <= 0) { first = true; continue; }
-          if (first) { gPil.moveTo(q[0], q[1]); first = false; } else gPil.lineTo(q[0], q[1]);
+          if (first) { tl.moveTo(q[0], q[1]); first = false; } else tl.lineTo(q[0], q[1]);
         }
       });
-      gPil.stroke();
+      gPil.lineJoin = 'round';
+      gPil.globalAlpha = 0.07; gPil.strokeStyle = '#bcd0f0'; gPil.lineWidth = 4; gPil.stroke(tl);
+      gPil.globalAlpha = 0.5; gPil.strokeStyle = '#a9b3c4'; gPil.lineWidth = 0.7; gPil.stroke(tl);
     }
     gPil.globalAlpha = FILTER ? 0.9 : 0.5; gPil.strokeStyle = FILTER ? '#ffffff' : '#6b7482'; gPil.lineWidth = FILTER ? 1.3 : 0.7;
     gPil.beginPath();
@@ -1442,12 +1458,31 @@
     var need = cols.some(function (c) { return c.children.length && c.getBoundingClientRect().bottom > hudTop - 6; });
     cols.forEach(function (c) { c.classList.toggle('c3', need); });
   }
-  // a county's expected mayoral total: rehearsal = this source's final count; live = counted ÷ the share of polling
-  // stations counted (else counted)
-  function expTotOf(f, cc, tot) {
-    if (f.sim && f.M[cc] && f.M[cc].at == null) return Math.max(tot, sumC(f.M[cc].cands));
-    if (!f.sim && f.prog && f.prog[cc] && f.prog[cc][0] > 0) return Math.max(tot, tot * f.prog[cc][1] / f.prog[cc][0]);
-    return tot;
+  // a county's expected final mayoral total and its safe upper bound (v2/live-turnout.js, method C2; user 2026-11-08:
+  // 過半門檻要靠到時候的投票率 → backtest → 「好」): counted + each township's uncounted share × its prior × this year's
+  // turnout ratio, upper = × (1 + margin). Rehearsal: the 2022 prior (2018 rates — no hindsight); live: the 2026 prior.
+  // Replaces 「counted ÷ share of stations」 (and, in the rehearsal, the source's final count), which under-estimated by
+  // up to ~50% early when small stations report first. One estimate per snapshot, cached.
+  var TO_CACHE = { snap: null, f: null, towns: null, by: {} };
+  function ccOfTc(tc) { return LF_TOWNS[tc] ? LF_TOWNS[tc][0] : null; }
+  function turnoutOf(f, snap, cc) {
+    if (!window.LiveTurnout || typeof TURNOUT_PRIOR === 'undefined' || !f || !snap) return null;
+    if (TO_CACHE.snap !== snap || TO_CACHE.f !== f) {
+      TO_CACHE = { snap: snap, f: f, by: {}, towns: Object.keys(snap.T || {}).filter(function (tc) { return LF_TOWNS[tc]; }).map(function (tc) {
+        return { tc: tc, cnt: sumC(snap.T[tc]), s: Math.max(0, Math.min(1, tcProg(f, snap, tc))) };
+      }) };
+    }
+    if (!(cc in TO_CACHE.by)) {
+      var prior = TURNOUT_PRIOR[String(f.year) === '2022' ? '2022' : '2026'], counted = sumC(snap.M && snap.M[cc]);
+      var r = LiveTurnout.estimate(prior, TO_CACHE.towns, cc, ccOfTc);
+      if (!r && counted > 0) {   // no township numbers for this county: county numbers only
+        var share = f.sim ? (snap.prog && snap.prog[cc]) : (f.prog && f.prog[cc] && f.prog[cc][1] ? f.prog[cc][0] / f.prog[cc][1] : null);
+        r = LiveTurnout.estimateCounty(prior, cc, ccOfTc, counted, share);
+      }
+      if (r && counted > r.est) { r.est = counted; r.upper = counted * (1 + r.margin); }
+      TO_CACHE.by[cc] = r;
+    }
+    return TO_CACHE.by[cc];
   }
   var LASTF = null;
   function placeFocus() {   // focus column at the top left, the left column below it
@@ -1470,9 +1505,9 @@
       var cs = snap.M[cc], el = crRow(cc);
       var top = cs && sumC(cs) > 0 ? cs.slice().sort(function (a, b) { return b.v - a.v; }) : null;
       var p = top ? pc('M', cc, top[0], f.year) : null, tot = top ? sumC(cs) : 0;
-      // bars grow with the count (user 2026-11-07: 「背景的詳細資料長條圖也要跟著票數更新」): length = votes / the county's expected
-      // total — rehearsal: this source's final count; live: counted ÷ the share of polling stations counted (else counted)
-      var expTot = expTotOf(f, cc, tot);
+      // bars grow with the count (user 2026-11-07: 「背景的詳細資料長條圖也要跟著票數更新」): length = votes / the county's safe
+      // upper total (turnoutOf), so the tick at half is the certain-win point; exact once the count is complete
+      var tr = top ? turnoutOf(f, snap, cc) : null, expTot = tr ? tr.upper : tot;
       el.classList.toggle('solo', !!top && top.length < 2);
       el.style.setProperty('--pc', p ? colorOf(p) : '#9aa1b2');
       [0, 1].forEach(function (k) {   // the two leading candidates: name, votes, a bar ∝ their share, in their own party colour

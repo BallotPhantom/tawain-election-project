@@ -92,6 +92,27 @@
       });
       return hit;
     }
+    // 縣市長 cards: the county's expected final total and its safe upper bound from this source's township numbers
+    // (v2/live-turnout.js, C2; user 2026-11-08: 過半門檻要靠到時候的投票率 → backtest → 「好」), replacing 「counted ÷ share of
+    // stations」 for the threshold, the votes-to-come note and 推定當選 (which now needs the gap to beat the upper bound)
+    var MUNI = { '63': 1, '64': 1, '65': 1, '66': 1, '67': 1, '68': 1 };
+    function ccOf(tc) { return MUNI[tc.slice(0, 2)] ? tc.slice(0, 2) : tc.slice(0, 5); }
+    function turnout(k, cc, counted, pr) {
+      // TURNOUT_PRIOR is a top-level const (a global binding, not a window property)
+      if (!window.LiveTurnout || typeof TURNOUT_PRIOR === 'undefined') return null;
+      var prior = TURNOUT_PRIOR['2026'], TC = G(win, "typeof LIVE_TRACK_TC !== 'undefined' ? LIVE_TRACK_TC : null") || {}, towns = [];
+      Object.keys(TC).forEach(function (tc) {
+        var src = TC[tc] && TC[tc].sources && TC[tc].sources[k]; if (!src || !src.cands) return;
+        var cnt = src.cands.reduce(function (a, c) { return a + (c.v || 0); }, 0);
+        var s = src.prog && src.prog[1] ? src.prog[0] / src.prog[1] : (cnt > 0 ? null : 0);
+        if (s == null) return;   // a township without its own station count: left to the prior
+        towns.push({ tc: tc, cnt: cnt, s: s });
+      });
+      var r = window.LiveTurnout.estimate(prior, towns, cc, ccOf);
+      if (!r && pr) r = window.LiveTurnout.estimateCounty(prior, cc, ccOf, counted, pr[0] / pr[1]);
+      if (r && counted > r.est) { r.est = counted; r.upper = counted * (1 + r.margin); }
+      return r;
+    }
     var TAG = 'font-size:9px;font-weight:600;color:#4ade80;margin-left:4px';
     var NOTE = 'font-size:9px;color:rgba(255,255,255,0.45);margin-top:2px';
     var html = win._liveTrack26Html;
@@ -108,8 +129,10 @@
         var marked = srt.filter(function (c) { return c.e; }), fin = marked.length === seats;
         var pr = src.prog && src.prog[0] > 0 && src.prog[1] ? src.prog : null;
         var remain = pr ? (pr[0] >= pr[1] ? 0 : counted * (pr[1] / pr[0] - 1)) : null;
+        var tr = isCC ? turnout(k, codeKey, counted, pr) : null, safeRemain = remain;
+        if (tr) { remain = Math.max(0, tr.est - counted); safeRemain = Math.max(0, tr.upper - counted); }
         var gap = srt.length > seats ? srt[seats - 1].v - srt[seats].v : null;
-        var est = !fin && remain != null && gap != null && gap > remain;
+        var est = !fin && safeRemain != null && gap != null && gap > safeRemain;
         srt.slice(0, seats).forEach(function (c) {
           var n = c.n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           if (fin && c.e) part = part.replace(new RegExp('<span>(?:✓ )?' + n + '</span>'), '<span>✓ ' + c.n + '</span>');
@@ -125,14 +148,17 @@
             var el = typeof win._cc26Elig === 'function' ? win._cc26Elig(codeKey) : null;
             thr = '<div style="' + NOTE + '">' + (el ? T('法定當選門檻：選舉人數 × 20% ≈ ' + Math.ceil(el * 0.2).toLocaleString() + ' 票（已達 ' + (srt[0].v / (el * 0.2) * 100).toFixed(1) + '%）', 'Legal floor: 20% of the electorate ≈ ' + Math.ceil(el * 0.2).toLocaleString() + ' (' + (srt[0].v / (el * 0.2) * 100).toFixed(1) + '% reached)')
               : T('唯一候選人：得票須達選舉人總數 20% 才當選（選罷法第70條）', 'Sole candidate: needs 20% of the electorate (art. 70)')) + '</div>';
-          } else if (pr || fin) {
-            var expT = remain != null ? counted + remain : counted, half = Math.ceil(expT / 2), pos = Math.min(100, half / (counted || 1) * 100);
-            thr = '<div style="' + NOTE + '">' + T('過半保證當選 ≈ ' + half.toLocaleString() + ' 票（預估總票數 ' + Math.round(expT).toLocaleString() + ' ÷ 2）', 'Certain win past half ≈ ' + half.toLocaleString() + ' (expected total ' + Math.round(expT).toLocaleString() + ' ÷ 2)') + '</div>';
+          } else if (tr || pr || fin) {
+            var expT = tr ? tr.upper : (remain != null ? counted + remain : counted), half = Math.ceil(expT / 2), pos = Math.min(100, half / (counted || 1) * 100);
+            var estT = tr ? Math.round(tr.est / 100) * 100 : Math.round(expT), mg = tr ? Math.round(tr.margin * 100) : 0;
+            thr = '<div style="' + NOTE + '">' + T('過半保證當選 ≈ ' + half.toLocaleString() + ' 票（預估總票數約 ' + estT.toLocaleString() + (mg ? '，含 +' + mg + '% 安全邊際' : '') + '）',
+              'Certain win past half ≈ ' + half.toLocaleString() + ' (expected total ~' + estT.toLocaleString() + (mg ? ', with a +' + mg + '% safety margin' : '') + ')') + '</div>';
             if (pos < 100) part = part.split('<div style="height:7px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">').join(
               '<div style="height:7px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;position:relative"><div style="position:absolute;left:' + pos.toFixed(2) + '%;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.8)"></div>');
           }
         }
-        var notes = thr + (remain != null && remain > 0 ? '<div style="' + NOTE + '">' + T('尚未開出約 ' + Math.round(remain).toLocaleString() + ' 票（依開票所比例估）', '~' + Math.round(remain).toLocaleString() + ' votes to come (from the share of stations counted)') + '</div>' : '') +
+        var notes = thr + (remain != null && remain > 0 ? '<div style="' + NOTE + '">' + (tr ? T('尚未開出約 ' + Math.round(remain).toLocaleString() + ' 票（依各鄉鎮投票率估）', '~' + Math.round(remain).toLocaleString() + ' votes to come (from each township\'s turnout)')
+          : T('尚未開出約 ' + Math.round(remain).toLocaleString() + ' 票（依開票所比例估）', '~' + Math.round(remain).toLocaleString() + ' votes to come (from the share of stations counted)')) + '</div>' : '') +
           (seats > 1 && gap != null ? '<div style="' + NOTE + '">' + T('最後一席與落選頭差 ' + gap.toLocaleString() + ' 票', 'Edge gap (last seat vs first loser) ' + gap.toLocaleString()) + '</div>' : '');
         var close = part.indexOf('\n    </div>');   // the card's own closing tag (rows close at a deeper indent)
         if (notes && close >= 0) part = part.slice(0, close) + notes + part.slice(close);
