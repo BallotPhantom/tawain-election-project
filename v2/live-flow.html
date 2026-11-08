@@ -115,7 +115,19 @@
   @media (max-width: 640px) { #cols { display: none; } }   /* two 300-px columns do not fit a phone; not designed yet */
   .lf-info { cursor: help; color: #9aa1b2; font-size: 13px; padding: 0 4px; }
   .lf-empty { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); font-size: 13px; color: #9aa1b2; text-align: center; z-index: 3; }
+  .lf-short { display: none; }
+  /* phones (user 2026-11-07: 「開票的手機版擠在一起了」, approved): one-line header (「舊版」), the tab row one line that
+     scrolls sideways instead of wrapping under the header, a shorter bottom block (3 gains, small source line, smaller totals) */
   @media (max-width: 640px) {
+    .lf-full { display: none; } .lf-short { display: inline; }
+    #v2-bar { gap: 6px; padding-left: 8px; padding-right: 8px; }
+    #v2-bar .v2-title { font-size: 14px; } #v2-bar .v2-badge { display: none; }
+    #v2-bar .v2-home { padding: 4px 8px; font-size: 12px; } #v2-bar .v2-lang button { padding: 3px 7px; font-size: 12px; }
+    .lf-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .lf-tabs::-webkit-scrollbar { display: none; }
+    .lf-tabs > * { flex: 0 0 auto; }
+    .lf-mid .src { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lf-side .vn { font-size: 17px !important; }
     .lf-hud { grid-template-columns: 1fr 1fr; }
     .lf-mid { grid-column: 1 / 3; grid-row: 1; max-width: none; }
     .lf-legend { display: none; }
@@ -134,7 +146,7 @@
 <div id="v2-bar">
   <a class="v2-home" href="index.html" data-zh="← 首頁" data-en="← Home">← 首頁</a>
   <span class="v2-title"><span data-zh="2026 開票之夜" data-en="2026 Election Night">2026 開票之夜</span><span class="v2-badge">V2</span></span>
-  <a class="v2-home" href="live.html" style="margin-left:10px" data-zh="舊版開票頁（鄉鎮細節）" data-en="Classic live page (township detail)">舊版開票頁（鄉鎮細節）</a>
+  <a class="v2-home" href="live.html" style="margin-left:10px"><span class="lf-full" data-zh="舊版開票頁（鄉鎮細節）" data-en="Classic live page (township detail)">舊版開票頁（鄉鎮細節）</span><span class="lf-short" data-zh="舊版" data-en="Classic">舊版</span></a>
   <span class="v2-spacer"></span>
   <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
 </div>
@@ -191,6 +203,9 @@
   var DPR = 1, SW = 0, SH = 0, L = null;   // L = layout (map transform, hemicycle geometry)
 
   function layout() {
+    // the stage starts under the header as it actually stands (on a phone the header can wrap to two lines and used to
+    // cover the tab row)
+    var bar = document.getElementById('v2-bar'); if (bar) root.style.top = bar.offsetHeight + 'px';
     DPR = Math.min(2, window.devicePixelRatio || 1);
     SW = root.clientWidth; SH = root.clientHeight;
     [cvBg, cvPil, cvTr, cvTop].forEach(function (c) { c.width = Math.round(SW * DPR); c.height = Math.round(SH * DPR); });
@@ -232,8 +247,10 @@
   // the Taiwan Strait (north on the left), swung 30° towards the south so the hemicycle's right (south) end is nearer;
   // lines rise from the floor almost straight up into the hemicycle. The camera is fixed; its distance is fitted to the
   // screen (setCamLie) so the hemicycle and the island both fit vertically (left / right may overflow, as in the reference)
+  // phones open on the flat view (user 2026-11-07, picked 「2B」); their own choice is kept apart from the desktop's
+  var VIEW_KEY = window.innerWidth <= 640 ? 'lf_view_m' : 'lf_view';
   var VIEW = 'flat';
-  try { if (localStorage.getItem('lf_view') === 'lie') VIEW = 'lie'; } catch (e) {}
+  try { if (localStorage.getItem(VIEW_KEY) === 'lie') VIEW = 'lie'; } catch (e) {}
   var LIE = VIEW === 'lie';
   var FOC = 600, CAM = { yaw: 0, pitch: 0, pos: [0, 0, 0] };
   var HH = 900, RH = 650;   // hemicycle height and radius (map frame px)
@@ -1289,7 +1306,7 @@
     gains.sort(function (a, b) { return b[1] - a[1]; });
     var m = document.getElementById('hud-m');
     m.innerHTML = '<div class="clk">' + (f.sim ? hhmm(CLOCK) + T('（模擬）', ' (simulated)') : (f.ts ? T('最後更新 ', 'Updated ') + f.ts : T('尚無資料', 'No data yet'))) + '</div>' +
-      '<div class="gain">' + gains.slice(0, 9).map(function (g) { var top = snap.M[g[0]].slice().sort(function (a, b) { return b.v - a.v; })[0], p = pc('M', g[0], top, f.year); return '<span style="color:' + colorOf(p) + '">' + ccName(g[0]) + ' +' + kfmt(g[1]) + '</span>'; }).join('') + '</div>' +
+      '<div class="gain">' + gains.slice(0, SW <= 640 ? 3 : 9).map(function (g) { var top = snap.M[g[0]].slice().sort(function (a, b) { return b.v - a.v; })[0], p = pc('M', g[0], top, f.year); return '<span style="color:' + colorOf(p) + '">' + ccName(g[0]) + ' +' + kfmt(g[1]) + '</span>'; }).join('') + '</div>' +
       (f.sim && fin ? '<div class="prog">' + T('縣市長票已開出 ' + Math.round(all / fin * 100) + '%（以這個來源的最終票數計）', Math.round(all / fin * 100) + '% of this source\'s final mayoral count') + '</div>' : '') +
       '<div class="src">' + T('來源：', 'Source: ') + srcLabel(f) + (f.sim ? T('・2022 排練，開票進度為模擬', ' · 2022 rehearsal, counting pace simulated') : '') + '</div>';
   }
@@ -1345,7 +1362,7 @@
     el.querySelectorAll('button[data-src]').forEach(function (b) { b.onclick = function () { SRC = b.dataset.src; restart(); }; });
     el.querySelectorAll('button[data-view]').forEach(function (b) { b.onclick = function () {
       VIEW = LIE ? 'flat' : 'lie'; LIE = VIEW === 'lie';
-      try { localStorage.setItem('lf_view', VIEW); } catch (e) {}
+      try { localStorage.setItem(VIEW_KEY, VIEW); } catch (e) {}
       root.style.cursor = LIE ? 'grab' : ''; layout(); renderTabs(); }; });
     el.querySelectorAll('button[data-pil]').forEach(function (b) { b.onclick = function () {
       PIL_MODE = PIL_MODE === 'cell' ? 'smooth' : 'cell';
