@@ -247,10 +247,12 @@
   // the Taiwan Strait (north on the left), swung 30° towards the south so the hemicycle's right (south) end is nearer;
   // lines rise from the floor almost straight up into the hemicycle. The camera is fixed; its distance is fitted to the
   // screen (setCamLie) so the hemicycle and the island both fit vertically (left / right may overflow, as in the reference)
-  // phones open on the flat view (user 2026-11-07, picked 「2B」); their own choice is kept apart from the desktop's
-  var VIEW_KEY = window.innerWidth <= 640 ? 'lf_view_m' : 'lf_view';
+  // phones: the flat view only, no 3D (user 2026-11-07: 「手機版只給平面不開放3d」) — a phone = a narrow window, or a touch
+  // screen whose short side is at most 500 px (so a phone turned sideways stays flat too)
+  var PHONE = window.innerWidth <= 640 || (window.matchMedia && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500);
+  var VIEW_KEY = 'lf_view';
   var VIEW = 'flat';
-  try { if (localStorage.getItem(VIEW_KEY) === 'lie') VIEW = 'lie'; } catch (e) {}
+  try { if (!PHONE && localStorage.getItem(VIEW_KEY) === 'lie') VIEW = 'lie'; } catch (e) {}
   var LIE = VIEW === 'lie';
   var FOC = 600, CAM = { yaw: 0, pitch: 0, pos: [0, 0, 0] };
   var HH = 900, RH = 650;   // hemicycle height and radius (map frame px)
@@ -1349,7 +1351,7 @@
       var note = f.sim ? (ts != null ? T(n + ' 縣市・' + hhmm(ts) + ' 截圖', n + ' counties · snapshot ' + hhmm(ts)) : T(n + ' 縣市', n + ' counties')) : (ts || '');
       return '<button type="button" data-src="' + k + '" aria-pressed="' + (k === SRC) + '" title="' + (srcLabel(f) + (note ? '・' + note : '')).replace(/"/g, '&quot;') + '">' + srcShort(f) + '</button>';
     }).join('');
-    html += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / lying') + '">' + (LIE ? T('平躺', 'Lying') : T('平面', 'Flat')) + '</button>' +
+    if (!PHONE) html += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / lying') + '">' + (LIE ? T('平躺', 'Lying') : T('平面', 'Flat')) + '</button>' +
       (LIE ? '<button type="button" data-pil="1" title="' + T('光柱：平滑＝高度相近（每個人口點一根）；高低＝人口集中區較高（約 3 公里一根）', 'Pillars: smooth = similar heights (one per population point); relief = crowded areas taller (one per ~3 km)') + '">' +
         T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth')) + '</button>' +
         '<button type="button" data-cam0="1" title="' + T('回到預設角度', 'Reset view') + '">⟲</button>' : '');
