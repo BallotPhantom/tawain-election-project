@@ -1062,3 +1062,19 @@ On the UI side, indigenous districts use a structurally different nav path (`cou
 - 新增 `tests/pipeline_sim_2022.py`：自由時報已不提供 2022 數字，改用 11/05 實抓的最終數字依開票進度 20／50／80／100% 模擬出自由時報格式的資料檔（每位候選人＝最終×進度^a，接近的選舉讓最後輸的人先開），真的跑 `run_once`（讀檔→驗證→寫 data_live2026.js），每 35 秒一輪；四輪各接受縣市長 21、鄉鎮 366、議員 215，零拒絕。測完 `data_live2026.js`、`data_live2026_margin_log.js` 還原且 md5 相同。
 - 舊版地圖實測（正式模式）：屏東縣長 20% 蘇清泉領先（淺藍）→ 後段周春米反超（淺綠）；屏東縣第3選區席次圖 20% 時黃建溢（民進黨）在第10席，最終陳宗廷（無黨）6,319 比 6,310 拿下最後一席，綠席→灰席。已知：滑鼠停著不動時，新一輪資料進來席次圖不會自己重畫（移開再移回才更新）。
 - 備份：`backup/poll_live2026_pre_feed_20261107.py`。
+
+## 2026-11-07 poll_live2026.py：加入中央社、TVBS 兩個來源；多來源輪詢；姓名正規化
+- 使用者：「找三個開票網站，一個主要兩個備案；電視台自己開的票都要有自己的分頁」。來源檢查（robots.txt 依 `*` 規則、服務條款、防火牆）見專案記憶 reference_live_results_sources；新標準：只擋 ClaudeBot 等 AI 爬蟲不再自動排除（使用者：「你去抓data跟給我程式去自動抓有啥差別」）。
+- `fetch_cna`（source key `cna`，網路媒體・中選會數字）：中央社開票頁 `/project/{CNA_PROJECT[year]}/api/council.json`（議員 215 區）每輪；`api/city.json`（縣市長＋鄉鎮＋村里，2022 年 18.8 MB）最快每 `CNA_CITY_EVERY`=180 秒一次。黨籍由政黨全名轉代碼（`PARTY_NAME`），當選＝`isYou` 為 *，進度＝百分比。2026 資料夾名稱照 2022 命名（20261128-election-live）猜的，上線要確認。
+- `fetch_tvbs`（source key `tvbs`，電視台・自行報票）：`news.tvbs.com.tw/events/taiwan_election/json/{year}.json`，[0] 縣市長 22、[1] 議員 215 區；無鄉鎮、無投開票所進度。2026.json 目前 403。
+- `--source` 可逗號列多個（如 `ltn,cna,tvbs`），每輪依序各抓、各寫各的 source key（自由時報沿用 `auto_poll`），一個來源出錯不影響其他；紀錄檔同樣分來源。
+- `_clean_name`：中央社部分姓名用 CJK 相容字（葉、劉、林、李、阮…），頁面依姓名查黨籍會失敗；只轉相容字區段，拿掉中文字間空白（「李　問」），「．」等不動。四個讀法都套用。
+- 測試：新增 `tests/test_poll_cna_tvbs.py`（中央社、TVBS 2022 真實檔，fixtures 於 `tests/fixtures/cna_tvbs_2022/`）——兩家 215 區票數與中選會完全一致；已知 2022 來源標記缺漏（中央社 4 區少標一位、TVBS 新竹縣 4 區未標）列為已知，頁面遇到標記數≠席數本就維持「領先」。`tests/test_poll_ltn_feed.py` 參考名稱同樣正規化，通過。
+- 實測：`--source cna,tvbs --year 2022 --once` 寫入暫存檔：中央社縣市長 22（含嘉義市）／鄉鎮 368／議員 215、TVBS 縣市長 22／議員 215，零拒絕；暫放進 data_live2026.js 後新版出現「中央社」「TVBS」分頁、舊版並列兩張來源卡，測完還原、md5 相同。
+- 尚待開票頁上線再查：三立 elect.setn.com/2026（robots 無限制，有 /voteApi 介面，「開票實況」尚未開放）、中天 ctinews.com/election（目前為選舉資料庫）、ETtoday 2026 資料夾、自由時報／中央社／TVBS 2026 的實際網址。
+- 備份：`backup/poll_live2026_pre_multisource_20261107.py`。
+
+## 2026-11-07 每日檢查各來源 2026 開票頁是否上線（launchd）
+- 使用者同意在 Mac 上裝排程。新增 `check_live_sites.py`（只留本機，發佈白名單外）：檢查自由時報（realtime/Taipei 存在且有 pageRno）、中央社（猜的資料夾 20261128-election-live）、TVBS（json/2026.json）、三立（「開票實況」選單出現連結）、中天（選舉頁出現「開票」）；每天約 5 個小請求，不抓票數。某來源由未上線→上線時跳 macOS 通知；結果寫 `logs/live_check.log`，狀態 `logs/live_check_state.json`。
+- `~/Library/LaunchAgents/com.pvimap.livecheck.plist`：每天 09:00、登入時各跑一次（/opt/anaconda3/bin/python3）。已 `launchctl bootstrap` 載入，首跑結束代碼 0、紀錄寫入正常（2026-11-07 19:14：五家皆未上線）。
+- 移除方法：`launchctl bootout gui/$(id -u)/com.pvimap.livecheck` 並刪除該 plist。

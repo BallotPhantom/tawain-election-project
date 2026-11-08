@@ -162,6 +162,17 @@ LTN_SLUGS = {
 }
 
 
+def _clean_name(n):
+    """候選人姓名正規化（2026-11-07）：中央社有些姓名用 CJK 相容字（葉、劉、林、李、阮… 長得一樣、編碼不同，例如
+    U+F96E），頁面用姓名查黨籍會查不到——NFKC 轉回一般字；中文字之間的空白（「李　問」）拿掉，拼音前的空白保留。"""
+    import unicodedata
+    # only the compatibility-ideograph blocks (NFKC on the whole string would also turn 「．」 into 「.」 and break
+    # indigenous names against the roster)
+    n = ''.join(unicodedata.normalize('NFKC', ch) if (0xF900 <= ord(ch) <= 0xFAFF or 0x2F800 <= ord(ch) <= 0x2FA1F) else ch
+                for ch in (n or '')).replace('\u3000', ' ').strip()
+    return re.sub(r'(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])', '', n)
+
+
 def _norm(s):
     return s.replace('臺', '台')  # NM.t用正體「臺」，新聞網站常用通用的「台」，同一個字的異體
 
@@ -259,7 +270,7 @@ def _parse_cec_table(table):
         pm = re.search(r'politicalParty/([^/_.]+)', img.get('src', '')) if img else None
         party = LTN_PARTY.get(pm.group(1), 'other') if pm else None
         elected = bool(tds[0].find('span', class_='elected'))
-        cands.append({'name': name, 'votes': int(m.group(1).replace(',', '')), 'party': party, 'elected': elected})
+        cands.append({'name': _clean_name(name), 'votes': int(m.group(1).replace(',', '')), 'party': party, 'elected': elected})
     return cands
 
 
@@ -357,7 +368,7 @@ def _feed_cands(rows):
         except ValueError:
             continue
         pno = str(x.get('PNo') or '').strip()
-        out.append({'name': (x.get('Name') or '').strip(), 'votes': v,
+        out.append({'name': _clean_name(x.get('Name')), 'votes': v,
                     'party': LTN_PARTY.get('t' + pno, 'other') if pno else None, 'elected': str(x.get('Elected')) == '1'})
     return [c for c in out if c['name']]
 
@@ -507,7 +518,144 @@ def fetch_ltn(tc_pool, council_seats, year=2026):
     return cc_out, tc_out, ed_out
 
 
-FETCHERS = {'ltn': fetch_ltn}
+# ── 中央社、TVBS（2026-11-07 加，使用者：「找三個開票網站，一個主要兩個備案；電視台自己開的票都要有自己的分頁」）──
+# 每個來源寫進 data_live2026.js 各自的 source key（SOURCE_KEY），數字不合併；robots.txt／服務條款的檢查見
+# 專案記憶 reference_live_results_sources。
+# 中央社：開票頁 /project/{CNA_PROJECT[year]}/ 讀同資料夾的 api/council.json（議員各選區）與 api/city.json（縣市長＋
+#   各鄉鎮＋村里，2022 年 18.8 MB——所以縣市長層最快 CNA_CITY_EVERY 秒才抓一次）。中選會數字。2026 的資料夾名稱
+#   是照 2022 的命名猜的，開票頁上線時要確認。
+# TVBS：開票專區讀 /events/taiwan_election/json/{year}.json，voteCountingList[0]＝縣市長 22 縣市、[1]＝議員 215 區，
+#   含黨籍名稱、當選。票數是「TVBS開票中心」自己的計票（電視台），不是中選會數字。沒有投開票所進度。
+CNA_PROJECT = {2022: '20221126-election-live', 2026: '20261128-election-live'}
+CNA_CITY_EVERY = 180
+_CNA_LAST_CITY = [0.0]
+PARTY_NAME = {   # 來源寫的政黨全名／簡稱 → 頁面用的代碼（其他 → 'other'）
+    '中國國民黨': 'kmt', '國民黨': 'kmt', '民主進步黨': 'dpp', '民進黨': 'dpp', '台灣民眾黨': 'tpp', '民眾黨': 'tpp',
+    '無黨籍': 'ind', '無黨籍及未經政黨推薦': 'ind', '無': 'ind', '時代力量': 'npp', '台灣基進': 'tsr', '親民黨': 'pfp',
+    '台灣團結聯盟': 'tsu', '台聯': 'tsu', '綠黨': 'gp', '新黨': 'np', '無黨團結聯盟': 'npa', '小民參政歐巴桑聯盟': 'spgp',
+    '勞動黨': 'lp', '社會民主黨': 'sdp',
+}
+
+
+def _party_code(name):
+    if not name:
+        return None
+    return PARTY_NAME.get(_norm(name.strip()), 'other')
+
+
+def _cc_of_code(code5):   # 中央社 '63000' / '10017' → '63' / '10017'
+    return code5[:2] if code5[:2] in ('63', '64', '65', '66', '67', '68') else code5[:5]
+
+
+def _entry(cands, label, stype, ts, prog):
+    return {'cands': cands, 'source_label': label, 'source_type': stype, 'ts': ts, 'prog': prog}
+
+
+def fetch_cna(tc_pool, council_seats, year=2026):
+    now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    base = f'https://www.cna.com.tw/project/{CNA_PROJECT.get(year, CNA_PROJECT[2026])}/api/'
+    label = '中央社(中選會數字)'
+    cc_out, tc_out, ed_out = {}, {}, {}
+    def cands_of(rows):
+        out = []
+        for x in rows or []:
+            try:
+                v = int(x.get('tickets') or 0)
+            except (TypeError, ValueError):
+                continue
+            nm = _clean_name(x.get('name'))
+            if nm:
+                out.append({'name': nm, 'votes': v, 'party': _party_code(x.get('party')), 'elected': (x.get('isYou') or '').strip() == '*'})
+        return out
+    def prog_of(p):
+        try:
+            return [int(float(p)), 100]   # 中央社只給開票進度百分比
+        except (TypeError, ValueError):
+            return None
+    try:
+        council = json.loads(http_get(base + 'council.json?t=%d' % int(time.time())))
+        for cc5, dists in (council or {}).items():
+            cc = _cc_of_code(cc5)
+            if ONLY_COUNTIES and cc not in {CC_MAP[c] for c in ONLY_COUNTIES}:
+                continue
+            for code, d in dists.items():
+                dk = f'{cc}_{code[-2:]}'
+                if dk not in council_seats:
+                    print(f'  [cna] {dk} 不在席次表裡，跳過', file=sys.stderr); continue
+                cs = cands_of(d.get('candidates'))
+                if cs:
+                    ed_out[dk] = _entry(cs, label, 'net', now_label, prog_of(d.get('process')))
+    except Exception as e:
+        print(f'  [cna] 縣市議員 council.json 讀取／解析失敗: {e}', file=sys.stderr)
+    if time.time() - _CNA_LAST_CITY[0] >= CNA_CITY_EVERY:
+        try:
+            city = json.loads(http_get(base + 'city.json?t=%d' % int(time.time())))
+            _CNA_LAST_CITY[0] = time.time()
+            for cc5, c in (city or {}).items():
+                cc = _cc_of_code(cc5)
+                if ONLY_COUNTIES and cc not in {CC_MAP[x] for x in ONLY_COUNTIES}:
+                    continue
+                cs = cands_of(c.get('candidates'))
+                if cs:
+                    cc_out[cc] = _entry(cs, label, 'net', now_label, prog_of(c.get('process')))
+                for tcode, t in (c.get('towns') or {}).items():
+                    tc = tcode if tcode in tc_pool.get(cc, {}).values() else tc_pool.get(cc, {}).get(_norm((t.get('name') or '').strip()))
+                    ts_ = cands_of(t.get('candidates'))
+                    if tc and ts_:
+                        tc_out[tc] = _entry(ts_, label, 'net', now_label, None)
+        except Exception as e:
+            print(f'  [cna] 縣市長 city.json 讀取／解析失敗: {e}', file=sys.stderr)
+    return cc_out, tc_out, ed_out
+
+
+def fetch_tvbs(tc_pool, council_seats, year=2026):
+    now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    label = 'TVBS(開票中心)'
+    cc_out, tc_out, ed_out = {}, {}, {}
+    try:
+        d = json.loads(http_get(f'https://news.tvbs.com.tw/events/taiwan_election/json/{year}.json?timestamp=%d' % int(time.time() * 1000)))
+    except Exception as e:
+        print(f'  [tvbs] {year}.json 讀取失敗: {e}', file=sys.stderr)
+        return cc_out, tc_out, ed_out
+    def cands_of(rows):
+        out = []
+        for x in rows or []:
+            nm = _clean_name(x.get('profileName'))
+            try:
+                v = int(x.get('votes') or 0)
+            except (TypeError, ValueError):
+                continue
+            if nm:
+                out.append({'name': nm, 'votes': v, 'party': _party_code(x.get('partyName')), 'elected': bool(x.get('elected'))})
+        return out
+    lists = (d or {}).get('voteCountingList') or []
+    for blk in lists:
+        data = blk.get('data') or {}
+        for row in data.get('byDistrict') or []:
+            county = _norm((row.get('districtName') or '').strip())
+            cc = CC_MAP.get(county)
+            if not cc or (ONLY_COUNTIES and county not in ONLY_COUNTIES):
+                continue
+            cs = cands_of(row.get('candidates'))
+            if not cs:
+                continue
+            sub = row.get('subDistrictName')
+            if sub:   # 議員
+                m = re.search(r'第(\d+)選舉區', sub)
+                if not m:
+                    continue
+                dk = f'{cc}_{int(m.group(1)):02d}'
+                if dk not in council_seats:
+                    print(f'  [tvbs] {dk} 不在席次表裡，跳過', file=sys.stderr); continue
+                ed_out[dk] = _entry(cs, label, 'tv', now_label, None)
+            else:
+                cc_out[cc] = _entry(cs, label, 'tv', now_label, None)
+    return cc_out, tc_out, ed_out
+
+
+FETCHERS = {'ltn': fetch_ltn, 'cna': fetch_cna, 'tvbs': fetch_tvbs}
+# 每個來源在 data_live2026.js 的 source key（自由時報沿用原本的 auto_poll，頁面與紀錄檔已經用這個名字）
+SOURCE_KEY = {'ltn': 'auto_poll', 'cna': 'cna', 'tvbs': 'tvbs'}
 
 
 # ── 驗證層：跟來源網站無關，CC層/TC層共用同一套規則 ──
@@ -686,7 +834,7 @@ def run_once(source, allow_all_zero, tc_pool, council_seats, year=2026):
 
     def _do_layer(varname, fresh, label, truncate=None):
         try:
-            accepted, rejected = _merge_layer(varname, fresh, allow_all_zero)
+            accepted, rejected = _merge_layer(varname, fresh, allow_all_zero, SOURCE_KEY.get(source, 'auto_poll'))
             print(f'  {label}：接受 {len(accepted)} 個，拒絕 {len(rejected)} 個')
             shown = rejected[:truncate] if truncate else rejected
             for key, reason in shown:
@@ -706,7 +854,7 @@ def run_once(source, allow_all_zero, tc_pool, council_seats, year=2026):
 
     if cc_accepted:
         try:
-            _append_margin_log(cc_fresh, cc_accepted)
+            _append_margin_log(cc_fresh, cc_accepted, SOURCE_KEY.get(source, 'auto_poll'))
         except Exception as e:
             # 領先幅度紀錄是錦上添花的附加功能，寫入失敗不該連帶讓這一輪的主要開票資料
             # (LIVE_TRACK_CC/TC/ED，已經在上面_do_layer()各自成功寫入了)也被當成失敗
@@ -717,7 +865,8 @@ def run_once(source, allow_all_zero, tc_pool, council_seats, year=2026):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('--source', choices=list(FETCHERS), default='ltn')
+    ap.add_argument('--source', default='ltn',
+                     help='來源，可用逗號列多個，每輪依序各抓一次、各寫各的 source key：' + ', '.join(FETCHERS) + '（例如 ltn,cna,tvbs）')
     ap.add_argument('--once', action='store_true', help='只執行一次，不進入輪詢迴圈')
     ap.add_argument('--interval', type=int, default=60,
                      help='輪詢間隔秒數下限(預設60)——實際每輪會在[interval, interval*1.5]之間'
@@ -748,12 +897,22 @@ if __name__ == '__main__':
     council_seats = _build_council_seats_2026() if args.year >= 2026 else {**_build_council_seats(), **_build_ind_council_seats()}
     print(f'  共{sum(len(v) for v in tc_pool.values())}個鄉鎮市區、{len(council_seats)}個縣市議員選區(含原住民選區)')
 
+    sources = [x.strip() for x in args.source.split(',') if x.strip()]
+    bad = [x for x in sources if x not in FETCHERS]
+    if bad:
+        ap.error('不認得的來源：' + ', '.join(bad))
+    def one_round(first):
+        for src in sources:   # 一個來源出錯不影響其他來源
+            try:
+                run_once(src, args.allow_all_zero_first_run and first, tc_pool, council_seats, args.year)
+            except Exception as e:
+                print(f'  [{src}] 這一輪失敗：{e}', file=sys.stderr)
     if args.once:
-        run_once(args.source, args.allow_all_zero_first_run, tc_pool, council_seats, args.year)
+        one_round(True)
     else:
         first = True
         while True:
-            run_once(args.source, args.allow_all_zero_first_run and first, tc_pool, council_seats, args.year)
+            one_round(first)
             first = False
             # 加隨機抖動而不是固定間隔：開票夜對方伺服器負載本來就重，固定的機械式間隔本身也是
             # 「明顯是機器人」的訊號之一，抖動一下比較像人類偶爾重新整理的節奏

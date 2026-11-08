@@ -20,7 +20,8 @@ FIX = os.path.join(ROOT, 'tests', 'fixtures', 'ltn_feed_2022')
 REF = {k: P.load_js(os.path.join(ROOT, 'data_live2026_2022full.js.bak'), k) for k in ('LIVE_TRACK_CC', 'LIVE_TRACK_TC', 'LIVE_TRACK_ED')}
 def ref_cands(table, key):
     s = (REF[table].get(key) or {}).get('sources', {}).get('auto_poll')
-    return [(c['n'], c['v'], c.get('p'), bool(c.get('e'))) for c in s['cands']] if s else None
+    # names cleaned the same way as the reader (poll_live2026._clean_name: CJK compatibility ideographs → standard)
+    return [(P._clean_name(c['n']), c['v'], c.get('p'), bool(c.get('e'))) for c in s['cands']] if s else None
 
 files = {os.path.basename(f)[3:-4]: f for f in glob.glob(os.path.join(FIX, 'wb_*.txt'))}   # '2_16' -> path
 CC2COUNTY = {v: k for k, v in P.CC_MAP.items()}

@@ -704,8 +704,10 @@
     if (sp.length) { var i = Math.floor(Math.random() * sp.length / 2) * 2; x = sp[i]; y = sp[i + 1]; } else { x = t[1]; y = t[2]; }
     x += (Math.random() - 0.5) * 3; y += (Math.random() - 0.5) * 3;
     var q0 = P(x, y);
-    if (PARTS.length > 2200) PARTS.shift();
-    PARTS.push({ x0: q0[0], y0: q0[1], mx: x, my: y, seat: seat, c: p ? lineOf(p) : '#e8ebf2', a: (p === 'ind' || p === 'other' || !p) ? 0.28 : 0.6,
+    // at most 400 lines alive (2,200 at the peak, each with its own gradient, ran the page at 1 frame a second and crashed
+    // Chrome — 「Error code: 11」, user 2026-11-07); dimmer (× 0.6, user: 「變暗些」)
+    if (PARTS.length > 400) PARTS.shift();
+    PARTS.push({ x0: q0[0], y0: q0[1], mx: x, my: y, seat: seat, c: p ? lineOf(p) : '#e8ebf2', a: (p === 'ind' || p === 'other' || !p) ? 0.17 : 0.36,
                  sp: Math.random() * 2 - 1,   // sideways spread of its arc (user 2026-11-07: 「粒子飛去圓形圖的可以再散開一點」)
                  w: lineW(v || 1000), t: stagger ? -Math.random() * 1.2 : 0, dur: 1.4 + Math.random() * 1.4, bend: 0.25 + Math.random() * 0.5, px: null, py: null });
   }
@@ -731,6 +733,18 @@
     gTr.clearRect(0, 0, SW, SH);
     gTr.globalCompositeOperation = 'lighter'; gTr.lineCap = 'round';
     var TL = 0.38;   // tail length, in the line's own time
+    // the lines stop short of the hemicycle (82% of the way) and fade there (user 2026-11-07: 「往上衝的光束可以在圓形的下面」);
+    // drawn in batches — one stroke per colour × width × head / tail — instead of a gradient and a stroke per line; the
+    // comet's bright head and faint tail kept as two pieces of the same arc
+    var END = 0.82, BATCH = {};
+    var addPiece = function (key, x0, y0, cx, cy, x1, y1, s0, s1) {
+      var Bx = function (t) { var u = 1 - t; return u * u * x0 + 2 * u * t * cx + t * t * x1; };
+      var By = function (t) { var u = 1 - t; return u * u * y0 + 2 * u * t * cy + t * t * y1; };
+      var kx = (1 - s0) * (1 - s1) * x0 + ((1 - s0) * s1 + s0 * (1 - s1)) * cx + s0 * s1 * x1;   // control = blossom(s0, s1)
+      var ky = (1 - s0) * (1 - s1) * y0 + ((1 - s0) * s1 + s0 * (1 - s1)) * cy + s0 * s1 * y1;
+      var path = BATCH[key] || (BATCH[key] = new Path2D());
+      path.moveTo(Bx(s0), By(s0)); path.quadraticCurveTo(kx, ky, Bx(s1), By(s1));
+    };
     for (var i = PARTS.length - 1; i >= 0; i--) {
       var q = PARTS[i]; q.t += dt / q.dur;
       if (q.t < 0) continue;   // staggered start
@@ -742,18 +756,16 @@
       var x0 = q.x0, y0 = q.y0, x1 = q.seat.x, y1 = q.seat.y;
       var cx = (x0 + x1) / 2 + (x1 - x0) * 0.1, cy = Math.min(y0, y1) - Math.abs(y0 - y1) * q.bend;
       if (LIE) { cx = x0 + (x1 - x0) * (0.1 + q.bend * 0.2); cy = y1 + (y0 - y1) * 0.12; }
-      cx += (q.sp || 0) * (0.35 * Math.abs(y0 - y1) + 40);   // the bundle fans out sideways
-      // the piece [a, b] of the quadratic: ends B(a), B(b), control = blossom(a, b)
-      var Bx = function (t) { var u = 1 - t; return u * u * x0 + 2 * u * t * cx + t * t * x1; };
-      var By = function (t) { var u = 1 - t; return u * u * y0 + 2 * u * t * cy + t * t * y1; };
-      var ax = Bx(a), ay = By(a), bx = Bx(b), by = By(b);
-      var kx = (1 - a) * (1 - b) * x0 + ((1 - a) * b + a * (1 - b)) * cx + a * b * x1;
-      var ky = (1 - a) * (1 - b) * y0 + ((1 - a) * b + a * (1 - b)) * cy + a * b * y1;
-      var gr = gTr.createLinearGradient(ax, ay, bx, by);
-      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, q.c);
-      gTr.strokeStyle = gr; gTr.globalAlpha = q.a; gTr.lineWidth = q.w;
-      gTr.beginPath(); gTr.moveTo(ax, ay); gTr.quadraticCurveTo(kx, ky, bx, by); gTr.stroke();
+      cx += (q.sp || 0) * (0.52 * Math.abs(y0 - y1) + 60);   // the bundle fans out sideways (wider, user: 「再分散一些」)
+      var s0 = a * END, s1 = b * END, sm = (s0 + s1) / 2, wk = Math.max(0.5, Math.round(q.w * 2) / 2);
+      addPiece(q.c + '|' + wk + '|' + q.a + '|h', x0, y0, cx, cy, x1, y1, sm, s1);   // head
+      addPiece(q.c + '|' + wk + '|' + q.a + '|t', x0, y0, cx, cy, x1, y1, s0, sm);   // tail
     }
+    Object.keys(BATCH).forEach(function (key) {
+      var k = key.split('|');
+      gTr.strokeStyle = k[0]; gTr.lineWidth = +k[1]; gTr.globalAlpha = +k[2] * (k[3] === 'h' ? 1 : 0.35);
+      gTr.stroke(BATCH[key]);
+    });
     gTr.globalAlpha = 1; gTr.globalCompositeOperation = 'source-over';
     if (LIE && PIL_ANIM) drawPillars();
     CAM_MOVED = false;
@@ -1283,13 +1295,14 @@
   }
 
   // ---------- tabs ----------
-  var SRC_EN = { ltn_cec: 'Liberty Times (CEC final)', auto_poll: 'Liberty Times', tvbs: 'TVBS (YouTube)', setn: 'SETN (YouTube)' };
-  var srcLabel = function (f) { return lang === 'en' && SRC_EN[f.key] ? SRC_EN[f.key] : f.label; };
+  // English labels; for 2026 the TVBS tab is its website's own count (key tvbs), the rehearsal's TVBS is a YouTube snapshot
+  var SRC_EN = { ltn_cec: 'Liberty Times (CEC final)', auto_poll: 'Liberty Times', cna: 'CNA (CEC numbers)', setn: 'SETN (YouTube)' };
+  var srcLabel = function (f) { var en = f.key === 'tvbs' ? (f.sim ? 'TVBS (YouTube)' : 'TVBS (own count)') : SRC_EN[f.key]; return lang === 'en' && en ? en : f.label; };
   // the tab buttons carry a short name only; the full label and its note sit in the hover title (user 2026-11-07: 精簡上方按鈕)
-  var SRC_SHORT = { ltn_cec: ['自由時報', 'LTN'], tvbs: ['TVBS', 'TVBS'], setn: ['三立', 'SETN'] };
+  var SRC_SHORT = { ltn_cec: ['自由時報', 'LTN'], auto_poll: ['自由時報', 'LTN'], cna: ['中央社', 'CNA'], tvbs: ['TVBS', 'TVBS'], setn: ['三立', 'SETN'] };
   var srcShort = function (f) { var m = SRC_SHORT[f.key]; return m ? T(m[0], m[1]) : srcLabel(f).split(/[（(]/)[0]; };
   function feedKeys() {
-    var order = ['ltn_cec', 'auto_poll', 'tvbs', 'setn'];
+    var order = ['ltn_cec', 'auto_poll', 'cna', 'tvbs', 'setn'];   // CEC-number sources first, then the TV stations' own counts
     return Object.keys(FEEDS).sort(function (a, b) { return ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99); });
   }
   // pick a county (the menu, or a click on one of its seats): filter, camera, focus box
