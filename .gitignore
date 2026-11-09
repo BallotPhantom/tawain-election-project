@@ -131,3 +131,8 @@ tests/verify_rally_sources.py
 tests/verify_family_sources.py
 CHANGELOG_v2.md
 v2/scenario.html
+v2/live.html
+v2/live-panel.js
+v2/live-seats2026.js
+v2/live-councilhemi.js
+v2/live-councilind.js
