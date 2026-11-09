@@ -31,6 +31,7 @@ Two election-night figures need the final total before it exists: the "certain t
 ## Multi-source election night
 
 - Each outlet is scraped politely (about once a minute) and stays its own source — never merged — so staleness and disagreement are visible. A comparison view puts every source side by side, flags rows where sources disagree on the leader, votes more than 1% apart, and sources more than 10 minutes behind.
+- Polite by construction: one machine fetches (readers load our own data file, never the outlets), compressed transfers (CNA's council file 204 KB → 40 KB), conditional requests so unchanged files are not re-sent, and on HTTP 429/503 the whole site is left alone for 2 → 4 → 5 minutes (or its Retry-After) instead of retrying.
 - Candidate names are normalised (CJK compatibility ideographs → standard forms) before matching across sources.
 - The poller originally stamped times in the polling machine's zone; since the machine runs outside Taiwan on the night and most readers are in Taiwan, every timestamp is now written and read as Taiwan time.
 

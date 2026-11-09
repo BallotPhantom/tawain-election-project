@@ -34,6 +34,7 @@ LIVE_TRACK_CC(縣市長層)跟LIVE_TRACK_TC(鄉鎮市區層)，不合格的一�
 2022年彩排測試資料的備份檔`data_live2026_2022rehearsal.js.bak`就是同樣的用法示範。
 """
 import argparse
+import gzip
 import json
 import random
 import re
@@ -41,6 +42,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -220,40 +222,83 @@ def _build_ind_council_seats():
     return out
 
 
-def http_get(url, max_retries=3):
+class SourceBusy(Exception):
+    """對方剛說過「太忙」（429/503），這個網站還在冷卻中——這一輪剩下的網址都不發請求"""
+
+
+# 對各家網站更客氣（使用者 2026-11-08：「目前爬蟲設定是不會造成癱瘓的？」→ 提三項 →「好，做」）：
+#  1. 要求壓縮（Accept-Encoding: gzip）：中央社縣市長大檔 2022 年 18.8 MB，沒要求壓縮時對方送整份未壓縮的
+#  2. 對方說忙就整個網站先停：收到 429/503 不再對同一網址重試，這個網站（host）進入冷卻 2 → 4 → 5 分鐘（有
+#     Retry-After 且更久就照它），冷卻中這一輪、之後幾輪對它都不發任何請求；成功一次就回到正常間隔
+#  3. 資料沒變就不重送：記住每個網址上次的 ETag／Last-Modified，下次帶 If-None-Match／If-Modified-Since，對方回
+#     304 就沿用上次的內容。網址裡的時間戳參數（?t= / ?timestamp=）不算在網址身分裡
+_BUSY = {}      # host -> {'until': epoch 秒, 'level': 連續忙碌次數}
+_COND = {}      # 去掉 query 的網址 -> {'etag', 'lm', 'body'}
+BUSY_BASE, BUSY_MAX = 60, 300
+
+
+def _host(url):
+    return urllib.parse.urlsplit(url).netloc
+
+
+def _busy(host):
+    b = _BUSY.get(host)
+    return bool(b and time.time() < b['until'])
+
+
+def http_get(url, max_retries=None):
     # Accept-Language：讓請求看起來像一般台灣瀏覽器的完整標頭之一，跟User-Agent同一個理由
     # （很多伺服器單純擋掉「明顯不是瀏覽器」的請求，不是針對本站）。
     # 刻意不加假的Referer（例如偽裝成從Google搜尋點進來）——那已經不是「看起來正常」，而是
     # 主動偽造來源去騙過對方在開票夜特別開啟的防禦機制(Cloudflare等)，性質不一樣，不做。
-    #
-    # 429/503單獨處理、指數backoff重試：開票夜對方伺服器負載最重的時候，剛好也是我們最需要
-    # 資料的時候，這兩件事同時發生不是意外，是選舉夜這種場景本來就會撞在一起。純網路逾時等
-    # 其他錯誤不在這裡重試——那類錯誤留給run_once()外層的輪詢interval自然重試，這裡只處理
-    # 「伺服器明確說『你太快了』」的情況，因為這種情況值得馬上、在同一輪內就退讓後再試，而不是
-    # 死等一整個interval（可能60~90秒）才有機會拿到這次原本就快到手的資料。
-    req = urllib.request.Request(url, headers={
+    # （max_retries 保留參數相容舊呼叫；同一網址不再重試，見上面第 2 點）
+    host, now = _host(url), time.time()
+    b = _BUSY.get(host)
+    if b and now < b['until']:
+        raise SourceBusy(f'{host} 冷卻中，還有 {b["until"] - now:.0f} 秒')
+    ckey = url.split('?', 1)[0]
+    headers = {
         'User-Agent': 'Mozilla/5.0',
         'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-    })
-    for attempt in range(max_retries + 1):
-        try:
-            return urllib.request.urlopen(req, timeout=15).read().decode('utf-8', errors='ignore')
-        except urllib.error.HTTPError as e:
-            if e.code not in (429, 503) or attempt >= max_retries:
-                raise
-            retry_after = e.headers.get('Retry-After') if e.headers else None
-            if retry_after:
-                try:
-                    wait = float(retry_after)
-                except ValueError:
-                    wait = 5 * (2 ** attempt)
-            else:
-                wait = 5 * (2 ** attempt)  # 5, 10, 20秒
-            wait += random.uniform(0, wait * 0.3)  # 加抖動，避免固定節奏被當成機器人訊號
-            print(f'  [http_get] {url} 收到HTTP {e.code}(限流/伺服器忙碌)，'
-                  f'{wait:.0f}秒後重試(第{attempt+1}/{max_retries}次)', file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f'http_get({url}) 重試{max_retries}次後仍然失敗')  # 理論上不會走到這裡
+        'Accept-Encoding': 'gzip',
+    }
+    c = _COND.get(ckey)
+    if c:
+        if c.get('etag'):
+            headers['If-None-Match'] = c['etag']
+        if c.get('lm'):
+            headers['If-Modified-Since'] = c['lm']
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+    except urllib.error.HTTPError as e:
+        if e.code == 304 and c:
+            _BUSY.pop(host, None)
+            return c['body']
+        if e.code in (429, 503):
+            level = (b['level'] if b else 0) + 1
+            wait = min(BUSY_MAX, BUSY_BASE * (2 ** level))   # 120, 240, 300…
+            ra = e.headers.get('Retry-After') if e.headers else None
+            try:
+                if ra and float(ra) > wait:
+                    wait = float(ra)
+            except ValueError:
+                pass
+            _BUSY[host] = {'until': time.time() + wait, 'level': level}
+            print(f'  [http_get] {host} 回 HTTP {e.code}（忙碌／限流），整個網站暫停 {wait:.0f} 秒（第 {level} 次）', file=sys.stderr)
+            raise SourceBusy(f'{host} HTTP {e.code}')
+        raise
+    raw = resp.read()
+    if (resp.headers.get('Content-Encoding') or '').lower() == 'gzip':
+        raw = gzip.decompress(raw)
+    body = raw.decode('utf-8', errors='ignore')
+    _BUSY.pop(host, None)
+    etag, lm = resp.headers.get('ETag'), resp.headers.get('Last-Modified')
+    if etag or lm:
+        _COND[ckey] = {'etag': etag, 'lm': lm, 'body': body}
+    else:
+        _COND.pop(ckey, None)
+    return body
 
 
 def _parse_cec_table(table):
@@ -463,6 +508,9 @@ def fetch_ltn(tc_pool, council_seats, year=2026):
     cc_out, tc_out, ed_out = {}, {}, {}
     slugs = {k: v for k, v in LTN_SLUGS.items() if not ONLY_COUNTIES or k in ONLY_COUNTIES}
     for n_county, (county, slug) in enumerate(slugs.items()):
+        if _busy('election.ltn.com.tw'):   # 對方說過忙：這一輪剩下的縣市都不抓
+            print('  [ltn] 網站冷卻中，這一輪其餘縣市跳過', file=sys.stderr)
+            break
         if n_county:
             time.sleep(random.uniform(0.8, 1.6))   # 縣市之間稍停，不連續快速打同一個網站
         cc = CC_MAP[county]
@@ -697,6 +745,8 @@ def fetch_ettoday(tc_pool, council_seats, year=2026):
         for code, cc in ETT_CODE.items():
             if only and cc not in only:
                 continue
+            if _busy('media.ettoday.net'):
+                break
             time.sleep(random.uniform(0.3, 0.8))
             try:
                 head = http_get(base + f'alderman_html_1_cec_{code}.html')
