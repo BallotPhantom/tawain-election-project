@@ -39,7 +39,10 @@
   .lf-side { min-width: 0; }
   .lf-side.r { text-align: right; }
   .lf-side .pt { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
-  .lf-side .vn { font-size: clamp(20px, 3.2vw, 34px); font-weight: 800; line-height: 1.05; }
+  .lf-side .vn { font-size: clamp(20px, 3.2vw, 34px); font-weight: 800; line-height: 1.05; transition: font-size .6s ease, opacity .6s ease; }
+  /* the side ahead by 1% or more: bigger; the side behind: fainter; within 1% both unchanged (user 2026-11-08) */
+  .lf-side .vn.lead { font-size: clamp(24px, 3.9vw, 42px); }
+  .lf-side .vn.trail { opacity: .5; }
   .lf-side .vl { font-size: 10px; color: #9aa1b2; letter-spacing: .06em; }
   .lf-side .called { font-size: 14px; font-weight: 800; margin-top: 4px; }
   .lf-side .recent { font-size: 10.5px; color: #b8bfcc; min-height: 28px; }
@@ -167,6 +170,7 @@
     .lf-tabs > * { flex: 0 0 auto; }
     .lf-mid .src { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .lf-side .vn { font-size: 17px !important; }
+    .lf-side .vn.lead { font-size: 20px !important; }
     .lf-hud { grid-template-columns: 1fr 1fr; }
     .lf-mid .gain { grid-template-columns: repeat(3, minmax(0, 92px)); }
     .lf-mid { grid-column: 1 / 3; grid-row: 1; max-width: none; }
@@ -212,7 +216,7 @@
 <script src="data_liveflow_r2022.js?v=20261105b"></script>
 <script src="data_council_seats_2026.js?v=20261107a"></script>
 <script src="data_turnout_prior.js?v=20261108a"></script>
-<script src="data_call_model.js?v=20261108d"></script>
+<script src="data_call_model.js?v=20261108e"></script>
 <script src="live-turnout.js?v=20261108f"></script>
 <script>
 (function () {
@@ -499,7 +503,9 @@
     var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
     tcs.forEach(function (tc) { LF_TOWNPOLY[tc].forEach(function (r) {
       var rx = 0, ry = 0, n = r.length / 2; for (var i = 0; i < r.length; i += 2) { rx += r[i]; ry += r[i + 1]; }
-      if (Math.hypot(rx / n - mx, ry / n - my) > 160) return;
+      // only truly far rings are left out (東沙, ~450 km off 高雄); 蘭嶼 / 綠島 (台東) and 東引 (連江) stay in — 160 units cut them
+      // off (user 2026-11-08: 「平面的台東馬祖沒有一整個在畫面裡」); ~0.26 km per unit
+      if (Math.hypot(rx / n - mx, ry / n - my) > 500) return;
       for (var j = 0; j < r.length; j += 2) { x0 = Math.min(x0, r[j]); x1 = Math.max(x1, r[j]); y0 = Math.min(y0, r[j + 1]); y1 = Math.max(y1, r[j + 1]); }
     }); });
     if (x1 < x0) return null;
@@ -977,7 +983,7 @@
       if (st === 'final' && s.st !== 'final') { var side = p === 'dpp' ? 'g' : (p === 'kmt' || p === 'tpp') ? 'b' : null; if (side) RECENT[side].unshift([cc, CLOCK]); }   // labelled when drawn, so a language switch re-labels it
       // 推估當選 (the model, not the source's mark): the leader drawn half-filled with its ring
       var proj = false;
-      if (st === 'lead') { var cr = CALLS[cc]; proj = !!(cr && cr.tag === 'proj' && (CALL_PARTY[cr.lead] ? cr.lead : 'ind') === (CALL_PARTY[p] ? p : 'ind')); }
+      if (st === 'lead') { var cr = CALLS[cc]; proj = !!(cr && cr.tag === 'proj' && cr.leadName === top.n); }
       if (s.st !== st || s.p !== p || !!s.proj !== proj) { s.st = st; s.p = p; s.proj = proj; changed = true; }
     });
     // council seats: the top-n candidates of the district
@@ -1274,9 +1280,20 @@
     turnoutOf(f, snap, cc);   // (re)builds TO_CACHE for this snapshot
     var C = TO_CACHE.calls || (TO_CACHE.calls = {});
     if (cc in C) return C[cc];
+    // per county, a party key goes to that party's top candidate only; another candidate of the same party (2022 連江: 曹爾元 and
+    // 王忠銘 both 國民黨) is keyed by name, like an independent — two candidates no longer merge into one
+    var KM = TO_CACHE.keymap || (TO_CACHE.keymap = {});
+    function keyMap(tcc) {
+      if (KM[tcc]) return KM[tcc];
+      var m = {}, seen = {};
+      (snap.M[tcc] || []).slice().sort(function (a, b) { return b.v - a.v; }).forEach(function (c) {
+        var k = ckey(tcc, c, f.year); if (CALL_PARTY[k]) { if (seen[k]) k = 'ind:' + c.n; else seen[k] = 1; } m[c.n] = k;
+      });
+      return (KM[tcc] = m);
+    }
     if (!TO_CACHE.ctowns) TO_CACHE.ctowns = TO_CACHE.towns.map(function (t) {
-      var by = {}, tcc = LF_TOWNS[t.tc][0];
-      (snap.T[t.tc] || []).forEach(function (c) { var k = ckey(tcc, c, f.year); by[k] = (by[k] || 0) + c.v; });
+      var by = {}, tcc = LF_TOWNS[t.tc][0], km = keyMap(tcc);
+      (snap.T[t.tc] || []).forEach(function (c) { var k = km[c.n] || ckey(tcc, c, f.year); by[k] = (by[k] || 0) + c.v; });
       return { tc: t.tc, s: t.s, by: by };
     });
     var nRep = null;
@@ -1287,7 +1304,7 @@
     var yr = String(f.year) === '2022' ? '2022' : '2026';
     var r = LiveTurnout.call(CALL_MODEL, yr, TURNOUT_PRIOR[yr], TO_CACHE.ctowns, cc, ccOfTc, nRep);
     if (r) {   // the candidates behind the keys, from the county numbers
-      (snap.M[cc] || []).forEach(function (c) { var k = ckey(cc, c, f.year); if (k === r.lead) r.leadName = c.n; if (k === r.second) r.secondName = c.n; });
+      var kmc = keyMap(cc); (snap.M[cc] || []).forEach(function (c) { var k = kmc[c.n]; if (k === r.lead) r.leadName = c.n; if (k === r.second) r.secondName = c.n; });
       r.party = CALL_PARTY[r.lead] ? r.lead : 'ind';
     }
     return (C[cc] = r);
@@ -1657,7 +1674,7 @@
   function turnoutOf(f, snap, cc) {
     if (!window.LiveTurnout || typeof TURNOUT_PRIOR === 'undefined' || !f || !snap) return null;
     if (TO_CACHE.snap !== snap || TO_CACHE.f !== f) {
-      TO_CACHE = { snap: snap, f: f, by: {}, calls: {}, ctowns: null, towns: Object.keys(snap.T || {}).filter(function (tc) { return LF_TOWNS[tc]; }).map(function (tc) {
+      TO_CACHE = { snap: snap, f: f, by: {}, calls: {}, ctowns: null, keymap: null, towns: Object.keys(snap.T || {}).filter(function (tc) { return LF_TOWNS[tc]; }).map(function (tc) {
         return { tc: tc, cnt: sumC(snap.T[tc]), s: Math.max(0, Math.min(1, tcProg(f, snap, tc))) };
       }) };
     }
@@ -1789,10 +1806,13 @@
     if (!HIST.length || HIST[HIST.length - 1].t !== hk) HIST.push({ t: hk, g: tot.dpp, b: tot.kmt, M: snap.M });
     var called = { g: [0, 0], b: [0, 0] };
     SEATS.forEach(function (s) { if (s.st !== 'final') return; var side = s.p === 'dpp' ? 'g' : (s.p === 'kmt' || s.p === 'tpp') ? 'b' : null; if (side) called[side][s.ring === 'M' ? 0 : 1]++; });
+    // who is ahead on the big numbers: 1% of the two sides' votes or more (user 2026-11-08: 「領先者數字大一點，落後者顏色淡一點，
+    // 差不多不分上下就不改」)
+    var ahead = tot.dpp + tot.kmt > 0 && Math.abs(tot.dpp - tot.kmt) / (tot.dpp + tot.kmt) >= 0.01 ? (tot.dpp > tot.kmt ? 'g' : 'b') : null;
     function side(id, sd, p, label) {
       var el = document.getElementById(id), c = called[sd], rec = RECENT[sd].slice(0, 2);
       el.innerHTML = '<div class="pt" style="color:' + colorOf(p) + '">' + label + '</div>' +
-        '<div class="vn" style="color:' + colorOf(p) + '">' + fmt(tot[p]) + '</div>' +
+        '<div class="vn' + (ahead === sd ? ' lead' : ahead ? ' trail' : '') + '" style="color:' + colorOf(p) + '">' + fmt(tot[p]) + '</div>' +
         // (the 「縣市長得票」 caption under the number: removed, user 2026-11-07; the sparkline went earlier the same day)
         '<div class="called" style="color:' + colorOf(p) + '">' + T('確定 ' + (c[0] + c[1]) + ' 席', (c[0] + c[1]) + ' FINAL') + '</div>' +
         '<div class="recent">' + T('縣市長 ' + c[0] + '・議員 ' + c[1], c[0] + ' mayors · ' + c[1] + ' councillors') +
