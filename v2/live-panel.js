@@ -113,6 +113,38 @@
       if (r && counted > r.est) { r.est = counted; r.upper = counted * (1 + r.margin); }
       return r;
     }
+    // the projected-winner model (v2/live-turnout.js LiveTurnout.call, CALL_MODEL; user 2026-11-08: Toss-up / Lean /
+    // Likely / 推估當選 →「做」) on this source's township numbers: one line in each 縣市長 card
+    var CALL_PARTY = { dpp: 1, kmt: 1, tpp: 1, pfp: 1, npp: 1 };
+    function ckey(cc, c) {
+      var p = c.p || (typeof win._liveCandParty === 'function' ? win._liveCandParty(cc, c.n) : null);
+      return CALL_PARTY[p] ? p : 'ind:' + c.n;
+    }
+    function callFor(k, cc, cands) {
+      if (!window.LiveTurnout || !LiveTurnout.call || typeof CALL_MODEL === 'undefined' || typeof TURNOUT_PRIOR === 'undefined') return null;
+      var TC = G(win, "typeof LIVE_TRACK_TC !== 'undefined' ? LIVE_TRACK_TC : null") || {}, towns = [], a = 0, b = 0;
+      Object.keys(TC).forEach(function (tc) {
+        var src = TC[tc] && TC[tc].sources && TC[tc].sources[k]; if (!src || !src.cands || !src.prog || !src.prog[1]) return;
+        var tcc = ccOf(tc), by = {};
+        src.cands.forEach(function (c) { var key = ckey(tcc, c); by[key] = (by[key] || 0) + (c.v || 0); });
+        towns.push({ tc: tc, s: src.prog[0] / src.prog[1], by: by });
+        if (tcc === cc) { a += src.prog[0]; b += src.prog[1]; }
+      });
+      var r = LiveTurnout.call(CALL_MODEL, '2026', TURNOUT_PRIOR['2026'], towns, cc, ccOf, b ? [a, b] : null);
+      if (r) cands.forEach(function (c) { if (ckey(cc, c) === r.lead) r.leadName = c.n; });
+      if (r) r.party = CALL_PARTY[r.lead] ? r.lead : 'ind';
+      return r;
+    }
+    var CTAG = { early: ['尚早', 'Too early to call'], toss: ['拉鋸', 'Toss-up'], lean: ['傾向', 'Lean'], likely: ['可能', 'Likely'], proj: ['推估當選', 'Certain'] };
+    var CPS = { dpp: ['民進黨', 'DPP'], kmt: ['國民黨', 'KMT'], tpp: ['民眾黨', 'TPP'], pfp: ['親民黨', 'PFP'], npp: ['時代力量', 'NPP'], ind: ['無黨籍', 'Ind.'] };
+    function callLine(r) {
+      if (!r) return '';
+      var t = r.tag === 'toss' || r.tag === 'proj' || r.tag === 'early' ? T(CTAG[r.tag][0], CTAG[r.tag][1]) : T(CTAG[r.tag][0] + (CPS[r.party] || CPS.ind)[0], CTAG[r.tag][1] + ' ' + (CPS[r.party] || CPS.ind)[1]);
+      var pct = r.tag === 'proj' ? '>99.5' : Math.round(r.P * 100);
+      var CLR = G(win, 'COUNCIL_CLR') || {}, col = r.tag === 'early' ? '#9aa1b2' : r.tag === 'toss' ? '#f5c518' : (CLR[r.party] || '#cbd5e1');
+      return '<div style="' + NOTE.replace('rgba(255,255,255,0.45)', col) + ';font-weight:600">' + T('模型：', 'Model: ') + t +
+        (r.tag === 'early' ? T('（開票未滿 5%）', ' (under 5% counted)') : r.leadName ? T('・' + r.leadName + ' 勝率 ' + pct + '%', ' · ' + r.leadName + ' ' + pct + '% to win') : '') + '</div>';
+    }
     var TAG = 'font-size:9px;font-weight:600;color:#4ade80;margin-left:4px';
     var NOTE = 'font-size:9px;color:rgba(255,255,255,0.45);margin-top:2px';
     var html = win._liveTrack26Html;
@@ -143,15 +175,16 @@
         // stations counted) and a tick on each bar where that is (bars are shares of the votes counted so far); a sole
         // candidate: 選舉人數 × 20% (the engine's _cc26Elig) and how far along
         var thr = '';
+        if (isCC && !fin && srt.length > 1) thr += callLine(callFor(k, codeKey, srt));
         if (isCC) {
           if (srt.length === 1) {
             var el = typeof win._cc26Elig === 'function' ? win._cc26Elig(codeKey) : null;
-            thr = '<div style="' + NOTE + '">' + (el ? T('法定當選門檻：選舉人數 × 20% ≈ ' + Math.ceil(el * 0.2).toLocaleString() + ' 票（已達 ' + (srt[0].v / (el * 0.2) * 100).toFixed(1) + '%）', 'Legal floor: 20% of the electorate ≈ ' + Math.ceil(el * 0.2).toLocaleString() + ' (' + (srt[0].v / (el * 0.2) * 100).toFixed(1) + '% reached)')
+            thr += '<div style="' + NOTE + '">' + (el ? T('法定當選門檻：選舉人數 × 20% ≈ ' + Math.ceil(el * 0.2).toLocaleString() + ' 票（已達 ' + (srt[0].v / (el * 0.2) * 100).toFixed(1) + '%）', 'Legal floor: 20% of the electorate ≈ ' + Math.ceil(el * 0.2).toLocaleString() + ' (' + (srt[0].v / (el * 0.2) * 100).toFixed(1) + '% reached)')
               : T('唯一候選人：得票須達選舉人總數 20% 才當選（選罷法第70條）', 'Sole candidate: needs 20% of the electorate (art. 70)')) + '</div>';
           } else if (tr || pr || fin) {
             var expT = tr ? tr.upper : (remain != null ? counted + remain : counted), half = Math.ceil(expT / 2), pos = Math.min(100, half / (counted || 1) * 100);
             var estT = tr ? Math.round(tr.est / 100) * 100 : Math.round(expT), mg = tr ? Math.round(tr.margin * 100) : 0;
-            thr = '<div style="' + NOTE + '">' + T('過半保證當選 ≈ ' + half.toLocaleString() + ' 票（預估總票數約 ' + estT.toLocaleString() + (mg ? '，含 +' + mg + '% 安全邊際' : '') + '）',
+            thr += '<div style="' + NOTE + '">' + T('過半保證當選 ≈ ' + half.toLocaleString() + ' 票（預估總票數約 ' + estT.toLocaleString() + (mg ? '，含 +' + mg + '% 安全邊際' : '') + '）',
               'Certain win past half ≈ ' + half.toLocaleString() + ' (expected total ~' + estT.toLocaleString() + (mg ? ', with a +' + mg + '% safety margin' : '') + ')') + '</div>';
             if (pos < 100) part = part.split('<div style="height:7px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">').join(
               '<div style="height:7px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;position:relative"><div style="position:absolute;left:' + pos.toFixed(2) + '%;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.8)"></div>');
