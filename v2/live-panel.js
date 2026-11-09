@@ -122,16 +122,26 @@
     }
     function callFor(k, cc, cands) {
       if (!window.LiveTurnout || !LiveTurnout.call || typeof CALL_MODEL === 'undefined' || typeof TURNOUT_PRIOR === 'undefined') return null;
-      var TC = G(win, "typeof LIVE_TRACK_TC !== 'undefined' ? LIVE_TRACK_TC : null") || {}, towns = [], a = 0, b = 0;
+      var TC = G(win, "typeof LIVE_TRACK_TC !== 'undefined' ? LIVE_TRACK_TC : null") || {}, CCT = G(win, "typeof LIVE_TRACK_CC !== 'undefined' ? LIVE_TRACK_CC : null") || {}, towns = [], a = 0, b = 0;
+      // a party key for that party's top candidate in the county only; a second candidate of the same party (2022 連江) by name
+      var KM = {};
+      function keyMap(tcc) {
+        if (KM[tcc]) return KM[tcc];
+        var src = CCT[tcc] && CCT[tcc].sources && CCT[tcc].sources[k], m = {}, seen = {};
+        ((src && src.cands) || []).slice().sort(function (x, y) { return y.v - x.v; }).forEach(function (c) {
+          var key = ckey(tcc, c); if (CALL_PARTY[key]) { if (seen[key]) key = 'ind:' + c.n; else seen[key] = 1; } m[c.n] = key;
+        });
+        return (KM[tcc] = m);
+      }
       Object.keys(TC).forEach(function (tc) {
         var src = TC[tc] && TC[tc].sources && TC[tc].sources[k]; if (!src || !src.cands || !src.prog || !src.prog[1]) return;
-        var tcc = ccOf(tc), by = {};
-        src.cands.forEach(function (c) { var key = ckey(tcc, c); by[key] = (by[key] || 0) + (c.v || 0); });
+        var tcc = ccOf(tc), by = {}, km = keyMap(tcc);
+        src.cands.forEach(function (c) { var key = km[c.n] || ckey(tcc, c); by[key] = (by[key] || 0) + (c.v || 0); });
         towns.push({ tc: tc, s: src.prog[0] / src.prog[1], by: by });
         if (tcc === cc) { a += src.prog[0]; b += src.prog[1]; }
       });
       var r = LiveTurnout.call(CALL_MODEL, '2026', TURNOUT_PRIOR['2026'], towns, cc, ccOf, b ? [a, b] : null);
-      if (r) cands.forEach(function (c) { if (ckey(cc, c) === r.lead) r.leadName = c.n; });
+      if (r) { var kmc = keyMap(cc); cands.forEach(function (c) { if ((kmc[c.n] || ckey(cc, c)) === r.lead) r.leadName = c.n; }); }
       if (r) r.party = CALL_PARTY[r.lead] ? r.lead : 'ind';
       return r;
     }
