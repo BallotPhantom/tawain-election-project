@@ -2615,7 +2615,7 @@
     if (keys.length) html += '<select class="lf-srcsel" aria-label="' + T('資料來源', 'Source') + '">' + keys.map(function (k) {
       var f = FEEDS[k], n = Object.keys(f.M).length, ts = f.lastTs();
       var note = f.sim ? (ts != null ? T(n + ' 縣市・' + hhmm(ts) + ' 截圖', n + ' counties · snapshot ' + hhmm(ts)) : T(n + ' 縣市', n + ' counties')) : (ts || '');
-      return '<option value="' + k + '"' + (k === SRC && !CMP.open ? ' selected' : '') + ' title="' + (srcLabel(f) + (note ? '・' + note : '')).replace(/"/g, '&quot;') + '">' + T('來源：', 'Source: ') + srcShort(f) + '</option>';
+      return '<option value="' + k + '"' + (k === SRC && !CMP.open ? ' selected' : '') + ' title="' + (srcLabel(f) + (note ? '・' + note : '')).replace(/"/g, '&quot;') + '">' + srcShort(f) + '</option>';   // just the outlet's name (user 2026-11-09: 「把來源：刪掉」)
     }).join('') + '<option value="__cmp"' + (CMP.open ? ' selected' : '') + '>' + T('各家比較', 'Compare sources') + '</option></select>';
     // (the 「全部縣市」 county menu was removed — user 2026-11-09: 「縣市 filter 應該可以拿掉？這個在打開時指引就行了」: a county is
     // picked on the map or on its mayor's seat, and the ⓘ guide says so)
