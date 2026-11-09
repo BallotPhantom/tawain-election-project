@@ -736,7 +736,22 @@
     });
     return inside;
   }
-  function countyAtFrame(fr) { if (!fr) return null; var hit = null; Object.keys(LF_COUNTY).some(function (cc) { return inRings(LF_COUNTY[cc], fr[0], fr[1]) && (hit = cc); }); return hit; }
+  // counties that lie inside another (嘉義市 in 嘉義縣, 臺北市 in 新北市 — found from the township centres, not listed by hand):
+  // the outer county's rings + the inner one's as holes (even-odd), so its glass, hover wash, toss-up outline and hit test
+  // leave the inner county out (user 2026-11-09: 「那個嘉義市（2022沒選）不夠黑」 — 嘉義縣's glass covered it)
+  var CC_HOLED = (function () {
+    var out = {};
+    Object.keys(LF_COUNTY).forEach(function (cc) { out[cc] = LF_COUNTY[cc]; });
+    Object.keys(LF_COUNTY).forEach(function (a) {
+      var pts = Object.keys(LF_TOWNS).filter(function (tc) { return LF_TOWNS[tc][0] === a; });
+      if (!pts.length) return;
+      Object.keys(LF_COUNTY).forEach(function (b) {
+        if (a !== b && pts.every(function (tc) { return inRings(LF_COUNTY[b], LF_TOWNS[tc][1], LF_TOWNS[tc][2]); })) out[b] = out[b].concat(LF_COUNTY[a]);
+      });
+    });
+    return out;
+  })();
+  function countyAtFrame(fr) { if (!fr) return null; var hit = null; Object.keys(CC_HOLED).some(function (cc) { return inRings(CC_HOLED[cc], fr[0], fr[1]) && (hit = cc); }); return hit; }
   function townAtFrame(cc, fr) {
     if (!fr || !cc) return null; var hit = null;
     Object.keys(LF_TOWNPOLY).some(function (tc) { return LF_TOWNS[tc] && LF_TOWNS[tc][0] === cc && inRings(LF_TOWNPOLY[tc], fr[0], fr[1]) && (hit = tc); });
@@ -861,7 +876,7 @@
     gBg.globalCompositeOperation = 'source-over'; gBg.globalAlpha = 1; gBg.fillStyle = '#000'; gBg.fillRect(0, 0, cvBg.width, cvBg.height);
     var hl = HOVER_CC || FILTER;   // a hovered or picked county: the others' lights at 35 %
     gBg.setTransform(DPR, 0, 0, DPR, 0, 0);
-    if (ccFillPaint(gBg, now, hl, LF_COUNTY)) LT_DIRTY = true;   // the counties' faint party wash, under the lights; repaint while it fades
+    if (ccFillPaint(gBg, now, hl, CC_HOLED)) LT_DIRTY = true;   // the counties' faint party wash, under the lights; repaint while it fades
     gBg.setTransform(1, 0, 0, 1, 0, 0);
     gBg.globalCompositeOperation = 'lighter';   // crops overlap only in empty corners; the cross-fade pair adds up to one
     Object.keys(LT_CTY).forEach(function (cc) {
@@ -879,8 +894,8 @@
       gBg.globalAlpha = ZOOM ? 0.75 : 0.35; gBg.strokeStyle = ZOOM ? '#b4bccb' : '#8f98a8'; gBg.lineWidth = ZOOM ? 0.9 : 0.5; ltRings(LF_TOWNLINE[FILTER]);
     }
     if (hl && LF_COUNTY[hl]) {   // the lit county: a faint white wash and a white outline
-      gBg.globalAlpha = 0.07; gBg.fillStyle = '#fff'; ltRings(LF_COUNTY[hl]); gBg.fill('evenodd');
-      gBg.globalAlpha = 0.95; gBg.strokeStyle = '#fff'; gBg.lineWidth = 1.4; ltRings(LF_COUNTY[hl]);
+      gBg.globalAlpha = 0.07; gBg.fillStyle = '#fff'; ltRings(CC_HOLED[hl]); gBg.fill('evenodd');
+      gBg.globalAlpha = 0.95; gBg.strokeStyle = '#fff'; gBg.lineWidth = 1.4; ltRings(CC_HOLED[hl]);
     }
     gBg.globalAlpha = 1;
   }
@@ -1908,7 +1923,7 @@
   function drawPillars() {
     gPil.clearRect(0, 0, SW, SH);
     dimFloor(true);
-    if (LIE) { ccFillPaint(gPil, performance.now(), FILTER, LF_COUNTY, true); drawCoast(); drawCountyLines(); }
+    if (LIE) { ccFillPaint(gPil, performance.now(), FILTER, CC_HOLED, true); drawCoast(); drawCountyLines(); }
     if (!LIE || !PIL_SNAP) return;
     var now = performance.now(), groups = {}, info = {};
     PIL_ANIM = false;
@@ -2421,7 +2436,7 @@
     gTr.globalCompositeOperation = 'source-over'; gTr.lineJoin = 'round';
     if (ccs.length) {
       var k = REDUCED ? 0.6 : 0.5 - 0.5 * Math.cos(now / CC_PULSE * 2 * Math.PI), path = new Path2D();
-      ccs.forEach(function (cc) { ccRingsPath(path, LF_COUNTY[cc]); });
+      ccs.forEach(function (cc) { ccRingsPath(path, CC_HOLED[cc]); });
       gTr.strokeStyle = '#f5c518';
       gTr.globalAlpha = 0.05 + 0.12 * k; gTr.lineWidth = 5; gTr.stroke(path);   // glow: a wide faint stroke, not shadowBlur
       gTr.globalAlpha = 0.3 + 0.55 * k; gTr.lineWidth = 1.3; gTr.stroke(path);
