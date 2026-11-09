@@ -91,7 +91,11 @@
   .cb .hd .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cb .hd .tg, .cb .hd .pin { flex: 0 0 auto; }
   /* the model's tag (Toss-up / Lean / Likely / 推估當選; user 2026-11-08) after the county name, revealed with the box */
-  .cb .hd .ct { flex: 0 0 auto; margin: 0 auto 0 4px; font-size: 8.5px; font-weight: 600; }
+  .cb .hd .ct { flex: 0 3 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 auto 0 4px; font-size: 8.5px; font-weight: 600; }
+  /* narrow boxes (three a row): the county name keeps ~2 characters, the tag gives way first (ellipsis), 「▸ 選區」 shows
+     only its arrow (user 2026-11-08: 「右邊如果是縣市卡三行縣市名字會不見」) */
+  .cb .hd .nm { flex: 0 1 auto; min-width: 2.2em; }
+  .col.c3 .cb .tg { max-width: 1em; overflow: hidden; }
   .col:hover .cb .ct, .cb.pin-on .ct { color: var(--tc); }
   .cb .tg { cursor: pointer; font-weight: 400; }
   .cb { min-width: 0; }
@@ -1240,7 +1244,20 @@
     // 「不要蓋住圖表」)
     var lfs = Math.max(9, L.R * 0.038);
     gTop.fillStyle = '#9aa1b2'; gTop.font = '600 ' + lfs + 'px system-ui, sans-serif'; gTop.textAlign = 'center';
-    if (LIE && !CMODE) { var lc = ringW(Math.PI / 2, 0.12), lq = proj3(lc[0], lc[1], lc[2]); if (lq) gTop.fillText(T('地方選舉', 'Local Elections'), lq[0], lq[1]); }
+    if (LIE && !CMODE) {   // lying view: inside the arch, turned to run parallel to the hemicycle's straight side (its projected
+      // base line), English one word a line (user 2026-11-08: 「跟長的那一面的直線平行」)
+      var bw = ringW(Math.PI, 1), be = ringW(0, 1), lc = ringW(Math.PI / 2, 0), ap = ringW(Math.PI / 2, 1);   // lc = the base line's middle
+      var qw = proj3(bw[0], bw[1], bw[2]), qe = proj3(be[0], be[1], be[2]), lq = proj3(lc[0], lc[1], lc[2]), qa = proj3(ap[0], ap[1], ap[2]);
+      if (qw && qe && lq && qa) {
+        var th = Math.atan2(qe[1] - qw[1], qe[0] - qw[0]);
+        // the arch's apex must be "up" in the turned frame (negative y); otherwise turn half a circle
+        if (-(qa[0] - lq[0]) * Math.sin(th) + (qa[1] - lq[1]) * Math.cos(th) > 0) th += Math.PI;
+        var lines3 = lang === 'en' ? ['Local', 'Elections'] : ['地方選舉'], f3 = Math.max(8, lfs * 0.95);
+        gTop.save(); gTop.translate(lq[0], lq[1]); gTop.rotate(th); gTop.font = '600 ' + f3 + 'px system-ui, sans-serif';
+        lines3.forEach(function (ln, i) { gTop.fillText(ln, 0, f3 * 0.35 - (lines3.length - 1 - i) * f3 * 1.1); });   // lowest line on the base line
+        gTop.restore();
+      }
+    }
     else if (CMODE) {   // county mode: 「台北 議會 61 席」 and a one-line legend — seats each party leads or has won
       gTop.fillText(T(ccName(FILTER) + ' 議會 ' + CMODE.n + ' 席', ccName(FILTER) + ' council · ' + CMODE.n + ' seats'), L.cx, L.cy + lfs + 8);
       var by = {}; SEATS.forEach(function (x) { if (x.ring === 'C' && x.cc === FILTER && x.st !== 'none') { var k = x.p || 'other'; by[k] = (by[k] || 0) + 1; } });
@@ -1257,7 +1274,21 @@
       });
       gTop.textAlign = 'center';
     }
-    else gTop.fillText(T('地方選舉', 'Local Elections'), L.cx, L.cy + lfs + 8);
+    else {   // inside the arch, under the mayors' ring (user 2026-11-08: 「local elections 地方選舉我想移到半圓形圖的拱形裡面」):
+      // the font shrinks to fit the space within the ring's inner edge, so it never touches a seat
+      // English one word a line (user 2026-11-08: 「local election 一個字一行」), the longer word lower where the space is widest
+      // the lowest line sits level with the bottom row of seats — centred on the base line (user 2026-11-08: 「election 這個字要
+      // 跟最下面的圓點同一行」)
+      var lines = lang === 'en' ? ['Local', 'Elections'] : ['地方選舉'], inner = L.R * 0.26 - Math.max(3.2, L.R * 0.032) - 7, ly0 = 0;
+      var room = function (h) { return 2 * Math.sqrt(Math.max(0, inner * inner - h * h)); };
+      var fs2 = lfs;
+      for (; fs2 > 6; fs2 -= 0.5) {
+        gTop.font = '600 ' + fs2 + 'px system-ui, sans-serif';
+        var ok = lines.every(function (ln, i) { var base = (lines.length - 1 - i) * fs2 * 1.1; return gTop.measureText(ln).width <= room(base + fs2 * 0.45); });
+        if (ok) break;
+      }
+      lines.forEach(function (ln, i) { gTop.fillText(ln, L.cx, L.cy + fs2 * 0.35 - (lines.length - 1 - i) * fs2 * 1.1); });
+    }
   }
 
   // ---------- HUD ----------
