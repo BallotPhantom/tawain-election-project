@@ -154,6 +154,25 @@
   /* the ⓘ legend box (the browser's own title tooltip often never showed, user 2026-11-08: 「滑鼠經過i只出現『？』」) */
   .lf-tip { position: absolute; z-index: 6; max-width: min(420px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 8px; background: rgba(14,17,24,.96); border: 1px solid rgba(255,255,255,.16); color: #cfd4de; font-size: 11.5px; line-height: 1.65; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
   .lf-tip div + div { border-top: 1px solid rgba(255,255,255,.06); }
+  /* 各家比較 (user 2026-11-08: 「各家比較可以放在新版的一個總覽頁面裡」「要也比議員，都來測試」) */
+  .lf-cmp { position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; overflow: auto; background: rgba(8,10,16,.96); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 10px 12px; color: #cfd4de; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .lf-cmp .hd { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .lf-cmp .hd b { font-size: 13px; color: #fff; margin-right: 6px; }
+  .lf-cmp .hd button { font: inherit; font-size: 11px; padding: 2px 9px; border-radius: 12px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.04); color: #cfd4de; cursor: pointer; }
+  .lf-cmp .hd button[aria-pressed="true"] { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.4); }
+  .lf-cmp .hd .x { margin-left: auto; }
+  .lf-cmp .hd .note { color: #7d8496; font-size: 10.5px; }
+  .lf-cmp table { border-collapse: collapse; width: 100%; min-width: 560px; }
+  .lf-cmp th, .lf-cmp td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.06); text-align: left; vertical-align: top; white-space: nowrap; }
+  .lf-cmp th { color: #9aa1b2; font-weight: 600; position: sticky; top: -10px; background: rgba(8,10,16,.98); }
+  .lf-cmp tbody tr { cursor: pointer; }
+  .lf-cmp tbody tr:hover { background: rgba(255,255,255,.05); }
+  .lf-cmp tr.dis td { background: rgba(245,197,24,.10); }
+  .lf-cmp td .s { color: #7d8496; font-size: 10px; display: block; }
+  .lf-cmp td .old { color: #8a8f9c; }
+  .lf-cmp td .df { color: #f5c518; font-weight: 700; margin-left: 4px; }
+  .lf-cmp .sp span { margin-right: 6px; font-weight: 700; }
+  .lf-cmp tfoot td { color: #fff; font-weight: 600; border-top: 1px solid rgba(255,255,255,.2); }
   /* township layer: the hovered township's mayoral numbers (user 2026-11-08) */
   .lf-ttip { position: absolute; z-index: 6; min-width: 150px; padding: 6px 9px; border-radius: 7px; background: rgba(14,17,24,.95); border: 1px solid rgba(255,255,255,.18); color: #cfd4de; font-size: 11px; line-height: 1.55; pointer-events: none; font-variant-numeric: tabular-nums; }
   .lf-ttip .tn { font-weight: 700; color: #fff; margin-bottom: 2px; }
@@ -206,6 +225,7 @@
   <div class="lf-tabs" id="tabs"></div>
   <div class="lf-tip" id="lf-tip" hidden></div>
   <div class="lf-ttip" id="lf-ttip" hidden></div>
+  <div class="lf-cmp" id="lf-cmp" hidden></div>
   <div class="lf-legend" id="legend" hidden></div>
   <div class="lf-cty" id="cty"></div>
   <div class="lf-empty" id="empty" hidden></div>
@@ -947,6 +967,7 @@
           var e = tab[key], srcs = (e && e.sources) || {};
           Object.keys(srcs).forEach(function (k) {
             var s = srcs[k], f = feed(k); f.label = s.label; if (s.ts && (!f.ts || s.ts > f.ts)) f.ts = s.ts;
+            if (s.ts) (f.tsBy || (f.tsBy = {}))[pair[1] + key] = s.ts;   // per county / district, for 各家比較's 「N 分鐘前」
             s.cands = dedupe(s.cands); f[pair[1]][key] = s.cands;
             if (s.prog) f.prog[key] = s.prog;
             var ne = (s.cands || []).filter(function (c) { return c.e; }).length;
@@ -1826,6 +1847,7 @@
   function hud(f, snap) {
     CALLS = {}; LF_SEATS.mayor.forEach(function (cc) { CALLS[cc] = callOf(f, snap, cc); });
     if (HOVER_TC) townTip();   // the township box follows the count
+    if (CMP.open && performance.now() - CMP.at > 1000) cmpRender();   // 各家比較 — once a second
     PIL_SNAP = snap; PIL_FEED = f; flipUpdate(f, snap); drawPillars(); ltUpdate(f, snap); crUpdate(f, snap);
     ctyPanel(f, snap);
     var tot = { dpp: 0, kmt: 0 }, all = 0, fin = 0;
@@ -1895,6 +1917,99 @@
     if (cc) pickCounty(cc === FILTER ? null : cc);
     else if (FILTER) pickCounty(null);
   }
+  // ---------- 各家比較: every source side by side (user 2026-11-08) ----------
+  // 縣市長: per county and source the leader, the margin, how far counted and how old the numbers are; a row whose sources
+  // disagree on the leader is yellow; a source's vote for a candidate more than 1% off the others' median gets 「≠」; a
+  // source more than 10 minutes behind (the poller's own clock stamps; the snapshot time in the rehearsal) shows 「N 分前」 greyed.
+  // 議員: per county and source the seats each party leads or has won (+ the national total). A click on a row opens that
+  // county's township layer. Numbers are never merged — each source stays its own column (same rule as the tabs).
+  var CMP = { open: false, tab: 'M', at: 0 };
+  function cmpOpen(v) {
+    CMP.open = v; var el = document.getElementById('lf-cmp'); el.hidden = !v;
+    if (v) { el.style.top = (document.getElementById('tabs').offsetHeight + 16) + 'px'; cmpRender(); }
+    renderTabs();
+  }
+  // minutes a source's numbers are behind, or 0. The poller stamps every read in Taiwan time ('2026-11-28 19:03';
+  // poll_live2026.py, TW zone since 2026-11-08), so the age is now − that, both as Taiwan time — right for a reader anywhere
+  function cmpAge(f, layer, key) {
+    if (f.sim) { var e = layer === 'M' ? f.M[key] : null; return e && e.at != null && CLOCK > e.at ? Math.round(CLOCK - e.at) : 0; }
+    var ts = f.tsBy && f.tsBy[layer + key]; if (!ts) return 0;
+    var m = /(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/.exec(ts);
+    if (!m) return 0;
+    var t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 8 * 3600e3;   // Taiwan = UTC+8, no daylight saving
+    return Math.max(0, Math.round((Date.now() - t) / 60000));
+  }
+  function cmpProg(f, snap, cc) {
+    if (f.sim) { var p = snap.prog && snap.prog[cc]; return p != null ? Math.round(p * 100) + '%' : ''; }
+    var g = f.prog && f.prog[cc]; return g && g[1] ? g[0] + '/' + g[1] : '';
+  }
+  function cmpRender() {
+    CMP.at = performance.now();
+    var el = document.getElementById('lf-cmp'); if (!el || !CMP.open) return;
+    var keys = feedKeys(), snaps = {};
+    keys.forEach(function (k) { var f = FEEDS[k]; try { snaps[k] = f.sim ? f.votesAt(CLOCK) : f.votesAt(); } catch (e) { snaps[k] = null; } });
+    var head = '<div class="hd"><b>' + T('各家比較', 'Compare sources') + '</b>' +
+      '<button type="button" data-ct="M" aria-pressed="' + (CMP.tab === 'M') + '">' + T('縣市長', 'Mayors') + '</button>' +
+      '<button type="button" data-ct="C" aria-pressed="' + (CMP.tab === 'C') + '">' + T('議員', 'Councils') + '</button>' +
+      '<span class="note">' + (CMP.tab === 'M' ? T('黃底＝各家領先者不同・≠＝某候選人票數與其他家差 1% 以上・灰＝超過 10 分鐘沒更新', 'Yellow = sources disagree on the leader · ≠ = a vote 1%+ off the others · grey = 10+ min old')
+        : T('各黨目前領先＋確定席數；黃底＝各家不同（小黨合併為其他後比較）', 'Seats each party leads or has won; yellow = sources differ (small parties pooled)')) + '</span>' +
+      '<button type="button" class="x" data-cx="1">' + T('關閉', 'Close') + ' ✕</button></div>';
+    var th = '<tr><th>' + T('縣市', 'County') + '</th>' + keys.map(function (k) { return '<th>' + srcShort(FEEDS[k]) + '</th>'; }).join('') + '</tr>';
+    var body = '', foot = '';
+    if (CMP.tab === 'M') {
+      body = GEO.map(function (cc) {
+        var cells = [], leaders = {}, votes = {};
+        keys.forEach(function (k) {
+          var sn = snaps[k], cs = sn && sn.M && sn.M[cc]; if (!cs || sumC(cs) <= 0) return;
+          var srt = cs.slice().sort(function (a, b) { return b.v - a.v; }); leaders[k] = srt[0].n;
+          cs.forEach(function (c) { (votes[c.n] = votes[c.n] || []).push(c.v); });
+        });
+        var ln = Object.keys(leaders).map(function (k) { return leaders[k]; }), dis = ln.length > 1 && ln.some(function (n) { return n !== ln[0]; });
+        var med = {}; Object.keys(votes).forEach(function (n) { var a = votes[n].slice().sort(function (x, y) { return x - y; }); med[n] = a[a.length >> 1]; });
+        keys.forEach(function (k) {
+          var f = FEEDS[k], sn = snaps[k], cs = sn && sn.M && sn.M[cc];
+          if (!cs || sumC(cs) <= 0) { cells.push('<td class="old">—</td>'); return; }
+          var srt = cs.slice().sort(function (a, b) { return b.v - a.v; }), a = srt[0], b = srt[1], p = pc('M', cc, a, f.year) || 'other';
+          var off = Object.keys(votes).length && cs.some(function (c) { return votes[c.n].length > 1 && med[c.n] > 0 && Math.abs(c.v - med[c.n]) / med[c.n] > 0.01; });
+          var age = cmpAge(f, 'M', cc), pr = cmpProg(f, sn, cc);
+          cells.push('<td class="' + (age > 10 ? 'old' : '') + '"><span style="color:' + (age > 10 ? '' : lineOf(p)) + '">' + a.n + '</span>' + (off ? '<span class="df" title="' + T('有候選人票數與其他來源差 1% 以上', 'a vote 1%+ off the other sources') + '">≠</span>' : '') +
+            '<span class="s">' + (b ? T('領先 ', '+') + fmt(a.v - b.v) : '') + (pr ? '・' + pr : '') + (age > 10 ? '・' + T(age + ' 分前', age + ' min ago') : '') + '</span></td>');
+        });
+        return '<tr class="' + (dis ? 'dis' : '') + '" data-cc="' + cc + '"><td>' + ccName(cc) + '</td>' + cells.join('') + '</tr>';
+      }).join('');
+    } else {
+      var tot = {};
+      var seatsBy = function (k, cc) {   // {party: seats} leading or won in the county's districts, from this source
+        var sn = snaps[k], f = FEEDS[k], out = {}, any = false;
+        Object.keys(LF_SEATS.council).forEach(function (dk) {
+          if (cc && LF_SEATS.council[dk][0] !== cc) return;
+          var cs = sn && sn.C && sn.C[dk]; if (!cs || sumC(cs) <= 0) return; any = true;
+          cs.slice().sort(function (a, b) { return b.v - a.v; }).slice(0, LF_SEATS.council[dk][1]).forEach(function (c) { var p = pc('C', dk, c, f.year) || 'other'; out[p] = (out[p] || 0) + 1; });
+        });
+        return any ? out : null;
+      };
+      // short party names that don't collide (無黨籍 / 無黨團結聯盟 both cut to 「無黨」 before)
+      var SH = { dpp: '民進', kmt: '國民', tpp: '民眾', ind: '無黨', npp: '時力', tsr: '基進', sdp: '社民', gp: '綠黨', tsu: '台聯', npa: '無盟', lp: '勞動', np: '新黨', pfp: '親民', spgp: '歐巴桑', szmd: '正神', mkt: '民國', other: '其他' };
+      var cellOf = function (m) {
+        if (!m) return '<td class="old">—</td>';
+        return '<td class="sp">' + Object.keys(m).sort(function (a, b) { return orderOf(a) - orderOf(b); }).map(function (p) { return '<span style="color:' + lineOf(p) + '" title="' + (PN[p] ? T(PN[p][0], PN[p][1]) : p) + '">' + T(SH[p] || (PN[p] ? PN[p][0] : p), PN[p] ? PN[p][1] : p) + ' ' + m[p] + '</span>'; }).join('') + '</td>';
+      };
+      // sources differ = the seats differ once the small parties are pooled into 「其他」 (ETtoday gives only the main parties'
+      // icons and files the rest as 其他 — not a real difference)
+      var bloc = function (m) { var o = { dpp: 0, kmt: 0, tpp: 0, ind: 0, other: 0 }; Object.keys(m).forEach(function (p) { o[o[p] != null ? p : 'other'] += m[p]; }); return JSON.stringify(o); };
+      body = GEO.map(function (cc) {
+        var ms = keys.map(function (k) { return seatsBy(k, cc); }), js = ms.filter(Boolean).map(bloc);
+        var dis = js.length > 1 && js.some(function (x) { return x !== js[0]; });
+        return '<tr class="' + (dis ? 'dis' : '') + '" data-cc="' + cc + '"><td>' + ccName(cc) + '</td>' + ms.map(cellOf).join('') + '</tr>';
+      }).join('');
+      foot = '<tfoot><tr><td>' + T('全國', 'Total') + '</td>' + keys.map(function (k) { return cellOf(seatsBy(k, null)); }).join('') + '</tr></tfoot>';
+    }
+    el.innerHTML = head + '<table><thead>' + th + '</thead><tbody>' + body + '</tbody>' + foot + '</table>';
+    el.querySelectorAll('button[data-ct]').forEach(function (b) { b.onclick = function () { CMP.tab = b.dataset.ct; cmpRender(); }; });
+    el.querySelector('button[data-cx]').onclick = function () { cmpOpen(false); };
+    el.querySelectorAll('tbody tr[data-cc]').forEach(function (tr) { tr.onclick = function () { cmpOpen(false); pickCounty(tr.dataset.cc); }; });
+  }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && CMP.open) cmpOpen(false); });
   function renderTabs() {
     var el = document.getElementById('tabs'), keys = feedKeys();
     if (!FEEDS[SRC]) SRC = keys[0] || null;
@@ -1909,6 +2024,7 @@
       (LIE ? '<button type="button" data-pil="1" title="' + T('光柱：平滑＝高度相近（每個人口點一根）；高低＝人口集中區較高（約 3 公里一根）', 'Pillars: smooth = similar heights (one per population point); relief = crowded areas taller (one per ~3 km)') + '">' +
         T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth')) + '</button>' +
         '<button type="button" data-cam0="1" title="' + T('回到預設角度', 'Reset view') + '">⟲</button>' : '');
+    if (keys.length) html += '<button type="button" data-cmp="1" aria-pressed="' + CMP.open + '" title="' + T('各來源的縣市長與議員數字並排比較', 'Every source side by side — mayors and councils') + '">' + T('各家比較', 'Compare sources') + '</button>';
     html += ctySelectHtml() + '<span class="lf-info" role="button" tabindex="0" aria-expanded="false" aria-label="' + T('圖例說明', 'Legend') + '">ⓘ</span>';
     if (!keys.length) html += '<span class="lf-banner">' + T('目前還沒有任何來源的開票資料', 'No source has reported yet') + '</span>';
     var f = FEEDS[SRC];
@@ -1916,6 +2032,7 @@
       '<button type="button" data-ctl="speed">' + SPEED + '×</button><button type="button" data-ctl="restart">↺</button></span>';
     el.innerHTML = html;
     el.querySelectorAll('button[data-src]').forEach(function (b) { b.onclick = function () { SRC = b.dataset.src; restart(); }; });
+    el.querySelectorAll('button[data-cmp]').forEach(function (b) { b.onclick = function () { cmpOpen(!CMP.open); }; });
     el.querySelectorAll('button[data-view]').forEach(function (b) { b.onclick = function () {
       VIEW = LIE ? 'flat' : 'lie'; LIE = VIEW === 'lie';
       root.style.cursor = LIE ? 'grab' : ''; layout(); renderTabs();

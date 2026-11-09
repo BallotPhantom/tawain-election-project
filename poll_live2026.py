@@ -43,6 +43,10 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime
+from zoneinfo import ZoneInfo
+# every timestamp written into the data is Taiwan time (2026-11-08): the poller runs on a Mac in another zone on the night,
+# while the public page's readers are mostly in Taiwan — 「最後更新」 and 各家比較's 「N 分前」 read it as Taiwan time
+TW = ZoneInfo('Asia/Taipei')
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -455,7 +459,7 @@ def _parse_mayor_page(html, county, cc, pool, now_label):
 
 
 def fetch_ltn(tc_pool, council_seats, year=2026):
-    now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    now_label = datetime.now(TW).strftime('%Y-%m-%d %H:%M')
     cc_out, tc_out, ed_out = {}, {}, {}
     slugs = {k: v for k, v in LTN_SLUGS.items() if not ONLY_COUNTIES or k in ONLY_COUNTIES}
     for n_county, (county, slug) in enumerate(slugs.items()):
@@ -552,7 +556,7 @@ def _entry(cands, label, stype, ts, prog):
 
 
 def fetch_cna(tc_pool, council_seats, year=2026):
-    now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    now_label = datetime.now(TW).strftime('%Y-%m-%d %H:%M')
     base = f'https://www.cna.com.tw/project/{CNA_PROJECT.get(year, CNA_PROJECT[2026])}/api/'
     label = '中央社(中選會數字)'
     cc_out, tc_out, ed_out = {}, {}, {}
@@ -609,7 +613,7 @@ def fetch_cna(tc_pool, council_seats, year=2026):
 
 
 def fetch_tvbs(tc_pool, council_seats, year=2026):
-    now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    now_label = datetime.now(TW).strftime('%Y-%m-%d %H:%M')
     label = 'TVBS(開票中心)'
     cc_out, tc_out, ed_out = {}, {}, {}
     try:
@@ -667,7 +671,7 @@ _ETT_PID = {'1': 'kmt', '16': 'dpp', '999': 'ind'}
 
 
 def fetch_ettoday(tc_pool, council_seats, year=2026):
-    now_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    now_label = datetime.now(TW).strftime('%Y-%m-%d %H:%M')
     base = f'https://media.ettoday.net/events/election{year}/data/html/'
     label = 'ETtoday(中選會數字)'
     cc_out, tc_out, ed_out = {}, {}, {}
@@ -868,7 +872,7 @@ def _append_margin_log(cc_fresh, accepted_keys, source_key='auto_poll'):
         print(f'  領先幅度紀錄：讀取失敗，這一輪跳過寫入（{e}）', file=sys.stderr)
         return
 
-    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ts = datetime.now(TW).strftime('%Y-%m-%d %H:%M:%S')
     changed = False
     for key in accepted_keys:
         info = cc_fresh.get(key)
