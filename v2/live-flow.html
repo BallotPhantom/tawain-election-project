@@ -153,13 +153,56 @@
   #col-f .cb .tg { display: none; }
   /* the picked county's mayoral lines merged into its card (user 2026-11-08: 「這張卡直接併入台北卡」) */
   .cb .mx { display: none; }
-  #col-f .cb .mx { display: block; color: #9aa1b2; font-size: 10px; line-height: 13px; margin: 3px 0 1px; white-space: normal; }
-  #col-f .cb .mx .ml { color: #e7eaf0; }
-  #col-f .cb .mx .dot, #col-f .cb .mx .ring { display: inline-block; width: 7px; height: 7px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
-  #col-f .cb .mx .ring { width: 5px; height: 5px; border: 1.5px solid; }
+  #col-f .cb .mx, #ph-list .cb.ph-pick .mx { display: block; color: #9aa1b2; font-size: 10px; line-height: 13px; margin: 3px 0 1px; white-space: normal; }
+  #col-f .cb .mx .ml, #ph-list .cb.ph-pick .mx .ml { color: #e7eaf0; }
+  #col-f .cb .mx .dot, #col-f .cb .mx .ring, #ph-list .cb .mx .dot, #ph-list .cb .mx .ring { display: inline-block; width: 7px; height: 7px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+  #col-f .cb .mx .ring, #ph-list .cb .mx .ring { width: 5px; height: 5px; border: 1.5px solid; }
   #col-f #cty { position: static; width: auto; margin-top: 4px; }
   #col-f #cty .box { margin-top: 0; }
-  @media (max-width: 640px) { #cols { display: none; } }   /* two 300-px columns do not fit a phone; not designed yet */
+  @media (max-width: 640px) { #cols { display: none; } }   /* two 300-px columns do not fit a phone: the list below instead */
+  /* phones (user 2026-11-08: 平板／手機提案 A →「a 開始」): the stage keeps one screen; under it the page scrolls to every
+     county's box — Toss-up first, then counting, then complete (a picked county above them all) — lit, bigger, no veil
+     (no hover on a touch screen); 「▾ 各縣市票數」 at the bottom of the stage jumps there, 「▴ 回到地圖」 back */
+  #ph-list, .ph-more { display: none; }
+  /* tablets — a touch screen with no hover, wider than a phone (user 2026-11-08: 平板提案 B →「b 也可」): the side columns stay
+     put away behind a tab at each edge (「各縣市」); a tap opens both, lit, no veil; a tap on the tab or the map puts them
+     away. A Toss-up box (and a followed ★ box) still shows while they are away; the picked county's column is untouched */
+  .tb-tab { display: none; }
+  body.lf-touch .tb-tab { display: block; position: absolute; top: 50%; transform: translateY(-50%); z-index: 5; writing-mode: vertical-rl; padding: 12px 5px;
+                          font: inherit; font-size: 12px; letter-spacing: 2px; color: #cfd4de; background: rgba(18,23,34,.88); border: 1px solid rgba(255,255,255,.22); cursor: pointer; }
+  body.lf-touch .tb-tab.l { left: 0; border-left: 0; border-radius: 0 8px 8px 0; }
+  body.lf-touch .tb-tab.r { right: 0; border-right: 0; border-radius: 8px 0 0 8px; }
+  body.lf-touch #cols:not(.tb-open) :is(#col-l, #col-r) .cb:not(.toss-on):not(.pin-on) { visibility: hidden; }
+  body.lf-touch #cols.tb-open :is(#col-l, #col-r) .cb:not(.pin-on) { color: #e7eaf0; border-color: var(--pc); background: rgba(10,13,22,.88); animation: none; }
+  body.lf-touch #cols.tb-open :is(#col-l, #col-r) .cb .cn { color: var(--cc); animation: none; }
+  body.lf-touch #cols.tb-open :is(#col-l, #col-r) .cb .bar { background: var(--cc); opacity: .75; animation: none; }
+  body.lf-touch #cols.tb-open :is(#col-l, #col-r) .cb .hd .ct { color: var(--tc); }
+  body.lf-touch #cols.tb-open :is(#col-l, #col-r) .cb .bt::after { opacity: 1; }
+  body.lf-touch #cols.tb-open :is(#col-l, #col-r) .cb.toss-on { border-color: #f5c518; }
+  @media (max-width: 640px) { body.lf-touch .tb-tab { display: none; } }
+  @media (max-width: 640px) {
+    html, body { height: auto; overflow-x: hidden; overflow-y: auto; }
+    #ph-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; padding: 12px 12px calc(28px + env(safe-area-inset-bottom, 0px));
+               background: #000; border-top: 1px solid rgba(255,255,255,.12); }
+    #ph-list .ph-top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; color: #e7eaf0; }
+    #ph-list .ph-top button, .ph-more { font: inherit; font-size: 11.5px; font-weight: 500; padding: 3px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.22);
+               background: rgba(255,255,255,.06); color: #cfd4de; cursor: pointer; }
+    .ph-more { display: block; grid-column: 1 / 3; justify-self: center; pointer-events: auto; }
+    #ph-list .ph-h { grid-column: 1 / -1; font-size: 11px; color: #9aa1b2; margin-top: 6px; }
+    #ph-list .ph-h.toss { color: #f5c518; }
+    #ph-list .cb { font-size: 12px; line-height: 16px; padding: 5px 7px 4px; color: #e7eaf0; border-color: var(--pc); background: rgba(10,13,22,.88); }
+    #ph-list .cb .cn { color: var(--cc); }
+    #ph-list .cb .bar { background: var(--cc); opacity: .75; height: 3px; }
+    #ph-list .cb .hd .ct { color: var(--tc); font-size: 10.5px; }
+    #ph-list .cb .bt::after { opacity: 1; }
+    #ph-list .cb .pin { display: none; }
+    #ph-list .cb.toss-on { border-color: #f5c518; }
+    #ph-list .cb.ph-pick { border-color: #fff; grid-column: 1 / -1; }
+    #ph-list .cb.ph-pick .mx { font-size: 11px; line-height: 15px; }
+    #ph-list .cb.open { grid-column: 1 / -1; }
+    #ph-list .cb .det { position: static; width: auto; margin: 4px -7px -4px; border-radius: 0 0 5px 5px; }
+    #ph-list .cb .det select { font-size: 13px; }
+  }
   .lf-info { cursor: pointer; color: #9aa1b2; font-size: 13px; padding: 0 4px; }
   .lf-info:hover, .lf-info[aria-expanded="true"] { color: #fff; }
   /* the ⓘ legend box (the browser's own title tooltip often never showed, user 2026-11-08: 「滑鼠經過i只出現『？』」) */
@@ -253,12 +296,15 @@
   <div class="lf-cty" id="cty"></div>
   <div class="lf-empty" id="empty" hidden></div>
   <div id="cols"><div class="col" id="col-l"></div><div class="col" id="col-r"></div><div class="col" id="col-f" hidden></div></div>
+  <button type="button" class="tb-tab l" id="tb-l" aria-expanded="false"></button><button type="button" class="tb-tab r" id="tb-r" aria-expanded="false"></button>
   <div class="lf-hud">
     <div class="lf-side" id="hud-g"></div>
     <div class="lf-mid" id="hud-m"></div>
     <div class="lf-side r" id="hud-b"></div>
+    <button type="button" class="ph-more" id="ph-more"></button>
   </div>
 </div>
+<div id="ph-list"></div>
 <script src="data_liveflow.js?v=20261108d"></script>
 <script src="data_liveflow_r2022.js?v=20261105b"></script>
 <script src="data_council_seats_2026.js?v=20261107a"></script>
@@ -323,11 +369,16 @@
     // the stage starts under the header as it actually stands (on a phone the header can wrap to two lines and used to
     // cover the tab row)
     var bar = document.getElementById('v2-bar'); if (bar) root.style.top = bar.offsetHeight + 'px';
+    // a phone: the stage in the page flow, one (small-viewport) screen high, with the county list scrolling under it
+    if (window.innerWidth < 640) { root.style.position = 'relative'; root.style.top = '0'; root.style.bottom = 'auto'; root.style.height = 'calc(100svh - ' + (bar ? bar.offsetHeight : 46) + 'px)'; }
+    else { root.style.position = root.style.bottom = root.style.height = ''; }
     DPR = Math.min(2, window.devicePixelRatio || 1);
     SW = root.clientWidth; SH = root.clientHeight;
     [cvBg, cvPil, cvTr, cvTop].forEach(function (c) { c.width = Math.round(SW * DPR); c.height = Math.round(SH * DPR); });
     [gBg, gPil, gTr, gTop].forEach(function (g) { g.setTransform(DPR, 0, 0, DPR, 0, 0); });
     var narrow = SW < 640;
+    // the 「▾ 各縣市票數」 button is in the bottom block before its height is read (layout runs once before these are set)
+    if (narrow && !PHKEY && CSIDE && CROWS && GEO) phPlace(null, null);
     var top = document.getElementById('tabs').offsetHeight + 16;
     document.getElementById('cty').style.top = (top + 4) + 'px'; document.getElementById('cty').style.zIndex = 4;
     // hemicycle on top, the map under it. (The 3D views — tilted, room, orbit, wall — were tried 2026-11-05…07 and
@@ -575,7 +626,8 @@
     }); });
     if (x1 < x0) return null;
     var pad = 3; x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
-    var side = SW > 900 ? 330 : 16, ax0 = side, ax1 = SW - side, ay0 = L.cy + 34, ay1 = SH - 18;
+    // a phone: above the bottom block (totals, 「▾ 票數」), which covered the zoomed county's south (user 2026-11-08, 手機 A)
+    var side = SW > 900 ? 330 : 16, ax0 = side, ax1 = SW - side, ay0 = L.cy + 34, ay1 = SH - (SW < 640 ? document.querySelector('.lf-hud').offsetHeight + 22 : 18);
     var k = Math.min((ax1 - ax0) / Math.max(1, x1 - x0), (ay1 - ay0) / Math.max(1, y1 - y0), BASEL.k * 12);
     return { k: k, ox: (ax0 + ax1) / 2 - (x0 + x1) / 2 * k, oy: (ay0 + ay1) / 2 - (y0 + y1) / 2 * k };
   }
@@ -747,6 +799,7 @@
     gBg.globalAlpha = 1;
   }
   function drawBg() {
+    root.style.touchAction = LIE ? 'none' : '';   // 3D: a finger turns / pinches the view instead of scrolling or zooming the page
     cvBg.style.transition = 'none'; cvBg.style.opacity = LIE ? '0' : '1';
     if (LIE) { gBg.clearRect(0, 0, SW, SH); gBg.fillStyle = '#000'; gBg.fillRect(0, 0, SW, SH); return; }   // lying view: no lights at all (user 2026-11-07: 「躺的視角不要再出現人點點」)
     ltLayout(); ltPaint(performance.now());
@@ -1242,20 +1295,34 @@
     // the side county boxes too (user 2026-11-07: 「隱藏在暗處的詳細開票數字沒辦法點縣議員選單」 — the drag grabbed the pointer
     // before the 「▸ 選區」 toggle could get its click)
     if (!LIE || !LCAM || e.target.closest('.lf-tabs, .lf-cty, .lf-hud, #cols, button, select')) return;
+    // two fingers (tablets; user 2026-11-08 平板提案 B): pinch = the wheel's zoom, the one-finger turn stops
+    PTRS[e.pointerId] = [e.clientX, e.clientY];
+    var ids = Object.keys(PTRS);
+    if (ids.length === 2) { var a = PTRS[ids[0]], b = PTRS[ids[1]]; PINCH = { d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cd: LCAM.d }; LDRAG = null; root.setPointerCapture(e.pointerId); return; }
     CAM_TW++;   // a drag stops a glide
     LDRAG = { x: e.clientX, y: e.clientY, az: LCAM.az, cy: LCAM.y }; root.setPointerCapture(e.pointerId); root.style.cursor = 'grabbing';
   });
   root.addEventListener('pointermove', function (e) {
+    if (PTRS[e.pointerId]) PTRS[e.pointerId] = [e.clientX, e.clientY];
+    if (PINCH && LCAM) {
+      var ids = Object.keys(PTRS); if (ids.length < 2) return;
+      var a = PTRS[ids[0]], b = PTRS[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+      LCAM.d = Math.max(FILTER ? 40 : 800, Math.min(20000, PINCH.cd * PINCH.d0 / d)); LMOVED = true; camChanged(); return;
+    }
     if (!LDRAG) return;
     LCAM.az = LDRAG.az + (e.clientX - LDRAG.x) * 0.005; LMOVED = true;
     LCAM.y = Math.max(20, Math.min(4000, LDRAG.cy + (e.clientY - LDRAG.y) * 4));
     camChanged();
   });
+  var PTRS = {}, PINCH = null;
+  root.addEventListener('pointercancel', function (e) { delete PTRS[e.pointerId]; PINCH = null; LDRAG = null; });
   root.addEventListener('pointerup', function (e) {
+    delete PTRS[e.pointerId];
+    if (PINCH) { if (Object.keys(PTRS).length < 2) { PINCH = null; PTRS = {}; camChanged(); } return; }
     if (LDRAG) {
       var still = Math.hypot(e.clientX - LDRAG.x, e.clientY - LDRAG.y) < 4;
       LDRAG = null; root.style.cursor = LIE ? 'grab' : ''; camChanged();
-      if (still) seatClick(e);
+      if (still && !(TOUCHUI && tbOpen())) seatClick(e);
     }
   });
   root.addEventListener('click', function (e) { if (!LIE && !e.target.closest('.lf-tabs, .lf-cty, .lf-hud, #cols, button, select')) seatClick(e); });
@@ -1705,6 +1772,52 @@
     return (CROWS[cc] = el);
   }
   var CSIDE = {};   // cc -> 'l' | 'r' | null (no numbers yet: not shown)
+  // the phone list (#ph-list): one group per state — the picked county, Toss-up, counting, complete — geographic order
+  // inside; rebuilt only when the order, the pick or the language changes
+  var LASTPH = null, PHKEY = null, PHPICK = '', PHTOUCH = 0;
+  // tablets (提案 B): no hover → the side columns open from the edge tabs
+  var TOUCHUI = !!(window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches) || /[?&]touch=1\b/.test(location.search);   // ?touch=1: to check it with a mouse
+  if (TOUCHUI) document.body.classList.add('lf-touch');
+  function tbOpen() { return document.getElementById('cols').classList.contains('tb-open'); }
+  function tbSet(open) {
+    document.getElementById('cols').classList.toggle('tb-open', open);
+    ['tb-l', 'tb-r'].forEach(function (id) { var b = document.getElementById(id); b.textContent = open ? T('收起', 'Hide') : T('各縣市', 'Counties'); b.setAttribute('aria-expanded', open ? 'true' : 'false'); });
+  }
+  ['tb-l', 'tb-r'].forEach(function (id) { document.getElementById(id).onclick = function (e) { e.stopPropagation(); tbSet(!tbOpen()); }; });
+  // a tap on the map with the columns out only puts them away (capture: before the map's own click picks a county)
+  root.addEventListener('click', function (e) {
+    if (TOUCHUI && tbOpen() && !e.target.closest('#cols, .tb-tab')) { e.stopPropagation(); tbSet(false); }
+  }, true);
+  function phPlace(f, snap) {
+    var list = document.getElementById('ph-list'), more = document.getElementById('ph-more');
+    var rank = function (cc) { return cc === FILTER ? 0 : CCTOSS[cc] ? 1 : f && snap && f.finalAt('M', cc, snap) ? 3 : 2; };
+    var ccs = GEO.filter(function (cc) { return CSIDE[cc] || cc === FILTER; });
+    ccs.sort(function (a, b) { return rank(a) - rank(b) || GEO.indexOf(a) - GEO.indexOf(b); });
+    var key = T('z', 'e') + '|' + ccs.map(function (cc) { return cc + rank(cc); }).join(',');
+    if (key === PHKEY) return;
+    // the order holds while the reader is at it — a box open, or the list touched in the last 4 s — so a box does not slide
+    // away under a finger (a new pick still goes through)
+    if (PHKEY && (FILTER || '') === PHPICK && (list.querySelector('.cb.open') || performance.now() - PHTOUCH < 4000)) return;
+    PHKEY = key; PHPICK = FILTER || '';
+    if (!list.__ph) { list.__ph = 1; list.addEventListener('pointerdown', function () { PHTOUCH = performance.now(); }, true); list.addEventListener('scroll', function () { PHTOUCH = performance.now(); }, true); }
+    more.textContent = '▾ ' + (FILTER ? T(ccName(FILTER) + ' 票數', ccName(FILTER) + ' results') : T('各縣市票數', 'Every county'));
+    more.onclick = function () { list.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    var heads = [T('選取的縣市', 'Picked'), T('拉鋸中（Toss-up）', 'Toss-up'), T('開票中', 'Counting'), T('已開完', 'Complete')];
+    list.textContent = '';
+    var top = document.createElement('div'); top.className = 'ph-top';
+    top.innerHTML = '<span>' + T('各縣市長開票', 'Mayoral races') + '</span><button type="button">▴ ' + T('回到地圖', 'Back to map') + '</button>';
+    top.querySelector('button').onclick = function () { window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    list.appendChild(top);
+    if (!ccs.length) { var e = document.createElement('div'); e.className = 'ph-h'; e.textContent = T('還沒有開出的票', 'No votes counted yet'); list.appendChild(e); }
+    var last = -1;
+    ccs.forEach(function (cc) {
+      var r = rank(cc);
+      if (r !== last) { var h = document.createElement('div'); h.className = 'ph-h' + (r === 1 ? ' toss' : ''); h.textContent = heads[r]; list.appendChild(h); last = r; }
+      var el = crRow(cc); el.classList.toggle('ph-pick', r === 0);
+      el.style.transform = ''; list.appendChild(el);
+    });
+    GEO.forEach(function (cc) { var el = CROWS[cc]; if (el && ccs.indexOf(cc) < 0) { el.classList.remove('ph-pick'); if (el.parentNode) el.parentNode.removeChild(el); } });
+  }
   // gender of a council candidate (LF_GENDER: 2022 from the CEC files; none for 2026 yet): exact name, else the Chinese
   // characters only (indigenous names carry a romanised name), else the one name in the district of the same length that
   // differs by one character (variant characters: 黃／黄, 峰／峯, 采／釆 …); otherwise unknown (null), never guessed
@@ -1790,7 +1903,7 @@
     var top0 = (document.getElementById('tabs').offsetHeight || 40) + 10;
     if (ctyEl.parentNode !== colF) colF.appendChild(ctyEl);
     colF.hidden = !FILTER;
-    colF.style.left = '12px'; colF.style.top = top0 + 'px';
+    colF.style.left = (TOUCHUI ? 34 : 12) + 'px'; colF.style.top = top0 + 'px';
     // never down over the bottom totals: the column scrolls inside instead
     var hudTop = document.querySelector('.lf-hud').getBoundingClientRect().top - root.getBoundingClientRect().top;
     colF.style.maxHeight = Math.max(160, hudTop - top0 - 8) + 'px'; colF.style.overflowY = 'auto';
@@ -1799,8 +1912,8 @@
   function crUpdate(f, snap) {
     var colL = document.getElementById('col-l'), colR = document.getElementById('col-r'), moved = false;
     var top0 = (document.getElementById('tabs').offsetHeight || 40) + 10;
-    colL.style.left = '12px'; colL.style.top = top0 + 'px';
-    colR.style.left = (SW - 312) + 'px'; colR.style.top = (top0 + (SW > 640 ? 42 : 0)) + 'px';   // below the top-right middle box
+    colL.style.left = (TOUCHUI ? 34 : 12) + 'px'; colL.style.top = top0 + 'px';   // tablets: clear of the edge tabs
+    colR.style.left = (SW - 312 - (TOUCHUI ? 22 : 0)) + 'px'; colR.style.top = (top0 + (SW > 640 ? 42 : 0)) + 'px';   // below the top-right middle box
     GEO.forEach(function (cc) {
       var cs = snap.M[cc], el = crRow(cc);
       var top = cs && sumC(cs) > 0 ? cs.slice().sort(function (a, b) { return b.v - a.v; }) : null;
@@ -1861,6 +1974,8 @@
       if (side !== CSIDE[cc]) { CSIDE[cc] = side; moved = true; }
     });
     if (FILTER !== LASTF) moved = true;
+    var ph = SW < 640; if (ph !== LASTPH) { LASTPH = ph; PHKEY = null; moved = true; }
+    if (ph) { phPlace(f, snap); return; }
     if (!moved) { placeFocus(); fitCols(); return; }
     // re-place: boxes in geographic order in their column; a box that changed side glides there (FLIP); the picked
     // county's box goes to the focus column instead
@@ -2119,6 +2234,7 @@
   }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && CMP.open) cmpOpen(false); });
   function renderTabs() {
+    tbSet(tbOpen());   // the edge tabs' words follow the language
     var el = document.getElementById('tabs'), keys = feedKeys();
     if (!FEEDS[SRC]) SRC = keys[0] || null;
     var html = '<button type="button" data-mode="live" aria-pressed="' + (MODE === 'live') + '">' + T('2026 開票', '2026 count') + '</button>' +
