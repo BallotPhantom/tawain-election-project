@@ -371,14 +371,10 @@
   // (the diameter) runs east–west, perpendicular to the island's long axis, and the arc opens towards the north
   // (user 2026-11-07: 「半圓形圖長邊應該是跟台灣東西向的且不是直立的」「應該漂浮在台灣的中間」「弧線朝北」);
   // π = west end (left, 綠), 0 = east end (藍), as the flat view
-  var AXN = (function () {
-    var pts = Object.keys(LF_TOWNS).filter(function (tc) { return ['09007', '09020', '10016'].indexOf(LF_TOWNS[tc][0]) < 0; })
-      .map(function (tc) { return W3(LF_TOWNS[tc][1], LF_TOWNS[tc][2]); });
-    var sxx = 0, sxz = 0, szz = 0; pts.forEach(function (p) { sxx += p[0] * p[0]; sxz += p[0] * p[2]; szz += p[2] * p[2]; });
-    var ang = 0.5 * Math.atan2(2 * sxz, sxx - szz), ux = Math.cos(ang), uz = Math.sin(ang);
-    return uz < 0 ? [-ux, -uz] : [ux, uz];   // unit vector along the island, pointing north
-  })();
-  var AXE = [AXN[1], -AXN[0]];   // perpendicular to the island axis, pointing east
+  // true north / east since 2026-11-08: with the default camera facing north (the flat map's orientation, tilted back) the
+  // hemicycle's straight side reads level, as in the flat view (it used to follow the island's slanted long axis)
+  var AXN = [0, 1];   // north (floor z)
+  var AXE = [1, 0];   // east (floor x)
   function ringW(a, r) {
     var across = Math.cos(a) * r * RH, north = Math.sin(a) * r * RH;
     return [AXE[0] * across + AXN[0] * north, HH, AXE[1] * across + AXN[1] * north];
@@ -400,7 +396,9 @@
   // from above: the island runs from upper-left (north) to lower-right, the hemicycle above it. Phones: a bit farther
   function setCamLie(top, hudH) {
     if (LCAM && LMOVED) { applyCam(); return; }   // a camera the user moved survives a resize
-    LCAM0 = { az: 0.10, y: 3250, d: 2300 * Math.max(1, 1000 / SW), fx: 0, fz: 0, ty: HH * 0.5 };
+    // facing north from the south, so the 3D map has the flat map's orientation, only tilted back (user 2026-11-08: 「3d 預設的
+    // 地圖角度應該跟平面一樣只是是躺的」; replaces the 11-07 dragged angle az 0.10, kept in the comment above)
+    LCAM0 = { az: Math.PI / 2, y: 3250, d: 2300 * Math.max(1, 1000 / SW), fx: 0, fz: 0, ty: HH * 0.5 };
     LCAM = Object.assign({}, LCAM0); applyCam();
     if (FILTER) flyToCounty(FILTER, true);
   }
