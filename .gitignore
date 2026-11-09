@@ -136,3 +136,5 @@ v2/live-panel.js
 v2/live-seats2026.js
 v2/live-councilhemi.js
 v2/live-councilind.js
+!docs/
+!docs/*.md
