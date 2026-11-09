@@ -96,7 +96,7 @@
      only its arrow (user 2026-11-08: 「右邊如果是縣市卡三行縣市名字會不見」) */
   .cb .hd .nm { flex: 0 1 auto; min-width: 2.2em; }
   .col.c3 .cb .tg { max-width: 1em; overflow: hidden; }
-  .col:hover .cb .ct, .cb.pin-on .ct { color: var(--tc); }
+  .col:hover .cb .ct, .cb.pin-on .ct, .cb.toss-on .ct { color: var(--tc); }
   .cb .tg { cursor: pointer; font-weight: 400; }
   .cb { min-width: 0; }
   .cb .cn { display: flex; justify-content: space-between; gap: 4px; overflow: hidden; }
@@ -116,9 +116,9 @@
   .cb .det select { font: inherit; font-size: 11px; background: #11151f; color: #e7eaf0; border: 1px solid rgba(255,255,255,.2); border-radius: 4px; margin: 2px 0 4px; }
   .cb .det .k { display: grid; grid-template-columns: 16px 1fr 62px; gap: 4px; }
   .cb .det .gap { color: #f5c518; }
-  .col:hover .cb:not(.pin-on) { animation: cbGlow .9s forwards; }
-  .col:hover .cb:not(.pin-on) .cn { animation: cnGlow .9s forwards; }
-  .col:hover .cb:not(.pin-on) .bar { animation: barGlow .9s forwards; }
+  .col:hover .cb:not(.pin-on):not(.toss-on) { animation: cbGlow .9s forwards; }
+  .col:hover .cb:not(.pin-on):not(.toss-on) .cn { animation: cnGlow .9s forwards; }
+  .col:hover .cb:not(.pin-on):not(.toss-on) .bar { animation: barGlow .9s forwards; }
   /* 關注 (user 2026-11-07: 「加入想關注縣市的…開關的按鈕讓他常駐，不會滑鼠移開直接隱藏」, kept in place): ☆ / ★ in the box's
      header; a followed box stays lit where it is (it still changes side with the lead); remembered (localStorage lf_pins) */
   .cb .pin { cursor: pointer; font-weight: 400; margin-left: auto; margin-right: 6px; }
@@ -127,6 +127,17 @@
   .cb.pin-on .bar { background: var(--cc); opacity: .75; }
   .cb.pin-on .bt::after { opacity: 1; }
   .cb.pin-on .pin { color: #f5c518; }
+  /* resting boxes sit under a grey veil — contents faintly readable — so the cards are hinted in the dark; they light up
+     as before when the column is hovered or the box is followed (user 2026-11-08: 「預設的縣市長小卡是在黑暗裡有若隱若現的匡」
+     →「小卡加一層灰色遮罩」→「只要灰色遮罩、不要淡框」) */
+  #col-l:not(:hover) .cb:not(.pin-on):not(.toss-on), #col-r:not(:hover) .cb:not(.pin-on):not(.toss-on) { color: rgba(160,166,180,.22); background: rgba(120,126,140,.10); }
+  #col-l:not(:hover) .cb:not(.pin-on):not(.toss-on) .bar, #col-r:not(:hover) .cb:not(.pin-on):not(.toss-on) .bar { background: rgba(160,166,180,.25); }
+  /* a Toss-up county's box lights up by itself, with the map's yellow outline (user 2026-11-08: 「toss up 的縣市小卡也跟著地圖
+     自動顯示沒有灰色遮罩」); back under the veil once the race is Lean / Likely / Certain */
+  .cb.toss-on { color: #e7eaf0; border-color: #f5c518; background: rgba(10,13,22,.88); }
+  .cb.toss-on .cn { color: var(--cc); }
+  .cb.toss-on .bar { background: var(--cc); opacity: .75; }
+  .cb.toss-on .bt::after { opacity: 1; }
   @keyframes cbGlow { 0% { color: #000; } 25% { color: #fff; border-color: rgba(255,255,255,.9); box-shadow: 0 0 8px rgba(255,255,255,.6); } 100% { color: #e7eaf0; border-color: var(--pc); box-shadow: none; } }
   @keyframes cnGlow { 0% { color: #000; } 25% { color: #fff; } 100% { color: var(--cc); } }
   @keyframes barGlow { 0% { background: transparent; } 25% { background: #fff; } 100% { background: var(--cc); opacity: .75; } }
@@ -1182,6 +1193,7 @@
       LF_TOWNPOLY[HOVER_TC].forEach(function (r) { var first = true; for (var i = 0; i < r.length; i += 2) { var q = P(r[i], r[i + 1]); if (q[2] <= 0) { first = true; continue; } if (first) { gTr.moveTo(q[0], q[1]); first = false; } else gTr.lineTo(q[0], q[1]); } gTr.closePath(); });
       gTr.strokeStyle = '#ffffff'; gTr.lineWidth = 1.6; gTr.globalAlpha = 0.9; gTr.stroke(); gTr.globalAlpha = 1;
     }
+    ccFxDraw(now);
     if (LIE && PIL_ANIM) drawPillars();
     ltStep(now);
     CAM_MOVED = false;
@@ -1803,6 +1815,7 @@
       if (el._ctx !== ctx) { ctEl.textContent = ctx; el._ctx = ctx; }
       if (el._ctc !== ctc) { el.style.setProperty('--tc', ctc); el._ctc = ctc; }
       el.classList.toggle('solo', !!top && top.length < 2);
+      el.classList.toggle('toss-on', !!CCTOSS[cc]);
       el.style.setProperty('--pc', p ? colorOf(p) : '#9aa1b2');
       [0, 1].forEach(function (k) {   // the two leading candidates: name, votes, a bar ∝ their share, in their own party colour
         var c = top && top[k], ln = el.querySelector('.c' + k), bar = el.querySelector('.b' + k), cp = c ? colorOf(pc('M', cc, c, f.year) || 'other') : '#9aa1b2';
@@ -1872,10 +1885,75 @@
       el.style.transition = 'transform .8s cubic-bezier(.4,.1,.2,1)'; el.style.transform = '';
     });
   }
+  // close races on the map (user 2026-11-08: 「緊咬的縣市在地圖上要加入一些特效嗎」→ 都做): a county the model calls Toss-up
+  // (≥ 5% counted, leader under 70%) gets a slowly breathing yellow outline — the Toss-up tag's colour — gone once it is
+  // Lean / Likely / Certain or complete; when a county's leader changes after 5% counted, one ring spreads on the floor from
+  // its centre in the new leader's colour. Drawn on the trail canvas (cleared every frame), flat and 3D alike; with a
+  // county picked, only that county. The lights keep their meaning (each township's leader) — nothing here recolours them.
+  var CCLEAD = {}, CCTOSS = {}, CCRIP = [], CCMID = {}, CC_PULSE = 3000, CC_RIP = 1200;
+  function ccFxUpdate(f, snap) {
+    var now = performance.now();
+    LF_SEATS.mayor.forEach(function (cc) {
+      var cs = snap.M[cc], r = CALLS[cc], fin = f.finalAt('M', cc, snap);
+      CCTOSS[cc] = !!(r && r.tag === 'toss' && !fin);
+      if (!cs || sumC(cs) <= 0) return;
+      var top = cs.slice().sort(function (a, b) { return b.v - a.v; })[0], was = CCLEAD[cc];
+      if (was && was !== top.n && r && r.tag !== 'early' && !fin && LF_COUNTY[cc]) CCRIP.push({ cc: cc, t: now, c: colorOf(pc('M', cc, top, f.year) || 'other') });
+      CCLEAD[cc] = top.n;
+    });
+  }
+  window.__lfCcFx = function () { return { toss: Object.keys(CCTOSS).filter(function (cc) { return CCTOSS[cc]; }), ripples: CCRIP.map(function (o) { return o.cc; }) }; };   // read-only peek for browser checks
+  function ccMid(cc) {   // centre and half-diagonal of the county's largest ring, in map-frame units
+    if (CCMID[cc]) return CCMID[cc];
+    var best = null, ba = -1;
+    LF_COUNTY[cc].forEach(function (r) {
+      var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (var i = 0; i < r.length; i += 2) { x0 = Math.min(x0, r[i]); x1 = Math.max(x1, r[i]); y0 = Math.min(y0, r[i + 1]); y1 = Math.max(y1, r[i + 1]); }
+      var a = (x1 - x0) * (y1 - y0); if (a > ba) { ba = a; best = [x0, x1, y0, y1]; }
+    });
+    return (CCMID[cc] = { x: (best[0] + best[1]) / 2, y: (best[2] + best[3]) / 2, r: Math.hypot(best[1] - best[0], best[3] - best[2]) / 2 });
+  }
+  function ccRingsPath(path, rings) {
+    rings.forEach(function (r) {
+      var first = true;
+      for (var i = 0; i < r.length; i += 2) {
+        var q = P(r[i], r[i + 1]); if (q[2] <= 0) { first = true; continue; }
+        if (first) { path.moveTo(q[0], q[1]); first = false; } else path.lineTo(q[0], q[1]);
+      }
+      if (!first) path.closePath();
+    });
+  }
+  function ccFxDraw(now) {
+    var ccs = Object.keys(CCTOSS).filter(function (cc) { return CCTOSS[cc] && LF_COUNTY[cc] && (!FILTER || cc === FILTER); });
+    gTr.globalCompositeOperation = 'source-over'; gTr.lineJoin = 'round';
+    if (ccs.length) {
+      var k = REDUCED ? 0.6 : 0.5 - 0.5 * Math.cos(now / CC_PULSE * 2 * Math.PI), path = new Path2D();
+      ccs.forEach(function (cc) { ccRingsPath(path, LF_COUNTY[cc]); });
+      gTr.strokeStyle = '#f5c518';
+      gTr.globalAlpha = 0.05 + 0.12 * k; gTr.lineWidth = 5; gTr.stroke(path);   // glow: a wide faint stroke, not shadowBlur
+      gTr.globalAlpha = 0.3 + 0.55 * k; gTr.lineWidth = 1.3; gTr.stroke(path);
+    }
+    for (var i = CCRIP.length - 1; i >= 0; i--) {
+      var o = CCRIP[i], e = (now - o.t) / CC_RIP;
+      if (e >= 1) { CCRIP.splice(i, 1); continue; }
+      if (FILTER && o.cc !== FILTER) continue;
+      var m = ccMid(o.cc), rr = 1.6 * m.r * (0.1 + 0.9 * (1 - Math.pow(1 - e, 2))), ring = new Path2D(), first = true;
+      for (var j = 0; j <= 48; j++) {
+        var a = j / 48 * 2 * Math.PI, q = P(m.x + rr * Math.cos(a), m.y + rr * Math.sin(a));
+        if (q[2] <= 0) { first = true; continue; }
+        if (first) { ring.moveTo(q[0], q[1]); first = false; } else ring.lineTo(q[0], q[1]);
+      }
+      gTr.strokeStyle = o.c;
+      gTr.globalAlpha = 0.25 * (1 - e); gTr.lineWidth = 6; gTr.stroke(ring);
+      gTr.globalAlpha = 0.9 * (1 - e); gTr.lineWidth = 1.6; gTr.stroke(ring);
+    }
+    gTr.globalAlpha = 1;
+  }
   // the model runs with the HUD (every ~180 ms), not every frame: the seats read the latest CALLS
   var CALLS = {};
   function hud(f, snap) {
     CALLS = {}; LF_SEATS.mayor.forEach(function (cc) { CALLS[cc] = callOf(f, snap, cc); });
+    ccFxUpdate(f, snap);
     if (HOVER_TC) townTip();   // the township box follows the count
     if (CMP.open && performance.now() - CMP.at > 1000) cmpRender();   // 各家比較 — once a second
     PIL_SNAP = snap; PIL_FEED = f; flipUpdate(f, snap); drawPillars(); ltUpdate(f, snap); crUpdate(f, snap);
@@ -2178,7 +2256,7 @@
   }
   function resetState() {
     SEATS.forEach(function (s) { s.p = null; s.st = 'none'; });
-    PREV = null; ACC = {}; LASTE = {}; PARTS = []; HIST = []; RECENT = { g: [], b: [] }; CALLS = {};
+    PREV = null; ACC = {}; LASTE = {}; PARTS = []; HIST = []; RECENT = { g: [], b: [] }; CALLS = {}; CCLEAD = {}; CCTOSS = {}; CCRIP = [];
     PIL_SNAP = null; gPil.clearRect(0, 0, SW, SH); dimFloor(false); pilReset(); ltReset();
     gTr.clearRect(0, 0, SW, SH); placeSeats(true);
   }
