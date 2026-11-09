@@ -676,7 +676,9 @@
   // zoomed in (township layer) the lights grow only with √zoom and brighten a little, so they stay points, not haze
   function ltZoom() { return BASEL ? Math.max(1, L.k / BASEL.k) : 1; }
   function ltSize(P) { var z = ltZoom(); return Math.max(0.5, LT_TS[P][0] * (BASEL ? BASEL.k : L.k) * 1.6 * Math.sqrt(z)); }
-  function ltAlpha(P) { return Math.min(0.9, LT_TS[P][1] * Math.pow(ltZoom(), 0.6)); }
+  // brighter lights (user 2026-11-09: 「補強人口光點亮度」, kept when the county glass came back): every tier's alpha × LT_BRIGHT
+  var LT_BRIGHT = 1.3;
+  function ltAlpha(P) { return Math.min(0.9, LT_TS[P][1] * LT_BRIGHT * Math.pow(ltZoom(), 0.6)); }
   function ltCanvas(c) {   // a fresh canvas for county c's crop
     var cv = document.createElement('canvas'); cv.width = c.w; cv.height = c.h;
     cv.getContext('2d').setTransform(DPR, 0, 0, DPR, -c.x, -c.y); return cv;
