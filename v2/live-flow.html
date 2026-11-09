@@ -154,6 +154,17 @@
   /* the ⓘ legend box (the browser's own title tooltip often never showed, user 2026-11-08: 「滑鼠經過i只出現『？』」) */
   .lf-tip { position: absolute; z-index: 6; max-width: min(420px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 8px; background: rgba(14,17,24,.96); border: 1px solid rgba(255,255,255,.16); color: #cfd4de; font-size: 11.5px; line-height: 1.65; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
   .lf-tip div + div { border-top: 1px solid rgba(255,255,255,.06); }
+  /* ⓘ guided tour (user 2026-11-08: 「i 的教導使用應該要說的再清楚明白…先按區塊簡單介紹按下一步然後再開始使用」) */
+  .lf-tour { position: absolute; inset: 0; z-index: 20; }
+  .lf-tour .hole { position: absolute; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0,0,0,.66); border: 1.5px solid rgba(255,255,255,.85); transition: all .35s ease; pointer-events: none; }
+  .lf-tour .hole.none { width: 0; height: 0; border: 0; left: 50%; top: 40%; }
+  .lf-tour .card { position: absolute; width: min(360px, calc(100% - 32px)); padding: 14px 16px 12px; border-radius: 10px; background: #121722; border: 1px solid rgba(255,255,255,.18); color: #cfd4de; font-size: 12.5px; line-height: 1.7; box-shadow: 0 10px 30px rgba(0,0,0,.6); transition: left .35s ease, top .35s ease; }
+  .lf-tour .card h4 { margin: 0 0 6px; font-size: 14px; color: #fff; }
+  .lf-tour .card ul { margin: 4px 0 0; padding-left: 18px; }
+  .lf-tour .card .nav { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .lf-tour .card .nav .n { color: #7d8496; font-size: 11px; margin-right: auto; }
+  .lf-tour .card button { font: inherit; font-size: 12px; padding: 4px 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.05); color: #cfd4de; cursor: pointer; }
+  .lf-tour .card button.go { background: #e7eaf0; color: #0b0e14; border-color: #e7eaf0; font-weight: 600; }
   /* 各家比較 (user 2026-11-08: 「各家比較可以放在新版的一個總覽頁面裡」「要也比議員，都來測試」) */
   .lf-cmp { position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; overflow: auto; background: rgba(8,10,16,.96); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 10px 12px; color: #cfd4de; font-size: 11.5px; font-variant-numeric: tabular-nums; }
   .lf-cmp .hd { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
@@ -226,6 +237,7 @@
   <div class="lf-tip" id="lf-tip" hidden></div>
   <div class="lf-ttip" id="lf-ttip" hidden></div>
   <div class="lf-cmp" id="lf-cmp" hidden></div>
+  <div class="lf-tour" id="lf-tour" hidden><div class="hole"></div><div class="card"></div></div>
   <div class="lf-legend" id="legend" hidden></div>
   <div class="lf-cty" id="cty"></div>
   <div class="lf-empty" id="empty" hidden></div>
@@ -276,6 +288,26 @@
   var cvPil = document.getElementById('cv-pil'), gPil = cvPil.getContext('2d');
   var DPR = 1, SW = 0, SH = 0, L = null;   // L = layout (map transform, hemicycle geometry)
 
+  // the hemicycle's centre on a desktop: up at the top edge, but never into the tab row — where the row's left group reaches
+  // under the arc (English labels are longer; a short window makes the arc taller relative to the row), the arc is lowered
+  // just enough that its width at the row's bottom clears the row's right end (user 2026-11-08: 「英文版會在鄉鎮市區層蓋過
+  // 半圓形圖」)
+  function hemiCy(R, cx) {
+    var tabs = document.getElementById('tabs'); if (!tabs) return R + 10;
+    var rr = root.getBoundingClientRect(), right = 0, bottom = 0;
+    Array.prototype.forEach.call(tabs.children, function (el) {
+      if (el.classList.contains('lf-ctl')) return;   // the right-hand controls sit far right, outside the arc
+      var b = el.getBoundingClientRect(); if (!b.width) return;
+      right = Math.max(right, b.right - rr.left); bottom = Math.max(bottom, b.bottom - rr.top);
+    });
+    var cy = R + 10, top0 = cy - R, d = bottom + 4 - top0;   // how deep the row reaches into the arc
+    if (d <= 0) return cy;
+    var w = cx - right - 8;                                  // the half-width the arc may have at the row's bottom
+    if (w <= 0) return bottom + 4 + R;                       // the row runs past the centre: the arc goes below it
+    if (Math.sqrt(Math.max(0, 2 * R * d - d * d)) <= w) return cy;
+    var dd = R - Math.sqrt(Math.max(0, R * R - w * w));      // the depth at which the arc is just w wide
+    return bottom + 4 - dd + R;
+  }
   function layout() {
     // the stage starts under the header as it actually stands (on a phone the header can wrap to two lines and used to
     // cover the tab row)
@@ -301,7 +333,7 @@
     // desktop: the hemicycle goes up to the top edge, between the tab row (left) and the top-right box — its narrow top
     // clears both — and the map keeps its place, so the gap between them grows (user 2026-11-08: 「半圓形圖不能往上移嗎？讓地圖
     // 跟他之間多些空隙」); phones keep it under the full-width tab row
-    var cx = SW / 2, mapTop = top + R + 6 + 8, cy = narrow ? top + R + 6 : R + 10, mapH = Math.max(120, SH - hudH - mapTop - 4);
+    var cx = SW / 2, cy = narrow ? top + R + 6 : hemiCy(R, cx), mapTop = Math.max(top + R + 6 + 8, cy + 14), mapH = Math.max(120, SH - hudH - mapTop - 4);
     // the main island lines up with the hemicycle (user: 「台灣在平面跟半圓形還是沒有一條線」): its centre line under the
     // hemicycle's centre, its northern tip right under the base. Fitted on the main island, not the whole frame (the
     // frame's left part is 金門 / 連江, which pushed the island off-centre)
@@ -2029,6 +2061,7 @@
     if (f && f.sim) html += '<span class="lf-ctl"><button type="button" data-ctl="play">' + (PLAY ? '❚❚' : '▶') + '</button>' +
       '<button type="button" data-ctl="speed">' + SPEED + '×</button><button type="button" data-ctl="restart">↺</button></span>';
     el.innerHTML = html;
+    if (L && SW >= 640) { var cyNow = hemiCy(L.R, L.cx); if (Math.abs(cyNow - L.cy) > 1) requestAnimationFrame(layout); }   // labels changed width (language)
     el.querySelectorAll('button[data-src]').forEach(function (b) { b.onclick = function () { SRC = b.dataset.src; restart(); }; });
     el.querySelectorAll('button[data-cmp]').forEach(function (b) { b.onclick = function () { cmpOpen(!CMP.open); }; });
     el.querySelectorAll('button[data-view]').forEach(function (b) { b.onclick = function () {
@@ -2076,13 +2109,63 @@
     tabs.addEventListener('mouseout', function (e) { if (e.target.closest('.lf-info') && !pinned) hide(); });
     tabs.addEventListener('focusin', function (e) { var el = e.target.closest('.lf-info'); if (el) show(el); });
     tabs.addEventListener('focusout', function (e) { if (e.target.closest('.lf-info')) hide(); });
-    tabs.addEventListener('click', function (e) {
+    tabs.addEventListener('click', function (e) {   // a click starts the guided tour (hover still shows the short legend)
       var el = e.target.closest('.lf-info'); if (!el) return;
-      e.stopPropagation(); if (pinned) hide(); else { pinned = true; show(el); }
+      e.stopPropagation(); hide(); tourStart();
     });
     document.addEventListener('click', function (e) { if (pinned && !e.target.closest('.lf-info')) hide(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !tip.hidden) hide(); });
   })();
+  // ---------- ⓘ guided tour: one region at a time, 「下一步」, then 「開始使用」 (user 2026-11-08) ----------
+  // each step spotlights a part of the page (a hole in a dark veil) with a short explanation next to it
+  var TOUR = { i: 0, steps: null };
+  function rectOf(el) { if (!el) return null; var r = root.getBoundingClientRect(), b = el.getBoundingClientRect(); return b.width ? { x: b.left - r.left, y: b.top - r.top, w: b.width, h: b.height } : null; }
+  function tourSteps() {
+    var hemi = L ? { x: L.cx - L.R - 10, y: L.cy - L.R - 8, w: 2 * L.R + 20, h: L.R + 52 } : null;
+    var map = L && LF_COAST ? (function () { var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; LF_COAST.forEach(function (r) { for (var i = 0; i < r.length; i += 2) { var q = P(r[i], r[i + 1]); if (q[2] <= 0) continue; x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); } }); return x1 > x0 ? { x: x0 - 10, y: y0 - 10, w: x1 - x0 + 20, h: y1 - y0 + 20 } : null; })() : null;
+    var side = SW > 640 ? { x: SW - 320, y: (document.getElementById('tabs').offsetHeight || 40) + 50, w: 312, h: Math.min(SH * 0.55, 380) } : null;
+    var bottom = rectOf(document.querySelector('.lf-hud'));
+    var li = function (a) { return '<ul>' + a.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>'; };
+    return [
+      { r: null, t: T('2026 開票之夜', '2026 Election Night'), b: T('開票時，選票從各鄉鎮「飛」進上方的席次半圓；地圖上的光點隨著各鄉鎮開出的票亮起。以下用幾步介紹畫面上每一塊。', 'As votes are counted they fly from each township into the seat hemicycle at the top, and the map lights up township by township. A few steps through each part of the page.') },
+      { r: rectOf(document.getElementById('tabs')), t: T('上方按鈕列', 'The top bar'), b: li([T('「2026 開票」看當晚真實數字；「2022 排練」用 2022 年結果模擬整晚開票', '「2026 count」 shows the night\'s real numbers; 「2022 rehearsal」 replays 2022 as a simulated night'), T('自由時報、中央社、TVBS…：每個來源一個分頁，數字從不混在一起', 'LTN, CNA, TVBS…: one tab per source; numbers are never merged'), T('平面／平躺切換 2D 與 3D；「各家比較」把所有來源並排；縣市選單直接跳到某縣市', 'Flat / 3D switches the view; 「Compare sources」 lines every source up; the county menu jumps to a county')]) },
+      { r: hemi, t: T('席次半圓', 'The seat hemicycle'), b: li([T('內圈＝22 席縣市長，外圈＝縣市議員（依政黨由綠到藍排列）', 'Inner ring = 22 mayors, outer rings = councillors (green to blue by party)'), T('空心＝目前領先；半實心＝模型推估當選；實心＝來源確定當選', 'Hollow = leading; half-filled = projected by the model; solid = declared by the source'), T('點某個圓點＝選取那個縣市', 'Click a seat to pick its county')]) },
+      { r: map, t: T('地圖', 'The map'), b: li([T('每個光點代表一群居民；鄉鎮開出多少比例，就亮多少比例，顏色＝該鄉鎮目前領先的政黨', 'Each light stands for a group of residents; a township lights up as far as it has counted, in the colour of the party leading it'), T('點縣市＝放大進入鄉鎮層；滑過鄉鎮看該鄉鎮的縣市長票數；點空白處回全台', 'Click a county to zoom into its townships; hover a township for its mayoral numbers; click empty space to go back')]) },
+      { r: side, t: T('兩側縣市卡', 'County cards'), b: li([T('滑鼠移到畫面左右兩側，就會出現各縣市卡：左邊民進黨領先，右邊在野或無黨領先', 'Move the mouse to the left or right edge to see every county: left = DPP leads, right = opposition / independent leads'), T('縣市名旁的標籤：Too early 開票未滿 5%、Toss-up 拉鋸、Lean 傾向、Likely 可能、Certain 推估當選；D 民進黨、K 國民黨、T 民眾黨、I 無黨', 'The tag by the name: Too early, Toss-up, Lean, Likely, Certain; D DPP, K KMT, T TPP, I independent'), T('☆＝把這張卡釘在畫面上；「▸ 選區」打開議員各選區', '☆ pins a card; “▸ Dist.” opens the council districts')]) },
+      { r: rectOf(document.getElementById('hud-m')), t: T('時間與新進票數', 'Time and new votes'), b: T('目前時間、縣市長票已開出的比例，以及最近票數增加最多的縣市。', 'The time, how much of the mayoral vote is counted, and the counties gaining the most votes lately.') },
+      { r: bottom, t: T('總票數', 'The totals'), b: T('執政（民進黨）與在野（國民黨＋民眾黨）的縣市長總票數與確定席數；領先的一方數字較大、落後的一方較淡。', 'Mayoral vote totals and declared seats for the ruling DPP and the opposition (KMT + TPP); the side ahead is larger, the side behind fainter.') },
+      { r: null, t: T('圖例', 'Legend'), b: li(legendText().split('\n')), last: true }
+    ];
+  }
+  function tourStart() { TOUR.i = 0; document.getElementById('lf-tour').hidden = false; tourShow(); }
+  function tourEnd() { document.getElementById('lf-tour').hidden = true; }
+  function tourShow() {
+    var steps = TOUR.steps = tourSteps(), st = steps[TOUR.i], box = document.getElementById('lf-tour'), hole = box.querySelector('.hole'), card = box.querySelector('.card');
+    if (st.r) { hole.className = 'hole'; hole.style.left = st.r.x + 'px'; hole.style.top = st.r.y + 'px'; hole.style.width = st.r.w + 'px'; hole.style.height = st.r.h + 'px'; }
+    else { hole.className = 'hole none'; hole.removeAttribute('style'); }
+    card.innerHTML = '<h4>' + st.t + '</h4><div>' + st.b + '</div><div class="nav"><span class="n">' + (TOUR.i + 1) + ' / ' + steps.length + '</span>' +
+      (TOUR.i ? '<button type="button" data-t="prev">' + T('上一步', 'Back') + '</button>' : '<button type="button" data-t="end">' + T('跳過', 'Skip') + '</button>') +
+      '<button type="button" class="go" data-t="' + (st.last ? 'end' : 'next') + '">' + (st.last ? T('開始使用', 'Start') : T('下一步', 'Next')) + '</button></div>';
+    // the card next to the spotlight: below it, else above, else to its side; centred when there is no spotlight
+    var cw = Math.min(360, SW - 32), ch = card.offsetHeight, x, y;
+    if (!st.r) { x = (SW - cw) / 2; y = Math.max(16, (SH - ch) / 2); }
+    else {
+      x = Math.min(Math.max(16, st.r.x + st.r.w / 2 - cw / 2), SW - cw - 16);
+      if (st.r.y + st.r.h + 12 + ch < SH - 8) y = st.r.y + st.r.h + 12;
+      else if (st.r.y - 12 - ch > 8) y = st.r.y - 12 - ch;
+      else { y = Math.max(16, Math.min(SH - ch - 16, st.r.y)); x = st.r.x > SW / 2 ? Math.max(16, st.r.x - cw - 16) : Math.min(SW - cw - 16, st.r.x + st.r.w + 16); }
+    }
+    card.style.left = x + 'px'; card.style.top = y + 'px';
+    card.querySelectorAll('button[data-t]').forEach(function (b) { b.onclick = function () {
+      var t = b.dataset.t; if (t === 'end') tourEnd(); else { TOUR.i += t === 'next' ? 1 : -1; tourShow(); }
+    }; });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (document.getElementById('lf-tour').hidden) return;
+    if (e.key === 'Escape') tourEnd();
+    else if (e.key === 'ArrowRight' && TOUR.steps && TOUR.i < TOUR.steps.length - 1) { TOUR.i++; tourShow(); }
+    else if (e.key === 'ArrowLeft' && TOUR.i > 0) { TOUR.i--; tourShow(); }
+  });
   function legendText() {   // the ⓘ tooltip in the tab row (the legend used to sit at the top right)
     return [T('內圈 縣市長 22 席・外圈 縣市議員 910 席', 'Inner ring: 22 mayors · outer ring: 910 councillors'),
       T('空心＝目前領先・半實心＝推估當選（模型）・實心＝確定', 'Hollow = leading · half-filled = projected (model) · solid = final'),
