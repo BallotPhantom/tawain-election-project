@@ -87,6 +87,9 @@
      the toggle reads 「Dist.」 in English */
   .cb .hd .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cb .hd .tg, .cb .hd .pin { flex: 0 0 auto; }
+  /* the model's tag (Toss-up / Lean / Likely / 推估當選; user 2026-11-08) after the county name, revealed with the box */
+  .cb .hd .ct { flex: 0 0 auto; margin: 0 auto 0 4px; font-size: 8.5px; font-weight: 600; }
+  .col:hover .cb .ct, .cb.pin-on .ct { color: var(--tc); }
   .cb .tg { cursor: pointer; font-weight: 400; }
   .cb { min-width: 0; }
   .cb .cn { display: flex; justify-content: space-between; gap: 4px; overflow: hidden; }
@@ -130,6 +133,12 @@
   #col-f .cb .bt::after { opacity: 1; }
   #col-f .cb .det { display: block; position: static; width: auto; border: 0; padding: 4px 0 2px; background: none; }
   #col-f .cb .tg { display: none; }
+  /* the picked county's mayoral lines merged into its card (user 2026-11-08: 「這張卡直接併入台北卡」) */
+  .cb .mx { display: none; }
+  #col-f .cb .mx { display: block; color: #9aa1b2; font-size: 10px; line-height: 13px; margin: 3px 0 1px; white-space: normal; }
+  #col-f .cb .mx .ml { color: #e7eaf0; }
+  #col-f .cb .mx .dot, #col-f .cb .mx .ring { display: inline-block; width: 7px; height: 7px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+  #col-f .cb .mx .ring { width: 5px; height: 5px; border: 1.5px solid; }
   #col-f #cty { position: static; width: auto; margin-top: 4px; }
   #col-f #cty .box { margin-top: 0; }
   @media (max-width: 640px) { #cols { display: none; } }   /* two 300-px columns do not fit a phone; not designed yet */
@@ -138,6 +147,12 @@
   /* the ⓘ legend box (the browser's own title tooltip often never showed, user 2026-11-08: 「滑鼠經過i只出現『？』」) */
   .lf-tip { position: absolute; z-index: 6; max-width: min(420px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 8px; background: rgba(14,17,24,.96); border: 1px solid rgba(255,255,255,.16); color: #cfd4de; font-size: 11.5px; line-height: 1.65; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
   .lf-tip div + div { border-top: 1px solid rgba(255,255,255,.06); }
+  /* township layer: the hovered township's mayoral numbers (user 2026-11-08) */
+  .lf-ttip { position: absolute; z-index: 6; min-width: 150px; padding: 6px 9px; border-radius: 7px; background: rgba(14,17,24,.95); border: 1px solid rgba(255,255,255,.18); color: #cfd4de; font-size: 11px; line-height: 1.55; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .lf-ttip .tn { font-weight: 700; color: #fff; margin-bottom: 2px; }
+  .lf-ttip .tr { display: flex; justify-content: space-between; gap: 12px; }
+  .lf-ttip .tr i { font-style: normal; color: #9aa1b2; margin-left: 6px; }
+  .lf-ttip .tp { color: #9aa1b2; font-size: 10px; margin-top: 2px; }
   .lf-empty { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); font-size: 13px; color: #9aa1b2; text-align: center; z-index: 3; }
   .lf-short { display: none; }
   /* phones (user 2026-11-07: 「開票的手機版擠在一起了」, approved): one-line header (「舊版」), the tab row one line that
@@ -182,6 +197,7 @@
   <canvas id="cv-top"></canvas>
   <div class="lf-tabs" id="tabs"></div>
   <div class="lf-tip" id="lf-tip" hidden></div>
+  <div class="lf-ttip" id="lf-ttip" hidden></div>
   <div class="lf-legend" id="legend" hidden></div>
   <div class="lf-cty" id="cty"></div>
   <div class="lf-empty" id="empty" hidden></div>
@@ -192,11 +208,12 @@
     <div class="lf-side r" id="hud-b"></div>
   </div>
 </div>
-<script src="data_liveflow.js?v=20261108b"></script>
+<script src="data_liveflow.js?v=20261108d"></script>
 <script src="data_liveflow_r2022.js?v=20261105b"></script>
 <script src="data_council_seats_2026.js?v=20261107a"></script>
 <script src="data_turnout_prior.js?v=20261108a"></script>
-<script src="live-turnout.js?v=20261108a"></script>
+<script src="data_call_model.js?v=20261108d"></script>
+<script src="live-turnout.js?v=20261108f"></script>
 <script>
 (function () {
   'use strict';
@@ -206,8 +223,9 @@
   var T = function (zh, en) { return lang === 'en' ? en : zh; };
 
   // party colours / names: the V2 set (final26.html)
-  var CLR = { dpp: '#1b9e4b', kmt: '#3b82f6', tpp: '#26b5c4', npp: '#FBBE01', tsr: '#B33A1E', tsu: '#C69E6A', pfp: '#f06a0a', ind: '#888888', other: '#aaaaaa' };
-  var LINE = { dpp: '#5fd38a', kmt: '#7fb0ff', tpp: '#6fe0ea', npp: '#ffd75e', tsr: '#e0715c', ind: '#c9ced8', other: '#c9ced8', pfp: '#ff9a4d', tsu: '#e0c08f' };
+  // small parties in their own colours, the V1 palette (council.html _COUNCIL_CLR_NORMAL; user 2026-11-08: 「小黨…給他們原本的政黨色」)
+  var CLR = { dpp: '#1b9e4b', kmt: '#3b82f6', tpp: '#26b5c4', npp: '#FBBE01', tsr: '#B33A1E', tsu: '#C69E6A', pfp: '#f06a0a', gp: '#7bc142', npa: '#9b59b6', np: '#FFDA00', sdp: '#D6336C', lp: '#b91c1c', spgp: '#FF69B4', szmd: '#6BAED6', mkt: '#8B5A2B', ind: '#888888', other: '#aaaaaa' };
+  var LINE = { dpp: '#5fd38a', kmt: '#7fb0ff', tpp: '#6fe0ea', npp: '#ffd75e', tsr: '#e0715c', ind: '#c9ced8', other: '#c9ced8', pfp: '#ff9a4d', tsu: '#e0c08f', gp: '#9bd862', npa: '#b98ad0', np: '#ffe14d', sdp: '#e8628f', lp: '#e05a5a', spgp: '#ff8fc8', szmd: '#8fc6e6', mkt: '#b3825a' };
   var colorOf = function (p) { return CLR[p] || CLR.other; };
   var lineOf = function (p) { return LINE[p] || LINE.other; };
   // seat order left → right: 綠 side, then the open (uncalled / no data) middle, then the rest, 藍 at the right end
@@ -265,6 +283,9 @@
     // the main island now sits ~30 px right of the centre line); the scale still fits the main island
     L = { R: R, cx: cx, cy: cy, k: k, ox: cx - (FULLF.x0 + FULLF.x1) / 2 * k, oy: mapTop - ISLF.y0 * k };
     if (LIE) { FOC = (SW / 2) / Math.tan((narrow ? 80 : 64) / 2 * Math.PI / 180); setCamLie(top, hudH); }
+    BASEL = { k: L.k, ox: L.ox, oy: L.oy };
+    if (!LIE && ZOOM) { var zt = zoomTarget(ZOOM); if (zt) { L.k = zt.k; L.ox = zt.ox; L.oy = zt.oy; } }
+    ZANIM = null; cvBg.style.transform = '';
     buildSlots();
     drawBg();
     gTr.clearRect(0, 0, SW, SH); PARTS = [];
@@ -303,8 +324,9 @@
   // screen whose short side is at most 500 px (so a phone turned sideways stays flat too)
   var PHONE = window.innerWidth <= 640 || (window.matchMedia && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500);
   var VIEW_KEY = 'lf_view';
+  // always opens flat (user 2026-11-08: 「點開預設是平面而非 3D」) — the 3D choice is no longer remembered
   var VIEW = 'flat';
-  try { if (!PHONE && localStorage.getItem(VIEW_KEY) === 'lie') VIEW = 'lie'; } catch (e) {}
+  try { localStorage.removeItem(VIEW_KEY); } catch (e) {}
   var LIE = VIEW === 'lie';
   var FOC = 600, CAM = { yaw: 0, pitch: 0, pos: [0, 0, 0] };
   var HH = 900, RH = 650;   // hemicycle height and radius (map frame px)
@@ -452,14 +474,95 @@
   })();
   var LT_SPR = {};
   function ltSprite(col) { return LT_SPR[col] || (LT_SPR[col] = sprite(16, hexRgb(col).join(','))); }
-  function ltSize(P) { return Math.max(0.5, LT_TS[P][0] * L.k * 1.6); }
+  // zoomed in (township layer) the lights grow only with √zoom and brighten a little, so they stay points, not haze
+  function ltZoom() { return BASEL ? Math.max(1, L.k / BASEL.k) : 1; }
+  function ltSize(P) { var z = ltZoom(); return Math.max(0.5, LT_TS[P][0] * (BASEL ? BASEL.k : L.k) * 1.6 * Math.sqrt(z)); }
+  function ltAlpha(P) { return Math.min(0.9, LT_TS[P][1] * Math.pow(ltZoom(), 0.6)); }
   function ltCanvas(c) {   // a fresh canvas for county c's crop
     var cv = document.createElement('canvas'); cv.width = c.w; cv.height = c.h;
     cv.getContext('2d').setTransform(DPR, 0, 0, DPR, -c.x, -c.y); return cv;
   }
+  // per-county township lines, rebuilt from LF_TOWNPOLY (build_v2_liveflow.py stores the outlines by township since
+  // 2026-11-08, for the township layer)
+  var LF_TOWNLINE = {};
+  Object.keys(LF_TOWNPOLY).forEach(function (tc) { var cc = LF_TOWNS[tc] && LF_TOWNS[tc][0]; if (cc) Array.prototype.push.apply(LF_TOWNLINE[cc] || (LF_TOWNLINE[cc] = []), LF_TOWNPOLY[tc]); });
+  // ---------- township layer, flat view (user 2026-11-08: 「點選縣市可以進入鄉鎮市區層（立體也是）」; A 一起做, B 不塗, C 只放縣市長) ----------
+  // picking a county zooms the map onto it (0.6 s; the base canvas is CSS-scaled meanwhile, then only that county's lights
+  // are redrawn at the new scale — the others fade out, their grey outlines stay); hovering a township shows its mayoral
+  // numbers. Back: the same county again, an empty spot, or 全部縣市. (The lying view flies its camera, flyToCounty.)
+  var BASEL = null, ZOOM = null, ZANIM = null, BGL = null, LT_RUSH = 0;
+  function zoomTarget(cc) {   // fit the county's township outlines under the hemicycle (rings far from its towns — 東沙 etc. — left out)
+    var tcs = Object.keys(LF_TOWNPOLY).filter(function (tc) { return LF_TOWNS[tc] && LF_TOWNS[tc][0] === cc; });
+    if (!tcs.length) return null;
+    var mx = tcs.map(function (tc) { return LF_TOWNS[tc][1]; }).sort(function (a, b) { return a - b; })[tcs.length >> 1];
+    var my = tcs.map(function (tc) { return LF_TOWNS[tc][2]; }).sort(function (a, b) { return a - b; })[tcs.length >> 1];
+    var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    tcs.forEach(function (tc) { LF_TOWNPOLY[tc].forEach(function (r) {
+      var rx = 0, ry = 0, n = r.length / 2; for (var i = 0; i < r.length; i += 2) { rx += r[i]; ry += r[i + 1]; }
+      if (Math.hypot(rx / n - mx, ry / n - my) > 160) return;
+      for (var j = 0; j < r.length; j += 2) { x0 = Math.min(x0, r[j]); x1 = Math.max(x1, r[j]); y0 = Math.min(y0, r[j + 1]); y1 = Math.max(y1, r[j + 1]); }
+    }); });
+    if (x1 < x0) return null;
+    var pad = 3; x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+    var side = SW > 900 ? 330 : 16, ax0 = side, ax1 = SW - side, ay0 = L.cy + 34, ay1 = SH - 18;
+    var k = Math.min((ax1 - ax0) / Math.max(1, x1 - x0), (ay1 - ay0) / Math.max(1, y1 - y0), BASEL.k * 12);
+    return { k: k, ox: (ax0 + ax1) / 2 - (x0 + x1) / 2 * k, oy: (ay0 + ay1) / 2 - (y0 + y1) / 2 * k };
+  }
+  function zoomFlat(cc) {   // animate the flat map to the county (or back to the whole island)
+    if (LIE || !L || !BASEL) { ZOOM = cc || null; return; }
+    var to = cc ? zoomTarget(cc) : BASEL; if (!to) return;
+    ZOOM = cc || null;
+    ZANIM = { t0: performance.now(), dur: 600, from: { k: L.k, ox: L.ox, oy: L.oy }, to: { k: to.k, ox: to.ox, oy: to.oy } };
+  }
+  function zoomStep(now) {   // per frame while animating: move L, CSS-scale the base canvas; at the end redraw the lights
+    if (!ZANIM) return false;
+    var e = Math.min(1, (now - ZANIM.t0) / ZANIM.dur), w = e * e * (3 - 2 * e), a = ZANIM.from, b = ZANIM.to;
+    L.k = a.k * Math.pow(b.k / a.k, w); L.ox = a.ox + (b.ox - a.ox) * w; L.oy = a.oy + (b.oy - a.oy) * w;
+    if (BGL) { var sc = L.k / BGL.k; cvBg.style.transformOrigin = '0 0'; cvBg.style.transform = 'translate(' + (L.ox - BGL.ox * sc) + 'px,' + (L.oy - BGL.oy * sc) + 'px) scale(' + sc + ')'; }
+    if (e >= 1) { ZANIM = null; cvBg.style.transform = ''; ltLayout(); LT_RUSH = now + 3000; ltPaint(now); }
+    return true;
+  }
+  function inRings(rs, fx, fy) {   // even-odd over all the rings
+    var inside = false;
+    (rs || []).forEach(function (r) {
+      for (var i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+        if ((r[i + 1] > fy) !== (r[j + 1] > fy) && fx < (r[j] - r[i]) * (fy - r[i + 1]) / (r[j + 1] - r[i + 1]) + r[i]) inside = !inside;
+      }
+    });
+    return inside;
+  }
+  function countyAtFrame(fr) { if (!fr) return null; var hit = null; Object.keys(LF_COUNTY).some(function (cc) { return inRings(LF_COUNTY[cc], fr[0], fr[1]) && (hit = cc); }); return hit; }
+  function townAtFrame(cc, fr) {
+    if (!fr || !cc) return null; var hit = null;
+    Object.keys(LF_TOWNPOLY).some(function (tc) { return LF_TOWNS[tc] && LF_TOWNS[tc][0] === cc && inRings(LF_TOWNPOLY[tc], fr[0], fr[1]) && (hit = tc); });
+    return hit;
+  }
+  // screen px → map frame: flat = the inverse of P; lying = Newton steps on P (the floor's projection), from the picked
+  // county's centre or the island's; null when the point is off the floor
+  function screenToFrame(sx, sy) {
+    if (!L) return null;
+    if (!LIE) return [(sx - L.ox) / L.k, (sy - L.oy) / L.k];
+    var x = ICX, y = ICY;
+    if (FILTER) { var n = 0, ax = 0, ay = 0; Object.keys(LF_TOWNS).forEach(function (tc) { if (LF_TOWNS[tc][0] === FILTER) { ax += LF_TOWNS[tc][1]; ay += LF_TOWNS[tc][2]; n++; } }); if (n) { x = ax / n; y = ay / n; } }
+    for (var it = 0; it < 12; it++) {
+      var q = P(x, y), qx = P(x + 1, y), qy = P(x, y + 1);
+      if (q[2] <= 0 || qx[2] <= 0 || qy[2] <= 0) return null;
+      var a = qx[0] - q[0], b = qy[0] - q[0], c = qx[1] - q[1], d = qy[1] - q[1], det = a * d - b * c;
+      if (!det) return null;
+      var ex = sx - q[0], ey = sy - q[1];
+      if (Math.abs(ex) < 0.5 && Math.abs(ey) < 0.5) return [x, y];
+      var dx = (d * ex - b * ey) / det, dy = (-c * ex + a * ey) / det, m = Math.hypot(dx, dy);
+      if (m > 200) { dx *= 200 / m; dy *= 200 / m; }
+      x += dx; y += dy;
+    }
+    var qf = P(x, y); return qf[2] > 0 && Math.hypot(qf[0] - sx, qf[1] - sy) < 3 ? [x, y] : null;
+  }
   function ltLayout() {   // county crops in device px, after a layout; everything redrawn from the targets
+    BGL = L ? { k: L.k, ox: L.ox, oy: L.oy } : null;
     Object.keys(LT_CTY).forEach(function (cc) {
       var c = LT_CTY[cc], x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, m = ltSize(1024) + 2;
+      c.tcs.forEach(function (tc) { LT_TOWNS[tc].drawn = { k: [0, 0, 0], col: null }; });
+      if (ZOOM && cc !== ZOOM) { c.cur = null; c.prev = null; c.fade = 0; c.build = null; return; }   // zoomed: the others fade out
       c.tcs.forEach(function (tc) { LT_TOWNS[tc].tiers.forEach(function (t) {
         for (var i = 0; i < t.xy.length; i += 2) { var q = P(t.xy[i], t.xy[i + 1]); if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
       }); });
@@ -484,18 +587,19 @@
   // draw lights [from k0 to k1) of tier j of a township onto a county canvas; returns the number drawn
   function ltDraw(cv, o, j, k0, k1, col) {
     var g = cv.getContext('2d'), t = o.tiers[j], sz = ltSize(t.P), spr = ltSprite(col);
-    g.globalAlpha = LT_TS[t.P][1];
+    g.globalAlpha = ltAlpha(t.P);
     for (var i = k0; i < k1; i++) { var q = P(t.xy[2 * i], t.xy[2 * i + 1]); g.drawImage(spr, q[0] - sz, q[1] - sz, sz * 2, sz * 2); }
     return k1 - k0;
   }
   var LT_DIRTY = true, LT_FADE = 1500;
   // per frame: bring the county canvases toward the targets within a few ms, then repaint the base if anything changed
   function ltStep(now) {
-    if (LIE || !L) return;
-    var t0 = performance.now(), BUDGET = 6;
+    if (LIE || !L || ZANIM) return;
+    var t0 = performance.now(), BUDGET = now < LT_RUSH ? 14 : 6;
     var ccs = Object.keys(LT_CTY);
     for (var ci = 0; ci < ccs.length; ci++) {
       var c = LT_CTY[ccs[ci]];
+      if (!c.cur) continue;
       if (c.fade && now - c.fade >= LT_FADE) { c.prev = null; c.fade = 0; LT_DIRTY = true; }
       if (c.fade) LT_DIRTY = true;
       if (performance.now() - t0 > BUDGET) continue;
@@ -563,7 +667,7 @@
     Object.keys(LF_COUNTY).forEach(function (cc) { ltRings(LF_COUNTY[cc]); });
     gBg.globalAlpha = 0.45; gBg.strokeStyle = '#9fb3d1'; gBg.lineWidth = 0.8; ltRings(LF_COAST);
     if (FILTER && LF_TOWNLINE[FILTER]) {   // the picked county's townships: faint lines under its outline (user 2026-11-08)
-      gBg.globalAlpha = 0.35; gBg.strokeStyle = '#8f98a8'; gBg.lineWidth = 0.5; ltRings(LF_TOWNLINE[FILTER]);
+      gBg.globalAlpha = ZOOM ? 0.75 : 0.35; gBg.strokeStyle = ZOOM ? '#b4bccb' : '#8f98a8'; gBg.lineWidth = ZOOM ? 0.9 : 0.5; ltRings(LF_TOWNLINE[FILTER]);
     }
     if (hl && LF_COUNTY[hl]) {   // the lit county: a faint white wash and a white outline
       gBg.globalAlpha = 0.07; gBg.fillStyle = '#fff'; ltRings(LF_COUNTY[hl]); gBg.fill('evenodd');
@@ -658,7 +762,24 @@
         if (jump || s.x == null) { s.x = s.tx; s.y = s.ty; }
       });
     });
+    // flat view with a county picked: its council fills the big hemicycle (same ranks as the old small one — party blocks,
+    // final at the outer ends), its mayor in the middle; the other seats are not drawn (user 2026-11-08: 「半圓形圖可以移到
+    // 全台910半圓形席的位置」, 「先只改平面」)
+    // the lying view too: its floating national hemicycle is hidden and the county's council is drawn flat on the screen
+    // at the same place, so turning the camera is unobstructed (user 2026-11-08: 「立體的也改成跟平面一樣，可能立體的暫時
+    // 就把全台大席次圖隱藏」→ 畫在畫面上方)
+    CMODE = null;
+    if (FILTER && SEAT_BY[FILTER]) {
+      var list = SEATS.filter(function (x) { return x.ring === 'C' && x.cc === FILTER; });
+      list.forEach(function (x, i) { x.mg = i; });
+      list.sort(function (a, b) { return (seatRank(a) - seatRank(b)) || (a.mg - b.mg); });
+      var n = list.length, rows = n <= 20 ? 3 : n <= 40 ? 4 : n <= 60 ? 5 : 6, pts = hemi(n, rows, 0.42, 1.0);
+      list.forEach(function (x, i) { var q = pts[i]; x.tx = L.cx + Math.cos(q.a) * q.r * L.R; x.ty = L.cy - Math.sin(q.a) * q.r * L.R; if (jump || x.x == null) { x.x = x.tx; x.y = x.ty; } });
+      var mz = SEAT_BY[FILTER][0]; mz.tx = L.cx; mz.ty = L.cy - L.R * 0.16; if (jump) { mz.x = mz.tx; mz.y = mz.ty; }
+      CMODE = { n: n, dr: Math.max(2, Math.min(9, L.R * 0.9 / (rows * 2.3))) };
+    }
   }
+  var CMODE = null;
 
   // ---------- data sources ----------
   // a "feed" = one source's numbers through time: votes(layer, key) at the current clock
@@ -854,7 +975,10 @@
         p = pc('M', cc, top, f.year) || 'other'; st = f.finalAt('M', cc, snap) ? 'final' : 'lead';
       }
       if (st === 'final' && s.st !== 'final') { var side = p === 'dpp' ? 'g' : (p === 'kmt' || p === 'tpp') ? 'b' : null; if (side) RECENT[side].unshift([cc, CLOCK]); }   // labelled when drawn, so a language switch re-labels it
-      if (s.st !== st || s.p !== p) { s.st = st; s.p = p; changed = true; }
+      // 推估當選 (the model, not the source's mark): the leader drawn half-filled with its ring
+      var proj = false;
+      if (st === 'lead') { var cr = CALLS[cc]; proj = !!(cr && cr.tag === 'proj' && (CALL_PARTY[cr.lead] ? cr.lead : 'ind') === (CALL_PARTY[p] ? p : 'ind')); }
+      if (s.st !== st || s.p !== p || !!s.proj !== proj) { s.st = st; s.p = p; s.proj = proj; changed = true; }
     });
     // council seats: the top-n candidates of the district
     Object.keys(LF_SEATS.council).forEach(function (dk) {
@@ -949,6 +1073,7 @@
     // Redrawn from scratch every frame: no accumulating trail canvas, so nothing is left behind (user 2026-11-05: the old
     // fading trails never fully cleared — 8-bit alpha — and left 「一個陰影在那邊」, which looked cheap)
     if (CAM_DIRTY && LIE && LCAM) { CAM_DIRTY = false; CAM_MOVED = true; applyCam(); drawBg(!!LDRAG); placeSeats(true); drawPillars(); }
+    zoomStep(now);
     gTr.clearRect(0, 0, SW, SH);
     gTr.globalCompositeOperation = 'lighter'; gTr.lineCap = 'round';
     var TL = 0.38;   // tail length, in the line's own time
@@ -991,6 +1116,11 @@
       gTr.stroke(BATCH[key]);
     });
     gTr.globalAlpha = 1; gTr.globalCompositeOperation = 'source-over';
+    if (HOVER_TC && LF_TOWNPOLY[HOVER_TC]) {   // the hovered township, outlined (township layer)
+      gTr.beginPath();
+      LF_TOWNPOLY[HOVER_TC].forEach(function (r) { var first = true; for (var i = 0; i < r.length; i += 2) { var q = P(r[i], r[i + 1]); if (q[2] <= 0) { first = true; continue; } if (first) { gTr.moveTo(q[0], q[1]); first = false; } else gTr.lineTo(q[0], q[1]); } gTr.closePath(); });
+      gTr.strokeStyle = '#ffffff'; gTr.lineWidth = 1.6; gTr.globalAlpha = 0.9; gTr.stroke(); gTr.globalAlpha = 1;
+    }
     if (LIE && PIL_ANIM) drawPillars();
     ltStep(now);
     CAM_MOVED = false;
@@ -1001,27 +1131,38 @@
   // flat view: the county under the mouse — on the map or one of its seats — rings its seats and lights it on the map
   // (white outline, the other counties' lights dimmed); a click on a seat picks the county (FILTER), which keeps it lit
   var HOVER_CC = null;
-  function countyAtMap(x, y) {   // screen px → the county whose outline contains it (even-odd over its rings)
-    var fx = (x - L.ox) / L.k, fy = (y - L.oy) / L.k, hit = null;
-    Object.keys(LF_COUNTY).some(function (cc) {
-      var inside = false;
-      LF_COUNTY[cc].forEach(function (r) {
-        for (var i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
-          if ((r[i + 1] > fy) !== (r[j + 1] > fy) && fx < (r[j] - r[i]) * (fy - r[i + 1]) / (r[j + 1] - r[i + 1]) + r[i]) inside = !inside;
-        }
-      });
-      if (inside) hit = cc; return inside;
-    });
-    return hit;
+  function countyAtMap(x, y) { return countyAtFrame(screenToFrame(x, y)); }   // screen px → the county under it
+  // township layer: the township under the mouse in the picked county → outline (frame) + a box with its mayoral numbers
+  var HOVER_TC = null, TIP_XY = null;
+  function townTip() {
+    var tip = document.getElementById('lf-ttip'); if (!tip) return;
+    if (!HOVER_TC || !TIP_XY) { tip.hidden = true; return; }
+    var tn = lang === 'en' && typeof LF_TOWNNAME_EN !== 'undefined' && LF_TOWNNAME_EN[HOVER_TC] ? LF_TOWNNAME_EN[HOVER_TC] : (LF_TOWNNAME[HOVER_TC] || HOVER_TC);
+    var f = FEEDS[SRC], cs = f && PREV && PREV.T[HOVER_TC], html = '<div class="tn">' + tn + '</div>';
+    if (cs && sumC(cs) > 0) {
+      var tot = sumC(cs), srt = cs.slice().sort(function (a, b) { return b.v - a.v; }).slice(0, 3);
+      html += srt.map(function (c) { var p = pc('T', HOVER_TC, c, f.year) || 'other'; return '<div class="tr"><span style="color:' + lineOf(p) + '">' + c.n + '</span><span>' + fmt(c.v) + '<i>' + (c.v / tot * 100).toFixed(1) + '%</i></span></div>'; }).join('');
+      var pr = Math.max(0, Math.min(1, tcProg(f, PREV, HOVER_TC)));
+      html += '<div class="tp">' + T('縣市長票・已開約 ' + Math.round(pr * 100) + '%', 'Mayoral votes · ~' + Math.round(pr * 100) + '% counted') + '</div>';
+    } else html += '<div class="tp">' + T('尚無資料', 'No data yet') + '</div>';
+    tip.innerHTML = html; tip.hidden = false;
+    var x = TIP_XY[0] + 14, y = TIP_XY[1] + 14;
+    if (x + tip.offsetWidth > SW - 8) x = TIP_XY[0] - tip.offsetWidth - 14;
+    if (y + tip.offsetHeight > SH - 8) y = TIP_XY[1] - tip.offsetHeight - 14;
+    tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
   }
+  function setTownHover(tc, x, y) { HOVER_TC = tc; TIP_XY = tc ? [x, y] : null; townTip(); }
   function setHover(cc) { if (cc === HOVER_CC) return; HOVER_CC = cc; LT_DIRTY = true; root.style.cursor = LIE ? 'grab' : (cc ? 'pointer' : ''); }
   root.addEventListener('pointermove', function (e) {
-    if (LIE || LDRAG || !L) return;
-    if (e.target.closest('.lf-tabs, .lf-cty, .lf-hud, #cols, button, select')) { setHover(null); return; }
+    if (LDRAG || !L || ZANIM) return;
+    if (e.target.closest('.lf-tabs, .lf-cty, .lf-hud, #cols, button, select')) { setHover(null); setTownHover(null); return; }
     var rr = root.getBoundingClientRect(), x = e.clientX - rr.left, y = e.clientY - rr.top, s = seatAt(x, y);
-    setHover(s ? s.cc : countyAtMap(x, y));
+    var fr = s ? null : screenToFrame(x, y);
+    setTownHover(FILTER && fr ? townAtFrame(FILTER, fr) : null, x, y);
+    if (LIE) return;
+    setHover(s ? s.cc : countyAtFrame(fr));
   });
-  root.addEventListener('pointerleave', function () { setHover(null); });
+  root.addEventListener('pointerleave', function () { setHover(null); setTownHover(null); });
   var LDRAG = null, CAM_DIRTY = false, CAM_MOVED = false, camIdle = 0;
   function camChanged() { CAM_DIRTY = true; clearTimeout(camIdle); camIdle = setTimeout(function () { CAM_DIRTY = true; }, 180); }   // a full redraw once it settles
   root.addEventListener('pointerdown', function (e) {
@@ -1065,11 +1206,12 @@
     var k = Math.min(1, dt * 3.5);
     SEATS.forEach(function (s) {
       s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k;
-      var r = (s.ring === 'M' ? Math.max(3.2, L.R * 0.032) : Math.max(1.3, L.R * 0.0125)) * (s.sc || 1);
+      if (CMODE && s.cc !== FILTER) return;   // county mode (flat): only the picked county's seats
+      var r = CMODE ? (s.ring === 'M' ? CMODE.dr * 1.8 : CMODE.dr) : (s.ring === 'M' ? Math.max(3.2, L.R * 0.032) : Math.max(1.3, L.R * 0.0125)) * (s.sc || 1);
       gTop.globalAlpha = FILTER && s.cc !== FILTER && s.cc !== HOVER_CC ? 0.14 : (!FILTER && HOVER_CC && s.cc !== HOVER_CC ? 0.3 : 1);
       var c = s.p ? colorOf(s.p) : '#e8ebf2';
       gTop.beginPath();
-      if (LIE) {   // the projected disc: centre + east axis·cos + north axis·sin
+      if (LIE && !CMODE) {   // the projected disc: centre + east axis·cos + north axis·sin
         for (var kk = 0; kk <= 12; kk++) {
           var th = kk / 12 * Math.PI * 2, cs = Math.cos(th), sn = Math.sin(th);
           var px = s.x + s.ax * cs + s.bx * sn, py = s.y + s.ay * cs + s.by * sn;
@@ -1078,6 +1220,7 @@
         gTop.closePath();
       } else gTop.arc(s.x, s.y, r, 0, Math.PI * 2);
       if (s.st === 'final') { gTop.fillStyle = c; gTop.fill(); }
+      else if (s.st === 'lead' && s.proj) { gTop.globalAlpha *= 0.55; gTop.fillStyle = c; gTop.fill(); gTop.globalAlpha /= 0.55; gTop.lineWidth = 1.6; gTop.strokeStyle = c; gTop.stroke(); }   // 推估當選
       else if (s.st === 'lead') { gTop.lineWidth = s.ring === 'M' ? 1.6 : 0.9; gTop.strokeStyle = c; gTop.stroke(); }
       else { gTop.fillStyle = '#2e3340'; gTop.fill(); }
       if (HOVER_CC && s.cc === HOVER_CC && !LIE) {   // the hovered county's seats: a white ring
@@ -1091,7 +1234,23 @@
     // 「不要蓋住圖表」)
     var lfs = Math.max(9, L.R * 0.038);
     gTop.fillStyle = '#9aa1b2'; gTop.font = '600 ' + lfs + 'px system-ui, sans-serif'; gTop.textAlign = 'center';
-    if (LIE) { var lc = ringW(Math.PI / 2, 0.12), lq = proj3(lc[0], lc[1], lc[2]); if (lq) gTop.fillText(T('地方選舉', 'Local Elections'), lq[0], lq[1]); }
+    if (LIE && !CMODE) { var lc = ringW(Math.PI / 2, 0.12), lq = proj3(lc[0], lc[1], lc[2]); if (lq) gTop.fillText(T('地方選舉', 'Local Elections'), lq[0], lq[1]); }
+    else if (CMODE) {   // county mode: 「台北 議會 61 席」 and a one-line legend — seats each party leads or has won
+      gTop.fillText(T(ccName(FILTER) + ' 議會 ' + CMODE.n + ' 席', ccName(FILTER) + ' council · ' + CMODE.n + ' seats'), L.cx, L.cy + lfs + 8);
+      var by = {}; SEATS.forEach(function (x) { if (x.ring === 'C' && x.cc === FILTER && x.st !== 'none') { var k = x.p || 'other'; by[k] = (by[k] || 0) + 1; } });
+      var ks = Object.keys(by).sort(function (a, b) { return orderOf(a) - orderOf(b); });
+      var items = ks.map(function (k) { return [k, (PN[k] ? T(PN[k][0], PN[k][1]) : k) + ' ' + by[k]]; });
+      var fs = Math.max(9, lfs * 0.95); gTop.font = '600 ' + fs + 'px system-ui, sans-serif'; gTop.textAlign = 'left';
+      var gap = 12, dotw = fs * 0.75, wsum = 0; items.forEach(function (it) { it.w = dotw + 4 + gTop.measureText(it[1]).width; wsum += it.w; });
+      wsum += gap * Math.max(0, items.length - 1);
+      var x = L.cx - wsum / 2, y = L.cy + lfs + 8 + fs + 6;
+      if (!items.length) { gTop.textAlign = 'center'; gTop.fillStyle = '#7d8496'; gTop.fillText(T('尚無資料', 'No data yet'), L.cx, y); }
+      items.forEach(function (it) {
+        gTop.fillStyle = colorOf(it[0]); gTop.beginPath(); gTop.arc(x + dotw / 2, y - fs * 0.35, dotw / 2, 0, Math.PI * 2); gTop.fill();
+        gTop.fillStyle = '#cfd4de'; gTop.fillText(it[1], x + dotw + 4, y); x += it.w + gap;
+      });
+      gTop.textAlign = 'center';
+    }
     else gTop.fillText(T('地方選舉', 'Local Elections'), L.cx, L.cy + lfs + 8);
   }
 
@@ -1104,6 +1263,55 @@
   // 縣市長當選門檻 (選罷法第67條: the most votes win, no floor; 第70條: a sole candidate needs 20% of the electorate):
   // two or more candidates → 「過半保證當選 ≈ expected total ÷ 2」; a sole candidate → the legal rule (no electorate
   // numbers on this page)
+  // projected winner + tag per county (v2/live-turnout.js LiveTurnout.call, CALL_MODEL; user 2026-11-08: Toss-up / Lean /
+  // Likely / 推估當選 →「做」): candidate key = party for the five parties with a track record, else 'ind:<name>';
+  // stations reported from the source's township 已開／應開 when it has them (else share × the county's stations)
+  var CALL_PARTY = { dpp: 1, kmt: 1, tpp: 1, pfp: 1, npp: 1 };
+  var CKEY = {};   // memo: a candidate's party never changes during the night (pc() is a name lookup)
+  function ckey(cc, c, year) { var m = year + '|' + cc + '|' + c.n; if (m in CKEY) return CKEY[m]; var p = pc('M', cc, c, year); return (CKEY[m] = CALL_PARTY[p] ? p : 'ind:' + c.n); }
+  function callOf(f, snap, cc) {
+    if (!window.LiveTurnout || typeof CALL_MODEL === 'undefined' || typeof TURNOUT_PRIOR === 'undefined' || !f || !snap) return null;
+    turnoutOf(f, snap, cc);   // (re)builds TO_CACHE for this snapshot
+    var C = TO_CACHE.calls || (TO_CACHE.calls = {});
+    if (cc in C) return C[cc];
+    if (!TO_CACHE.ctowns) TO_CACHE.ctowns = TO_CACHE.towns.map(function (t) {
+      var by = {}, tcc = LF_TOWNS[t.tc][0];
+      (snap.T[t.tc] || []).forEach(function (c) { var k = ckey(tcc, c, f.year); by[k] = (by[k] || 0) + c.v; });
+      return { tc: t.tc, s: t.s, by: by };
+    });
+    var nRep = null;
+    if (!f.sim && f.prog) {
+      var a = 0, b = 0; Object.keys(LF_TOWNS).forEach(function (tc) { if (LF_TOWNS[tc][0] === cc && f.prog[tc]) { a += f.prog[tc][0]; b += f.prog[tc][1]; } });
+      if (b) nRep = [a, b];
+    }
+    var yr = String(f.year) === '2022' ? '2022' : '2026';
+    var r = LiveTurnout.call(CALL_MODEL, yr, TURNOUT_PRIOR[yr], TO_CACHE.ctowns, cc, ccOfTc, nRep);
+    if (r) {   // the candidates behind the keys, from the county numbers
+      (snap.M[cc] || []).forEach(function (c) { var k = ckey(cc, c, f.year); if (k === r.lead) r.leadName = c.n; if (k === r.second) r.secondName = c.n; });
+      r.party = CALL_PARTY[r.lead] ? r.lead : 'ind';
+    }
+    return (C[cc] = r);
+  }
+  var TAGS = { early: ['尚早', 'Too early to call'], toss: ['拉鋸', 'Toss-up'], lean: ['傾向', 'Lean'], likely: ['可能', 'Likely'], proj: ['推估當選', 'Certain'] };
+  // the boxes' compact tag, the same in both languages (user 2026-11-08: 「勝率標籤要做出像是 lean K lean D 這種」; the model line
+  // keeps the words): Certain / Likely / Lean + party letter, Toss-up, Too early
+  var PCODE = { dpp: 'D', kmt: 'K', tpp: 'T', pfp: 'P', npp: 'N', ind: 'I' };
+  var TCODE = { proj: 'Certain', likely: 'Likely', lean: 'Lean' };
+  function tagCode(r) {
+    if (!r) return '';
+    if (r.tag === 'early') return 'Too early';
+    if (r.tag === 'toss') return 'Toss-up';
+    return TCODE[r.tag] + ' ' + (PCODE[r.party] || 'I');
+  }
+  function tagColor(r) { return !r ? 'transparent' : r.tag === 'early' ? '#9aa1b2' : r.tag === 'toss' ? '#f5c518' : colorOf(r.party); }
+  var PSHORT = { dpp: ['民進', 'DPP'], kmt: ['國民', 'KMT'], tpp: ['民眾', 'TPP'], pfp: ['親民', 'PFP'], npp: ['時力', 'NPP'], ind: ['無黨', 'Ind.'] };
+  function tagText(r) {
+    if (!r) return '';
+    if (r.tag === 'toss' || r.tag === 'proj' || r.tag === 'early') return T(TAGS[r.tag][0], TAGS[r.tag][1]);
+    var ps = PSHORT[r.party] || PSHORT.ind;
+    return T(TAGS[r.tag][0] + ps[0], TAGS[r.tag][1] + ' ' + ps[1]);
+  }
+  window.__lfCall = function (cc) { var f = FEEDS[SRC]; return f && PREV ? callOf(f, PREV, cc) : null; };
   // read-only peek for browser checks: a county's turnout estimate on the current snapshot (draws nothing)
   window.__lfTurnout = function (cc) { var f = FEEDS[SRC]; return f && PREV ? turnoutOf(f, PREV, cc) : null; };
   function thrLine(f, snap, cc, top) {
@@ -1126,45 +1334,26 @@
       var m = SEAT_BY[FILTER][0], cs = snap && snap.M[FILTER], top = cs && sumC(cs) > 0 ? cs.slice().sort(function (a, b) { return b.v - a.v; }) : null;
       var mline = top ? '<span class="' + (m.st === 'final' ? 'dot' : 'ring') + '" style="' + (m.st === 'final' ? 'background:' : 'border-color:') + colorOf(m.p) + '"></span> ' +
         top[0].n + ' ' + (m.st === 'final' ? T('確定', 'final') : T('領先', 'leads')) + (top[1] ? ' ' + T('差 ', 'by ') + fmt(top[0].v - top[1].v) + T(' 票', '') : '') : T('尚無資料', 'No data');
-      var by = {}, tot = 0, warnN = f.warn ? Object.keys(f.warn).filter(function (dk) { return LF_SEATS.council[dk] && LF_SEATS.council[dk][0] === FILTER; }).length : 0;
-      SEATS.forEach(function (s) { if (s.ring !== 'C' || s.cc !== FILTER) return; tot++; if (s.st === 'none') return; var k = s.p || '?'; by[k] = by[k] || [0, 0]; by[k][s.st === 'final' ? 1 : 0]++; });
-      var rows = Object.keys(by).sort(function (a, b) { return orderOf(a === '?' ? 'other' : a) - orderOf(b === '?' ? 'other' : b); }).map(function (p) {
-        var c = p === '?' ? '#e8ebf2' : colorOf(p), nm = p === '?' ? T('黨籍待補', 'Party n/a') : (PN[p] ? T(PN[p][0], PN[p][1]) : p);
-        return '<div class="row"><span><span class="dot" style="background:' + c + '"></span>' + nm + '</span><span title="' + T('領先', 'leading') + '"><span class="ring" style="border-color:' + c + '"></span> ' + by[p][0] + '</span><span title="' + T('確定', 'final') + '"><span class="dot" style="background:' + c + '"></span>' + by[p][1] + '</span></div>';
-      }).join('');
-      html += '<div class="k">' + T('縣市長', 'Mayor') + '</div><div>' + mline + '</div>' + thrLine(f, snap, FILTER, top) +
-        '<div class="k" style="margin-top:6px">' + T('議會 ' + tot + ' 席：空心＝目前領先、實心＝確定', 'Council, ' + tot + ' seats — hollow = leading, solid = final') + '</div>' +
-        '<canvas class="mini" style="width:100%;height:104px;display:block;margin:4px 0 2px"></canvas>' +
-        (warnN ? '<div class="k" style="color:#f5c518">' + T(warnN + ' 個選區的當選標記跟應選席次對不上：開完前維持「領先」，開完後依票數排名判定', warnN + ' district(s): elected marks do not match the seats — leading until fully counted, then called by the vote order') + '</div>' : '') +
-        (rows || '<div>' + T('尚無資料', 'No data') + '</div>');
+      var warnN = f.warn ? Object.keys(f.warn).filter(function (dk) { return LF_SEATS.council[dk] && LF_SEATS.council[dk][0] === FILTER; }).length : 0;
+      var fcr = top && m.st !== 'final' ? callOf(f, snap, FILTER) : null;
+      var cline = fcr ? '<div class="k" style="color:' + tagColor(fcr) + '">' + T('模型：', 'Model: ') + tagText(fcr) +
+        (fcr.tag === 'early' ? T('（開票未滿 5%）', ' (under 5% counted)') :
+          fcr.leadName ? T('・' + fcr.leadName + ' 勝率 ' + (fcr.tag === 'proj' ? '>99.5' : Math.round(fcr.P * 100)) + '%', ' · ' + fcr.leadName + ' ' + (fcr.tag === 'proj' ? '>99.5' : Math.round(fcr.P * 100)) + '% to win') : '') + '</div>' : '';
+      // the model and the 過半 line go into the county's card (both views); the flat view puts the mayor line there too and
+      // shows the council in the big hemicycle instead of this box (user 2026-11-08: 併入縣市卡；半圓移到 910 席位置；「先只改
+      // 平面」「立體的把預估當選跟傾向誰移到縣市卡就好」)
+      var mxEl = CROWS[FILTER] && CROWS[FILTER].querySelector('.mx');
+      // (3D the same since 2026-11-08: 「立體的也改成跟平面一樣」)
+      var mxHtml = '<div class="ml">' + mline + '</div>' + cline + thrLine(f, snap, FILTER, top) +
+        (warnN ? '<div style="color:#f5c518">' + T(warnN + ' 個選區的當選標記跟應選席次對不上：開完前維持「領先」，開完後依票數排名判定', warnN + ' district(s): elected marks do not match the seats — leading until fully counted, then called by the vote order') + '</div>' : '');
+      if (mxEl && mxEl.innerHTML !== mxHtml) mxEl.innerHTML = mxHtml;
     }
+    Object.keys(CROWS).forEach(function (cc) { if (cc !== FILTER) { var mx = CROWS[cc].querySelector('.mx'); if (mx && mx.innerHTML) mx.innerHTML = ''; } });
     box.hidden = !html;
     if (box.innerHTML !== html) box.innerHTML = html;
-    var mini = box.querySelector('canvas.mini');
-    if (mini) drawMini(mini);
   }
-  // the filtered county's own small hemicycle (user: 「filter也要即時給出一個小的圖跟一樣按照領先跟當選即時畫」): same ranks as the
-  // big chart (party blocks, final at the outer ends), the mayor in the middle
-  function drawMini(cv) {
-    var w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
-    cv.width = w * DPR; cv.height = h * DPR;
-    var g = cv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
-    var list = SEATS.filter(function (x) { return x.ring === 'C' && x.cc === FILTER; });
-    list.forEach(function (x, i) { x.mg = i; });
-    list.sort(function (a, b) { return (seatRank(a) - seatRank(b)) || (a.mg - b.mg); });
-    var n = list.length, rows = n <= 20 ? 3 : n <= 40 ? 4 : n <= 60 ? 5 : 6;
-    var R = Math.min(w / 2 - 6, h - 8), cx = w / 2, cy = h - 4, pts = hemi(n, rows, 0.42, 1.0);
-    var dr = Math.max(1.6, Math.min(4.2, R * 0.9 / (rows * 2.3)));
-    function dot(x, y, r, st, p) {
-      var c = p ? colorOf(p) : '#e8ebf2';
-      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
-      if (st === 'final') { g.fillStyle = c; g.fill(); }
-      else if (st === 'lead') { g.lineWidth = 1.1; g.strokeStyle = c; g.stroke(); }
-      else { g.fillStyle = '#2e3340'; g.fill(); }
-    }
-    list.forEach(function (x, i) { var q = pts[i]; dot(cx + Math.cos(q.a) * q.r * R, cy - Math.sin(q.a) * q.r * R, dr, x.st, x.p); });
-    var m = SEAT_BY[FILTER][0]; dot(cx, cy - R * 0.16, Math.max(4, dr * 1.8), m.st, m.p);
-  }
+  // (the filtered county's small hemicycle, drawMini, was replaced 2026-11-08 by the county council in the big hemicycle —
+  // placeSeats CMODE; backup/live-flow_pre_cty3d_20261108.html has it)
   // the select is built once per language (rebuilding it on every HUD refresh would close it under the mouse)
   // the county filter sits in the tab row (user 2026-11-07, approved); this box holds only its summary
   function ctySelect() {
@@ -1383,10 +1572,10 @@
     if (CROWS[cc]) return CROWS[cc];
     var el = document.createElement('div'); el.className = 'cb';
     var dks = districtsOf(cc); CDIST[cc] = dks[0];
-    el.innerHTML = '<div class="hd"><span class="nm"></span><span class="pin"></span><span class="tg">▸ ' + T('選區', 'Dist.') + '</span></div>' +
+    el.innerHTML = '<div class="hd"><span class="nm"></span><span class="ct"></span><span class="pin"></span><span class="tg">▸ ' + T('選區', 'Dist.') + '</span></div>' +
       '<div class="cn c0"><span></span><span></span></div><div class="bt"><div class="bar b0"></div></div>' +
       '<div class="cn c1"><span></span><span></span></div><div class="bt"><div class="bar b1"></div></div>' +
-      '<div class="det"><select>' + dks.map(function (dk) {
+      '<div class="mx"></div><div class="det"><select>' + dks.map(function (dk) {
         return '<option value="' + dk + '">' + T('第' + (+dk.split('_')[1]) + '選區（應選' + LF_SEATS.council[dk][1] + '席）', 'District ' + (+dk.split('_')[1]) + ' (' + LF_SEATS.council[dk][1] + ' seats)') + '</option>'; }).join('') +
       '</select><div class="list"></div></div>';
     el.querySelector('select').onchange = function () { CDIST[cc] = this.value; lastHud = 0; };
@@ -1468,7 +1657,7 @@
   function turnoutOf(f, snap, cc) {
     if (!window.LiveTurnout || typeof TURNOUT_PRIOR === 'undefined' || !f || !snap) return null;
     if (TO_CACHE.snap !== snap || TO_CACHE.f !== f) {
-      TO_CACHE = { snap: snap, f: f, by: {}, towns: Object.keys(snap.T || {}).filter(function (tc) { return LF_TOWNS[tc]; }).map(function (tc) {
+      TO_CACHE = { snap: snap, f: f, by: {}, calls: {}, ctowns: null, towns: Object.keys(snap.T || {}).filter(function (tc) { return LF_TOWNS[tc]; }).map(function (tc) {
         return { tc: tc, cnt: sumC(snap.T[tc]), s: Math.max(0, Math.min(1, tcProg(f, snap, tc))) };
       }) };
     }
@@ -1508,6 +1697,12 @@
       // bars grow with the count (user 2026-11-07: 「背景的詳細資料長條圖也要跟著票數更新」): length = votes / the county's safe
       // upper total (turnoutOf), so the tick at half is the certain-win point; exact once the count is complete
       var tr = top ? turnoutOf(f, snap, cc) : null, expTot = tr ? tr.upper : tot;
+      var cr = top && !f.finalAt('M', cc, snap) ? callOf(f, snap, cc) : null, ctEl = el.querySelector('.ct');
+      // written only when it changes: rewriting every box every ~180 ms while the column is hovered (its boxes animating)
+      // dropped the page to a few frames a second
+      var ctx = tagCode(cr), ctc = tagColor(cr);
+      if (el._ctx !== ctx) { ctEl.textContent = ctx; el._ctx = ctx; }
+      if (el._ctc !== ctc) { el.style.setProperty('--tc', ctc); el._ctc = ctc; }
       el.classList.toggle('solo', !!top && top.length < 2);
       el.style.setProperty('--pc', p ? colorOf(p) : '#9aa1b2');
       [0, 1].forEach(function (k) {   // the two leading candidates: name, votes, a bar ∝ their share, in their own party colour
@@ -1578,7 +1773,11 @@
       el.style.transition = 'transform .8s cubic-bezier(.4,.1,.2,1)'; el.style.transform = '';
     });
   }
+  // the model runs with the HUD (every ~180 ms), not every frame: the seats read the latest CALLS
+  var CALLS = {};
   function hud(f, snap) {
+    CALLS = {}; LF_SEATS.mayor.forEach(function (cc) { CALLS[cc] = callOf(f, snap, cc); });
+    if (HOVER_TC) townTip();   // the township box follows the count
     PIL_SNAP = snap; PIL_FEED = f; flipUpdate(f, snap); drawPillars(); ltUpdate(f, snap); crUpdate(f, snap);
     ctyPanel(f, snap);
     var tot = { dpp: 0, kmt: 0 }, all = 0, fin = 0;
@@ -1628,7 +1827,7 @@
   function pickCounty(cc) {
     FILTER = cc || null; gTr.clearRect(0, 0, SW, SH); PARTS = []; lastHud = 0; LT_DIRTY = true;
     var sel = document.querySelector('.lf-ctysel'); if (sel && sel.value !== (FILTER || '')) sel.value = FILTER || '';
-    flyToCounty(FILTER);
+    flyToCounty(FILTER); zoomFlat(FILTER); setTownHover(null); placeSeats(false);
     var f2 = FEEDS[SRC]; if (f2 && PREV) hud(f2, PREV); else { ctyPanel(null, null); placeFocus(); }
   }
   // a click (not a drag) on a seat picks its county; on the picked county's seats again, back to all
@@ -1638,8 +1837,12 @@
     return best;
   }
   function seatClick(e) {
-    var rr = root.getBoundingClientRect(), s = seatAt(e.clientX - rr.left, e.clientY - rr.top);
-    if (s) pickCounty(s.cc === FILTER ? null : s.cc);
+    var rr = root.getBoundingClientRect(), x = e.clientX - rr.left, y = e.clientY - rr.top, s = seatAt(x, y);
+    if (s) { pickCounty(s.cc === FILTER ? null : s.cc); return; }
+    // the map (both views; user 2026-11-08: 點選縣市進入鄉鎮市區層): a county → in (the same one again → out); empty → out
+    var cc = countyAtFrame(screenToFrame(x, y));
+    if (cc) pickCounty(cc === FILTER ? null : cc);
+    else if (FILTER) pickCounty(null);
   }
   function renderTabs() {
     var el = document.getElementById('tabs'), keys = feedKeys();
@@ -1664,8 +1867,9 @@
     el.querySelectorAll('button[data-src]').forEach(function (b) { b.onclick = function () { SRC = b.dataset.src; restart(); }; });
     el.querySelectorAll('button[data-view]').forEach(function (b) { b.onclick = function () {
       VIEW = LIE ? 'flat' : 'lie'; LIE = VIEW === 'lie';
-      try { localStorage.setItem(VIEW_KEY, VIEW); } catch (e) {}
-      root.style.cursor = LIE ? 'grab' : ''; layout(); renderTabs(); }; });
+      root.style.cursor = LIE ? 'grab' : ''; layout(); renderTabs();
+      // redraw at once (paused, the lying view's floor and pillars stayed empty until the next HUD tick)
+      var fv = FEEDS[SRC]; if (fv && PREV) hud(fv, PREV); else drawPillars(); }; });
     el.querySelectorAll('button[data-pil]').forEach(function (b) { b.onclick = function () {
       PIL_MODE = PIL_MODE === 'cell' ? 'smooth' : 'cell';
       try { localStorage.setItem('lf_pil', PIL_MODE); } catch (e) {}
@@ -1715,7 +1919,8 @@
   })();
   function legendText() {   // the ⓘ tooltip in the tab row (the legend used to sit at the top right)
     return [T('內圈 縣市長 22 席・外圈 縣市議員 910 席', 'Inner ring: 22 mayors · outer ring: 910 councillors'),
-      T('空心＝目前領先・實心＝確定', 'Hollow = leading · solid = final'), T('平躺視角：拖曳轉角度・滾輪拉近拉遠', '3D view: drag to turn · wheel to zoom'), T('線越粗＝那個鄉鎮這一批開出的票越多', 'Thicker line = a bigger batch of votes from that township')]
+      T('空心＝目前領先・半實心＝推估當選（模型）・實心＝確定', 'Hollow = leading · half-filled = projected (model) · solid = final'),
+      T('縣市長標籤：Too early（開票未滿 5%）・Toss-up 拉鋸（勝率<70%）・Lean 傾向（70–90%）・Likely 可能（90–99.5%）・Certain 推估當選（>99.5%）；D 民進黨・K 國民黨・T 民眾黨・I 無黨；依開出的票與上屆各鄉鎮得票推估', 'Mayor tags: Too early (<5% counted) · Toss-up (<70%) · Lean (70–90%) · Likely (90–99.5%) · Certain (>99.5%); D DPP · K KMT · T TPP · I independent; from the votes in vs each township\'s last result'), T('平躺視角：拖曳轉角度・滾輪拉近拉遠', '3D view: drag to turn · wheel to zoom'), T('線越粗＝那個鄉鎮這一批開出的票越多', 'Thicker line = a bigger batch of votes from that township')]
       .concat(LIE ? [] : [T('光點＝鄉鎮已開票的比例亮起，顏色＝該鄉鎮目前領先的政黨；灰線＝縣市界', 'Lights = the share of a township already counted, in the colour of the party leading it; grey lines = county borders')])
       .concat(LIE ? [T('光柱＝鄉鎮已開出的縣市長票，鄉鎮內依人口平均分配（示意）', 'Pillars = a township\'s counted mayoral votes, spread by population (illustrative)')] : [])
       .concat(LIE ? [] : [T('滑過縣市或圓點＝點亮該縣市；點圓點＝選取（再點一次取消）', 'Hover a county or a seat = light that county; click a seat = select it (click again to clear)')])
@@ -1724,7 +1929,7 @@
   }
   function resetState() {
     SEATS.forEach(function (s) { s.p = null; s.st = 'none'; });
-    PREV = null; ACC = {}; LASTE = {}; PARTS = []; HIST = []; RECENT = { g: [], b: [] };
+    PREV = null; ACC = {}; LASTE = {}; PARTS = []; HIST = []; RECENT = { g: [], b: [] }; CALLS = {};
     PIL_SNAP = null; gPil.clearRect(0, 0, SW, SH); dimFloor(false); pilReset(); ltReset();
     gTr.clearRect(0, 0, SW, SH); placeSeats(true);
   }
