@@ -220,6 +220,17 @@
     #ph-list .cb .det select { font-size: 13px; }
   }
   .lf-info { cursor: pointer; color: #9aa1b2; font-size: 13px; padding: 0 4px; }
+  /* the red ⚠ (user 2026-11-09: 「2026開票也要預留新聞媒體的開票網站的網址跟紅色三角形按鈕聲明」): the other V2 pages' disclaimer
+     button (disclaimer.js) in the tab row; its note holds the statement and the outlets' results pages */
+  .lf-warn { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,82,82,.18); border: 1.5px solid rgba(255,82,82,.55); color: #ff5252;
+    font-size: 10px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .lf-warn-note { position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: 10px 12px; font-size: 11.5px; line-height: 1.6;
+    color: #ff8a8a; background: rgba(40,12,14,.96); border: 1px solid rgba(255,82,82,.45); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+  .lf-warn-note h4 { margin: 8px 0 4px; padding-top: 8px; border-top: 1px solid rgba(255,82,82,.3); font-size: 11.5px; color: #ffb4b4; font-weight: 600; }
+  .lf-warn-note ul { margin: 0; padding: 0; list-style: none; }
+  .lf-warn-note li { display: flex; justify-content: space-between; gap: 8px; }
+  .lf-warn-note a { color: #ffd0d0; }
+  .lf-warn-note .tbd { color: rgba(255,138,138,.55); }
   .lf-info:hover, .lf-info[aria-expanded="true"] { color: #fff; }
   /* the ⓘ legend box (the browser's own title tooltip often never showed, user 2026-11-08: 「滑鼠經過i只出現『？』」) */
   .lf-tip { position: absolute; z-index: 6; max-width: min(420px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 8px; background: rgba(14,17,24,.96); border: 1px solid rgba(255,255,255,.16); color: #cfd4de; font-size: 11.5px; line-height: 1.65; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
@@ -307,6 +318,7 @@
   <canvas id="cv-top"></canvas>
   <div class="lf-tabs" id="tabs"></div>
   <div class="lf-tip" id="lf-tip" hidden></div>
+  <div class="lf-warn-note" id="lf-warn" role="note" hidden></div>
   <div class="lf-ttip" id="lf-ttip" hidden></div>
   <div class="lf-cmp" id="lf-cmp" hidden></div>
   <div class="lf-tour" id="lf-tour" hidden><div class="hole"></div><svg class="arr" aria-hidden="true"><defs><marker id="lf-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ffffff"/></marker></defs><path class="ln" d="" marker-end="url(#lf-ah)"/></svg><div class="card"></div></div>
@@ -1153,6 +1165,70 @@
       f.lastTs = function () { var m = null; Object.keys(f.M).forEach(function (cc) { if (f.M[cc].at != null) m = Math.max(m || 0, f.M[cc].at); }); return m; };
     });
     return feeds;
+  }
+
+  // 2026 重播 (user 2026-11-09: 開票當晚不即時上線 —「開完了再把真實的過程上線」): v2/data_liveflow_r2026.js, made by
+  // build_live2026_replay.py from the poller's per-round snapshots — the night's real timeline, only changes stored.
+  // Played like the rehearsal (clock, speed, ↺) but nothing simulated: at clock t each source shows its last snapshot at
+  // or before t; a county / district is final from the snapshot its source marked it. The file is loaded on demand, so
+  // the 「2026 重播」 tab appears only once it is up (?replayfile=data_liveflow_r2026*.js tests another file)
+  var R26 = null, SIM_R22 = { start: SIM.start, end: SIM.end, secs: SIM.secs };
+  function buildReplay26(R) {
+    var FR = R.frames || [], feeds = {};
+    Object.keys(R.src || {}).forEach(function (k) {
+      var S = R.src[k], f = feeds[k] = { key: k, label: S.label, ts: null, T: {}, C: {}, M: {}, year: String(R.year || '2026'), sim: true, replay: true };
+      function cursor() { return { i: 0, V: { M: {}, T: {}, C: {} }, P: {}, F: {} }; }
+      function advance(cur, t) {
+        for (; cur.i < FR.length && FR[cur.i].t <= t; cur.i++) {
+          var x = FR[cur.i].s[k]; if (!x) continue;
+          ['M', 'T', 'C'].forEach(function (L) { if (x[L]) Object.keys(x[L]).forEach(function (key) { cur.V[L][key] = x[L][key]; }); });
+          if (x.P) Object.keys(x.P).forEach(function (key) { cur.P[key] = x.P[key]; });
+          if (x.F) x.F.forEach(function (key) { cur.F[key] = 1; });
+        }
+      }
+      function cands(L, key, vec, fin) {
+        var row = S[L][key]; if (!row || !vec) return null;
+        return row[0].map(function (n, i) { var c = { n: n, v: vec[i] || 0 }; if (row[1][i]) c.p = row[1][i]; if (L === 'C' && fin && row[2] && row[2][i]) c.e = 1; return c; });
+      }
+      var end = cursor(); advance(end, Infinity);   // the final state: the denominators for 「share counted」, as the rehearsal's
+      Object.keys(S.M).forEach(function (cc) { f.M[cc] = { cands: cands('M', cc, end.V.M[cc]) || [], at: null, final: !!end.F['M' + cc] }; });
+      Object.keys(S.T).forEach(function (tc) { f.T[tc] = cands('T', tc, end.V.T[tc]) || []; });
+      Object.keys(S.C).forEach(function (dk) { f.C[dk] = { cands: cands('C', dk, end.V.C[dk], true) || [], final: !!end.F['C' + dk] }; });
+      var cur = cursor();
+      f.votesAt = function (t) {
+        if (cur.i && t < FR[cur.i - 1].t) cur = cursor();   // played back / restarted
+        advance(cur, t);
+        var out = { T: {}, M: {}, C: {}, prog: {}, fin: {} };
+        Object.keys(cur.F).forEach(function (key) { out.fin[key] = 1; });
+        function prog(L, key, cs, fin) { var p = cur.P[L + key]; if (p && p[1]) return p[0] / p[1]; var d = sumC(fin); return d ? sumC(cs) / d : 0; }
+        Object.keys(cur.V.M).forEach(function (cc) { var cs = cands('M', cc, cur.V.M[cc]); if (!cs) return; out.M[cc] = cs; out.prog[cc] = prog('M', cc, cs, f.M[cc] && f.M[cc].cands); });
+        Object.keys(cur.V.T).forEach(function (tc) { var cs = cands('T', tc, cur.V.T[tc]); if (cs) out.T[tc] = cs; });
+        Object.keys(cur.V.C).forEach(function (dk) { var cs = cands('C', dk, cur.V.C[dk], !!cur.F['C' + dk]); if (!cs) return; out.C[dk] = cs; out.prog[dk] = prog('C', dk, cs, f.C[dk] && f.C[dk].cands); });
+        return out;
+      };
+      f.finalAt = function (layer, key, snap) { return !!(snap.fin && snap.fin[layer + key]); };
+      f.lastTs = function () { return null; };
+    });
+    return feeds;
+  }
+  function loadReplay26(cb) {
+    var m = /[?&]replayfile=(data_liveflow_r2026[\w.]*\.js)/.exec(location.search), sc = document.createElement('script');
+    sc.src = (m ? m[1] : 'data_liveflow_r2026.js') + '?v=' + Math.floor(Date.now() / 600000);   // a fresh copy every 10 min
+    sc.onload = function () {
+      try { if (typeof LF_R2026 !== 'undefined' && LF_R2026.frames && LF_R2026.frames.length) R26 = buildReplay26(LF_R2026); }
+      catch (e) { console.warn('[live-flow] 2026 replay unreadable:', e); R26 = null; }
+      cb && cb();
+    };
+    sc.onerror = function () { cb && cb(); };   // not up yet (before the night is over): no 「2026 重播」 tab
+    document.head.appendChild(sc);
+  }
+  function simFor(m) {   // the clock's range: the rehearsal's 16:00–22:30, or the replay's first to last snapshot
+    var r = SIM_R22;
+    if (m === 'r2026' && typeof LF_R2026 !== 'undefined' && LF_R2026.frames.length) {
+      var a = Math.floor(LF_R2026.frames[0].t), b = Math.ceil(LF_R2026.frames[LF_R2026.frames.length - 1].t);
+      r = { start: a, end: Math.max(a + 1, b), secs: Math.max(60, SIM_R22.secs * (b - a) / (SIM_R22.end - SIM_R22.start)) };   // the rehearsal's pace
+    }
+    SIM.start = r.start; SIM.end = r.end; SIM.secs = r.secs;
   }
 
   // 2026: data_live2026.js, re-read every 60 s; each source's latest numbers (no timeline: deltas between reads fly)
@@ -2491,7 +2567,7 @@
     side('hud-b', 'b', 'kmt', T('在野（國民黨＋民眾黨）', 'OPPOSITION (KMT + TPP)'));
     var m = document.getElementById('hud-m');
     var pct = f.sim && fin ? Math.round(all / fin * 100) : null, wide = SW > 640;
-    m.innerHTML = '<div class="clk">' + (f.sim ? hhmm(CLOCK) + T('（模擬）', ' (simulated)') : (f.ts ? T('最後更新 ', 'Updated ') + f.ts : T('尚無資料', 'No data yet'))) +
+    m.innerHTML = '<div class="clk">' + (f.sim ? hhmm(CLOCK) + (f.replay ? T('（重播）', ' (replay)') : T('（模擬）', ' (simulated)')) : (f.ts ? T('最後更新 ', 'Updated ') + f.ts : T('尚無資料', 'No data yet'))) +
       (wide && pct != null ? '<span class="pg">' + T('・縣市長票已開出 ' + pct + '%', ' · ' + pct + '% of mayoral votes counted') + '</span>' : '') + '</div>' +
       refHtml(f, snap, all, fin) +
       (!wide && pct != null ? '<div class="prog">' + T('縣市長票已開出 ' + Math.round(all / fin * 100) + '%（以這個來源的最終票數計）', Math.round(all / fin * 100) + '% of this source\'s final mayoral count') + '</div>' : '');   // (the 「來源：…」 line removed, user 2026-11-08: 「來源：自由時報.....刪掉」)
@@ -2627,6 +2703,7 @@
     var el = document.getElementById('tabs'), keys = feedKeys();
     if (!FEEDS[SRC]) SRC = keys[0] || null;
     var html = '<span class="seg"><button type="button" data-mode="live" aria-pressed="' + (MODE === 'live') + '">' + T('2026 開票', '2026 count') + '</button>' +
+      (R26 ? '<button type="button" data-mode="r2026" aria-pressed="' + (MODE === 'r2026') + '">' + T('2026 重播', '2026 replay') + '</button>' : '') +
       '<button type="button" data-mode="r2022" aria-pressed="' + (MODE === 'r2022') + '">' + T('2022 排練', '2022 rehearsal') + '</button></span>';
     // the sources: one menu, each option titled with its full label and note; 「各家比較」 the last item (shown while open)
     if (keys.length) html += '<select class="lf-srcsel" aria-label="' + T('資料來源', 'Source') + '">' + keys.map(function (k) {
@@ -2637,6 +2714,7 @@
     // (the 「全部縣市」 county menu was removed — user 2026-11-09: 「縣市 filter 應該可以拿掉？這個在打開時指引就行了」: a county is
     // picked on the map or on its mayor's seat, and the ⓘ guide says so)
     html += '<span class="lf-info" role="button" tabindex="0" aria-expanded="false" aria-label="' + T('圖例說明', 'Legend') + '">ⓘ</span>';
+    html += '<button type="button" class="lf-warn" aria-expanded="' + !document.getElementById('lf-warn').hidden + '" title="' + T('聲明與各家開票網站', 'Disclaimer and outlets\' results pages') + '">⚠</button>';
     if (!keys.length) html += '<span class="lf-banner">' + T('目前還沒有任何來源的開票資料', 'No source has reported yet') + '</span>';
     var f = FEEDS[SRC], ctl = '';
     if (!PHONE) ctl += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / 3D') + '">' + (LIE ? T('平躺', '3D') : T('平面', 'Flat'))   /* EN 「Lying」 → 「3D」 (user 2026-11-08: 「平躺模式應該英文不叫lying吧」) */ + '</button>' +
@@ -2679,8 +2757,54 @@
     ctySelect();
     var empty = document.getElementById('empty');
     empty.hidden = !!(f && (Object.keys(f.M).length || Object.keys(f.C).length));
-    empty.textContent = MODE === 'live' ? T('2026 開票還沒開始，或來源還沒有資料。可以先看「2022 排練」。', 'The 2026 count has not started or no source has data yet — try the 2022 rehearsal.') : '';
+    // the night itself is not live here (user 2026-11-09: 開完票再把真實的過程上線): the replay goes up once counting is over
+    empty.textContent = MODE !== 'live' ? '' : R26 ? T('2026 開票已經結束，完整過程請看「2026 重播」。', 'The 2026 count is over — watch it in the 2026 replay.') :
+      T('2026 開票當晚本頁不即時更新，完整的開票過程會在開票結束後（台灣時間約晚上八點以後）整理上線。現在可以先看「2022 排練」，或點 ⚠ 前往各家開票網站。',
+        'This page is not updated live on election night; the full count goes up as a replay after counting ends (around 8 pm Taiwan time). Meanwhile, try the 2022 rehearsal, or tap ⚠ for the outlets\' results pages.');
   }
+  // the ⚠ note: the statement + every outlet with a public results page (agreed 2026-11-08: regardless of leaning, a fixed
+  // neutral order — 中選會 first, then the outlets by their English names —, each URL added only once verified live; the
+  // 2026 pages go up ~11/27–28, until then 「網址待公布」). To add one: set its url below.
+  var OUTLETS = [
+    { zh: '中選會（官方）', en: 'Central Election Commission (official)', url: null },
+    { zh: '中央社', en: 'CNA', url: null },
+    { zh: 'ETtoday', en: 'ETtoday', url: null },
+    { zh: '自由時報', en: 'Liberty Times', url: null },
+    { zh: '公視', en: 'PTS', url: null },
+    { zh: '三立', en: 'SET', url: null },
+    { zh: 'TVBS', en: 'TVBS', url: null },
+    { zh: '聯合報', en: 'United Daily News', url: null }
+  ];
+  function warnHtml() {
+    var esc = function (t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+    return '<div>' + T('本頁是個人製作的非官方整理，不代表任何政黨或媒體。開票數字取自各新聞媒體公開的開票網頁，各家數字可能不同，' +
+        '正式結果以中選會公告為準。「推估當選」是本頁依已開出票數計算的估計，不是媒體或中選會的宣布。' +
+        '開票當晚本頁不即時更新，完整的開票過程會在開票結束後整理上線。',
+        'An unofficial personal project, not affiliated with any party or outlet. Counts come from news outlets\' public results ' +
+        'pages and may differ between outlets; the Central Election Commission\'s announcement is final. 「Projected」 is this ' +
+        'page\'s own estimate from the votes counted, not a call by any outlet or the CEC. This page is not updated live on ' +
+        'election night; the full count goes up as a replay once counting is over.') + '</div>' +
+      '<h4>' + T('2026 各家開票網站', '2026 results pages') + '</h4><ul>' + OUTLETS.map(function (o) {
+        var nm = esc(lang === 'en' ? o.en : o.zh);
+        return '<li><span>' + (o.url ? '<a href="' + esc(o.url) + '" target="_blank" rel="noopener noreferrer">' + nm + '</a>' : nm) + '</span>' +
+          (o.url ? '' : '<span class="tbd">' + T('網址待公布', 'link soon') + '</span>') + '</li>';
+      }).join('') + '</ul>';
+  }
+  (function () {
+    var tabs = document.getElementById('tabs'), note = document.getElementById('lf-warn');
+    function close() { note.hidden = true; var b = tabs.querySelector('.lf-warn'); if (b) b.setAttribute('aria-expanded', 'false'); }
+    tabs.addEventListener('click', function (e) {
+      var b = e.target.closest('.lf-warn'); if (!b) return;
+      e.stopPropagation();
+      if (!note.hidden) return close();
+      note.innerHTML = warnHtml();
+      var r = b.getBoundingClientRect();
+      note.style.top = (r.bottom + 8) + 'px'; note.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Math.min(340, window.innerWidth - 16) - 8)) + 'px';
+      note.hidden = false; b.setAttribute('aria-expanded', 'true');
+    });
+    document.addEventListener('click', function (e) { if (!note.hidden && !note.contains(e.target)) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  })();
   // the ⓘ legend: shown at once on hover / focus, a tap toggles it (phones); built fresh each time, outside the tab row
   // so a re-render of the tabs doesn't drop it
   (function () {
@@ -2799,9 +2923,10 @@
     renderTabs();
   }
   function setMode(m) {
-    MODE = m;
-    useSeats(m === 'r2022' ? '2022' : '2026');
+    MODE = m; simFor(m);
+    useSeats(m === 'r2022' || (m === 'r2026' && String(LF_R2026.year) === '2022') ? '2022' : '2026');
     if (m === 'r2022') { FEEDS = REH; SRC = 'ltn_cec'; restart(); }
+    else if (m === 'r2026') { FEEDS = R26 || {}; SRC = FEEDS.auto_poll ? 'auto_poll' : null; restart(); }
     else { FEEDS = LIVE || {}; SRC = null; renderTabs(); loadLive(function () { FEEDS = LIVE; SRC = null; renderTabs(); restart(); nextLive = performance.now() + 60000; }); }
   }
 
@@ -2843,6 +2968,9 @@
     MODE = 'live'; FEEDS = LIVE; useSeats('2026'); nextLive = performance.now() + 60000;
     restart(); applyLang(); layout(); restart();
     requestAnimationFrame(frame);
+    // the 2026 replay, once it is up: its tab appears; with no live numbers on the page (after the night the public file is
+    // reset) it opens on the replay (user 2026-11-09: 開完票再把真實的過程上線)
+    loadReplay26(function () { if (!R26) return; if (MODE === 'live' && !feedKeys().length) setMode('r2026'); else renderTabs(); });
     // the guide opens by itself on a first visit (user 2026-11-09: 「我想要的指引就是 2026 的打開時…然後常駐在 i」); after that only ⓘ
     setTimeout(function () { var seen = '1'; try { seen = localStorage.getItem('lf_tour_seen'); } catch (e) {} if (!seen) tourStart(); }, 900);
   });
