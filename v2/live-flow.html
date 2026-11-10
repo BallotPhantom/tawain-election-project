@@ -511,6 +511,10 @@
   var LIE = VIEW === 'lie';
   var FOC = 600, CAM = { yaw: 0, pitch: 0, pos: [0, 0, 0] };
   var HH = 900, RH = 650;   // hemicycle height and radius (map frame px)
+  // with the 高低 pillars the hemicycle floats 15% higher (user 2026-11-10: 「伸長版光柱跟半圓形圖的距離還是大些不然太擠」→ 抬高);
+  // the camera targets still use HH
+  var HEM_CELL_LIFT = 1.15;
+  function hemH() { return typeof PIL_MODE !== 'undefined' && PIL_MODE === 'cell' ? HH * HEM_CELL_LIFT : HH; }
   var ICX = (ISLF.x0 + ISLF.x1) / 2, ICY = (ISLF.y0 + ISLF.y1) / 2;   // island centre, map frame
   function W3(x, y) { return [x - ICX, 0, ICY - y]; }                  // map frame → floor (x east, z north; origin = island centre)
   function proj3(X, Y, Z) {
@@ -530,7 +534,7 @@
   var AXE = [1, 0];   // east (floor x)
   function ringW(a, r) {
     var across = Math.cos(a) * r * RH, north = Math.sin(a) * r * RH;
-    return [AXE[0] * across + AXN[0] * north, HH, AXE[1] * across + AXN[1] * north];
+    return [AXE[0] * across + AXN[0] * north, hemH(), AXE[1] * across + AXN[1] * north];
   }
   // the lying view's angle can be moved (user: 「平躺你要可以移角度啊」): drag left / right orbits, up / down raises or lowers
   // the camera, the wheel zooms, ⟲ goes back to the fitted default
@@ -813,8 +817,8 @@
   function ltUpdate(f, snap) {   // targets from the current snapshot (called with the HUD, ~5× a second in the rehearsal)
     Object.keys(snap.T || {}).forEach(function (tc) {
       var o = LT_TOWNS[tc], cs = snap.T[tc]; if (!o || !cs || sumC(cs) <= 0) return;
-      var top = cs.slice().sort(function (a, b) { return b.v - a.v; })[0];
-      o.tgt = { prog: Math.max(0, Math.min(1, tcProg(f, snap, tc))), col: lineOf(pc('T', tc, top, f.year) || 'other') };
+      var srt = cs.slice().sort(function (a, b) { return b.v - a.v; }), top = srt[0], tot = sumC(cs);
+      o.tgt = { prog: Math.max(0, Math.min(1, tcProg(f, snap, tc))), col: pilTint(colorOf(pc('T', tc, top, f.year) || 'other'), (top.v - (srt[1] ? srt[1].v : 0)) / tot) };
     });
   }
   // draw lights [from k0 to k1) of tier j of a township onto a county canvas; returns the number drawn
@@ -1313,17 +1317,19 @@
     });
     if (changed) DIRTY = true;
     if (DIRTY && (performance.now() - lastPlace > PLACE_MS || !f.sim)) { placeSeats(false); DIRTY = false; }
-    // lines: new votes since the last snapshot, per township (mayor) and per district (council)
+    // lines: new votes since the last snapshot, per township — mayors only, in three colours: 民進黨 green, 國民黨 blue, every
+    // other party and independents grey (user 2026-11-10: 「粒子就只顯示縣市長的藍綠灰色市議員的跟公投就不給」, both views;
+    // the council and referendum lines below are switched off by LINES_COUNCIL / LINES_REF)
     if (emit && PREV && !REDUCED) {
       Object.keys(snap.T).forEach(function (tc) {
         var a = {}; (PREV.T[tc] || []).forEach(function (c) { a[c.n] = c.v; });
         snap.T[tc].forEach(function (c) {
           var d = c.v - (a[c.n] || 0); if (d <= 0) return;
-          var p = pc('T', tc, c, f.year) || 'other', k = 'T' + tc + p;
+          var p = pc('T', tc, c, f.year) || 'other'; p = p === 'dpp' || p === 'kmt' ? p : 'other'; var k = 'T' + tc + p;
           batch(k, d, f.sim, function (v) { spawnLine(tc, SEAT_BY[LF_TOWNS[tc][0]][0], p, v, !f.sim); });
         });
       });
-      Object.keys(snap.C).forEach(function (dk) {
+      if (LINES_COUNCIL) Object.keys(snap.C).forEach(function (dk) {
         var a = {}; (PREV.C[dk] || []).forEach(function (c) { a[c.n] = c.v; });
         var tcs = LF_SEATS.council[dk] ? LF_SEATS.council[dk][2] : [];
         if (!tcs.length) return;
@@ -1338,7 +1344,7 @@
       // agree part of the strip's referendum bar, its disagree votes grey into the disagree part (rehearsal: each township's
       // 2022 result × its new share counted). Only with the strip on screen (no strip — a picked county, 3D, a phone — no row)
       var RF = typeof REFERENDUM !== 'undefined' ? REFERENDUM[String(f.year) === '2022' ? '2022' : '2026'] : null;
-      if (f.sim && RF && RF.T && ((STRIP && STRIP.rfY) || LIE) && !FILTER) Object.keys(RF.T).forEach(function (tc) {
+      if (LINES_REF && f.sim && RF && RF.T && ((STRIP && STRIP.rfY) || LIE) && !FILTER) Object.keys(RF.T).forEach(function (tc) {
         if (!f.T || !f.T[tc]) return;
         var k = tcProg(f, snap, tc), was = REFPREV[tc] || 0; if (k <= was) return;
         REFPREV[tc] = k;
@@ -1353,7 +1359,8 @@
   // township counting fast sends thick lines often and a small one thin lines now and then. 2026: each 60-s update is one
   // batch, split into up to 4 lines that leave over ~2 s
   var BATCH_MS = 1200, BATCH_MIN = 150, LASTE = {}, REFPREV = {};
-  window.__lfParts = function () { var n = { seats: 0, referendum: 0 }; PARTS.forEach(function (q) { n[q.seat && q.seat.cc === null ? 'referendum' : 'seats']++; }); return n; };   // read-only peek for browser checks
+  var LINES_COUNCIL = false, LINES_REF = false;   // council / referendum lines off (user 2026-11-10: mayors only)
+  window.__lfParts = function () { var n = { seats: 0, referendum: 0, ring: {}, col: {} }; PARTS.forEach(function (q) { n[q.seat && q.seat.cc === null ? 'referendum' : 'seats']++; if (q.seat) n.ring[q.seat.ring] = (n.ring[q.seat.ring] || 0) + 1; n.col[q.c] = (n.col[q.c] || 0) + 1; }); return n; };   // read-only peek for browser checks
   function refTarget(side) {   // a landing spot inside the referendum bar's agree / disagree part, as it stands now
     var o = REFNOW, R = o && o.R;
     if (LIE) {   // 3D: on the arc (drawRefArc), at a random angle inside the part
@@ -1380,15 +1387,16 @@
   function spawnLine(tc, seat, p, v, stagger) {
     var t = LF_TOWNS[tc]; if (!t || !seat) return;
     if (FILTER && seat.cc !== FILTER) return;
-    var sp = t[3], x, y;
-    if (sp.length) { var i = Math.floor(Math.random() * sp.length / 2) * 2; x = sp[i]; y = sp[i + 1]; } else { x = t[1]; y = t[2]; }
+    var sp = t[3], x, y, pi = 0;
+    if (sp.length) { var i = Math.floor(Math.random() * sp.length / 2) * 2; x = sp[i]; y = sp[i + 1]; pi = i / 2; } else { x = t[1]; y = t[2]; }
+    var ox = x, oy = y;   // the population point itself (its pillar: pilStart)
     x += (Math.random() - 0.5) * 3; y += (Math.random() - 0.5) * 3;
-    var q0 = P(x, y);
+    var q0 = (LIE && pilStart({ tc: tc, pi: pi, ox: ox, oy: oy })) || P(x, y);
     // at most 400 lines alive (2,200 at the peak, each with its own gradient, ran the page at 1 frame a second and crashed
     // Chrome — 「Error code: 11」, user 2026-11-07); dimmer (× 0.6, user: 「變暗些」)
     if (PARTS.length > 400) PARTS.shift();
     var hex = p && p.charAt(0) === '#';   // a colour given straight (the referendum's agree / disagree lines)
-    PARTS.push({ x0: q0[0], y0: q0[1], mx: x, my: y, seat: seat, c: hex ? p : p ? lineOf(p) : '#e8ebf2', a: hex ? 0.3 : (p === 'ind' || p === 'other' || !p) ? 0.17 : 0.36,
+    PARTS.push({ x0: q0[0], y0: q0[1], mx: x, my: y, tc: tc, pi: pi, ox: ox, oy: oy, seat: seat, c: hex ? p : p ? (LIE ? colorOf(p) : lineOf(p)) : '#e8ebf2',   /* 3D: the pillars' party colour (user 2026-11-10: D 顏色統一) */ a: hex ? 0.3 : (p === 'ind' || p === 'other' || !p) ? 0.17 : 0.36,
                  sp: Math.random() * 2 - 1,   // sideways spread of its arc (user 2026-11-07: 「粒子飛去圓形圖的可以再散開一點」)
                  w: lineW(v || 1000), t: stagger ? -Math.random() * 1.2 : 0, dur: 1.4 + Math.random() * 1.4, bend: 0.25 + Math.random() * 0.5, px: null, py: null });
   }
@@ -1418,7 +1426,9 @@
     // the lines stop short of the hemicycle (82% of the way) and fade there (user 2026-11-07: 「往上衝的光束可以在圓形的下面」);
     // drawn in batches — one stroke per colour × width × head / tail — instead of a gradient and a stroke per line; the
     // comet's bright head and faint tail kept as two pieces of the same arc
-    var END = 0.82, BATCH = {};
+    // 3D: 97% — up to the hemicycle's underside, gone just before the seat (user 2026-11-10: B 「飛到半圓底面才消失」; 82% left them
+    // fading in mid-air once the hemicycle was lifted)
+    var END = LIE ? 0.97 : 0.82, BATCH = {};
     var addPiece = function (key, x0, y0, cx, cy, x1, y1, s0, s1) {
       var Bx = function (t) { var u = 1 - t; return u * u * x0 + 2 * u * t * cx + t * t * x1; };
       var By = function (t) { var u = 1 - t; return u * u * y0 + 2 * u * t * cy + t * t * y1; };
@@ -1434,11 +1444,12 @@
       var ease = function (t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return 1 - Math.pow(1 - t, 2.2); };
       var b = ease(q.t), a = ease(q.t - TL);
       if (b - a < 1e-3) continue;
-      if (LIE && CAM_MOVED) { var qq = P(q.mx, q.my); q.x0 = qq[0]; q.y0 = qq[1]; }
+      if (LIE) { var qq = (q.tc && pilStart(q)) || (CAM_MOVED ? P(q.mx, q.my) : null); if (qq) { q.x0 = qq[0]; q.y0 = qq[1]; } }   // follows its pillar's top as it grows / the camera moves
       var x0 = q.x0, y0 = q.y0, x1 = q.seat.x, y1 = q.seat.y;
       var cx = (x0 + x1) / 2 + (x1 - x0) * 0.1, cy = Math.min(y0, y1) - Math.abs(y0 - y1) * q.bend;
       if (LIE) { cx = x0 + (x1 - x0) * (0.1 + q.bend * 0.2); cy = y1 + (y0 - y1) * 0.12; }
-      cx += (q.sp || 0) * (0.52 * Math.abs(y0 - y1) + 60);   // the bundle fans out sideways (wider, user: 「再分散一些」)
+      cx += (q.sp || 0) * (0.52 * Math.abs(y0 - y1) + 60) * (LIE ? 0.5 : 1);   // the bundle fans out sideways (wider, user: 「再分散一些」); half
+      // as wide in 3D, so the bundle rises into the hemicycle's width instead of spraying past it (user 2026-11-10: C)
       if (!LIE) {   // flat: the control point between the township and the seat, inside the hemicycle's width, so an arc never
         // rises past the hemicycle or swings outside it (user 2026-11-08: 「平面的放射光線都跑到半圓形圖外面去了」)
         cy = y1 + (y0 - y1) * (0.15 + q.bend * 0.3);
@@ -1889,9 +1900,14 @@
         c.x += pts[i]; c.y += pts[i + 1]; c.n++; c.by[tc] = (c.by[tc] || 0) + 1;
       }
     });
-    return Object.keys(m).map(function (k) { var c = m[k]; return { x: c.x / c.n, y: c.y / c.n, by: c.by }; });
+    return Object.keys(m).map(function (k) { var c = m[k]; return { x: c.x / c.n, y: c.y / c.n, by: c.by, k: k }; });
   })();
+  var PIL_CELL_AT = {}; PIL_CELLS.forEach(function (c) { PIL_CELL_AT[c.k] = c; });
   var PIL_SNAP = null, PIL_FEED = null, PIL_K = 0.14 * 900 / Math.sqrt(6000);   // ≈ 0.14 × HH for 6,000 votes on one point (a third of the first try, user: 「光柱太重，批准」)
+  // 高低 pillars at 0.7× (user 2026-11-10: 「伸長版光柱跟半圓形圖的距離還是大些不然太擠」→ 0.7): the tallest 2022 cell ~700 → ~490 under the
+  // hemicycle at HH 900; the ruler uses the same factor
+  var PIL_CELL_K = 0.7;
+  function pilK() { return PIL_MODE === 'cell' ? PIL_K * PIL_CELL_K : PIL_K; }
   // once the pillars start rising, the population lights underneath dim to 35 % over ~2 s (user 2026-11-07: 「光柱開始往上跑時
   // 應該把人口光點底圖變暗」→「可」); back to full before the count / in the flat view
   // the pillars take over lighting the map (user 2026-11-07: 「光柱是接替人口光點點亮地圖」): the population lights go dark when
@@ -1916,11 +1932,65 @@
   // two pillar styles (user 2026-11-07: 「光柱還是太高…加入一個平滑版沒有顯著光柱高低（舊版那種）跟有光柱高低的選項」):
   // 'smooth' (default) = one pillar per population point, a township's votes shared evenly over its points (the earlier
   // look, heights alike); 'cell' = the ~3 km cells above (crowded areas tall). Stored in localStorage lf_pil
-  var PIL_PTS = [];
+  var PIL_PTS = [], PIL_PT_BY = {};
   Object.keys(LF_TOWNS).forEach(function (tc) {
-    var t = LF_TOWNS[tc], pts = t[3].length ? t[3] : [t[1], t[2]], by = {}; by[tc] = 1;
-    for (var i = 0; i < pts.length; i += 2) PIL_PTS.push({ x: pts[i], y: pts[i + 1], by: by });
+    var t = LF_TOWNS[tc], pts = t[3].length ? t[3] : [t[1], t[2]], by = {}; by[tc] = 1; PIL_PT_BY[tc] = [];
+    for (var i = 0; i < pts.length; i += 2) { var o = { x: pts[i], y: pts[i + 1], by: by }; PIL_PTS.push(o); PIL_PT_BY[tc].push(o); }
   });
+  // where a line leaves in the lying view (user 2026-11-10: 「往上衝的粒子跟光柱還有半圓形圖變得有點都沒關係了」→ A 從光柱頂端出發):
+  // the top of the pillar its population point feeds — that point's own pillar (平滑) or its ~3 km cell's (高低) — at the
+  // pillar's current, still-easing height, so the lines rise with it; screen [x, y] or null
+  function pilStart(q) {
+    var c = PIL_MODE === 'cell' ? PIL_CELL_AT[Math.floor(q.ox / PIL_G) + ',' + Math.floor(q.oy / PIL_G)] : (PIL_PT_BY[q.tc] || [])[q.pi];
+    if (!c) return null;
+    var s = c.s, h = s ? s.h0 + (s.h1 - s.h0) * ease((performance.now() - s.th) / 1000) : 0;
+    var w = W3(c.x, c.y), r = proj3(w[0], h, w[2]);
+    return r ? [r[0], r[1]] : null;
+  }
+  // pillar look (user 2026-11-10): halo / core widths and opacities, the fade of each pillar's pieces from foot to top, and the
+  // pale grey a narrow lead washes the party colour towards
+  var PIL_HALO_W = 4, PIL_HALO_A = 0.2, PIL_CORE_W = 1.4, PIL_CORE_A = 0.95, PIL_SEG = [1, 0.9, 0.75, 0.6], PIL_PALE = [205, 210, 222];   // firmer, gentler fade (user 2026-11-10: 「又太透明了像光束」→ A; was halo 0.13, core 0.9 px / 0.8, fade 1 → 0.2)
+  // vote scale (user 2026-11-10: 「光柱拔地而起時可以有小刻度大約給個概念多少」→ 標「票數」，只在平躺 3D): an upright ruler on the
+  // floor in the same 3D view as the pillars — west of the island (the Taiwan Strait), or west of the picked county — ticked
+  // in votes per pillar; heights go with √votes, so the ticks close up towards the top. Separate ticks per pillar style
+  // (one population point vs one ~3 km cell carry very different counts)
+  var PIL_TICKS = { smooth: [5000], cell: [10000, 50000, 100000] };   // 2022 finals: one point median ~700, max ~6,500 votes; one cell median ~2,000, top 1% ~84,000, max ~183,000
+  var PIL_RULER_AT = [ISLF.x0 + 20, ICY - (ISLF.y1 - ISLF.y0) * 0.15];   // map frame: just off the Hsinchu–Miaoli coast (further west it ran over the 金門 / 連江 insets)
+  function pilTickLabel(v) { return v >= 10000 ? T(v / 10000 + ' 萬', v / 1000 + 'k') : v >= 1000 ? T(v / 1000 + ' 千', v / 1000 + 'k') : String(v); }
+  function pilScale() {
+    var tk = PIL_TICKS[PIL_MODE], top = pilK() * Math.sqrt(tk[tk.length - 1]), X, Z;
+    if (FILTER) { var cf = countyFrame(FILTER); if (!cf) return; X = cf.x - cf.r * 1.05; Z = cf.z; }
+    else { var w0 = W3(PIL_RULER_AT[0], PIL_RULER_AT[1]); X = w0[0]; Z = w0[2]; }
+    var a = proj3(X, 0, Z), b = proj3(X, top, Z); if (!a || !b) return;   // (one point carries too few votes for a second label to clear the first)
+    var col = '#c9d3e6';
+    gPil.globalCompositeOperation = 'source-over'; gPil.globalAlpha = 0.55; gPil.strokeStyle = col; gPil.lineWidth = 1;
+    gPil.beginPath(); gPil.moveTo(a[0], a[1]); gPil.lineTo(b[0], b[1]); gPil.stroke();
+    gPil.font = '10px ' + getComputedStyle(document.body).fontFamily; gPil.textAlign = 'right'; gPil.textBaseline = 'middle'; gPil.fillStyle = col;
+    tk.forEach(function (v) {
+      var q = proj3(X, pilK() * Math.sqrt(v), Z); if (!q) return;
+      gPil.globalAlpha = 0.55; gPil.beginPath(); gPil.moveTo(q[0] - 4, q[1]); gPil.lineTo(q[0] + 4, q[1]); gPil.stroke();
+      gPil.globalAlpha = 0.8; gPil.fillText(pilTickLabel(v), q[0] - 7, q[1]);
+    });
+    // title under the ruler's foot (over the top it ran into the referendum line under the hemicycle)
+    gPil.globalAlpha = 0.8; gPil.textAlign = 'center'; gPil.textBaseline = 'top';
+    gPil.fillText(PIL_MODE === 'cell' ? T('每格（約 3 公里）票數', 'Votes per ~3 km cell') : T('每根光柱票數', 'Votes per pillar'), a[0], a[1] + 6);
+    gPil.globalAlpha = 1;
+  }
+  // colour by (user 2026-11-10: 「Color by: Winner | Margin 你加入這個功能」, 「固定色相＋差距控制飽和度或亮度」 in four steps
+  // 0–5 / 5–10 / 10–20 / 20+ points, default Winner): 'margin' washes the party colour towards PIL_PALE — close races soft,
+  // wide leads vivid. Stored in localStorage lf_pilc
+  var PIL_COLOR = 'winner';
+  try { if (localStorage.getItem('lf_pilc') === 'margin') PIL_COLOR = 'margin'; } catch (e) {}
+  function pilWash(lead) { return lead < 0.05 ? 0.55 : lead < 0.10 ? 0.37 : lead < 0.20 ? 0.18 : 0; }
+  // the flat view's population lights follow the same switch and look as the pillars (user 2026-11-10: 「平面也加入顏色可以
+  // 選擇margin還是winner的」; the harder wash + dimming tried for 「平面的margin看不太出來」 was reverted: 「改回來，效果應該要跟光柱
+  // 是一樣的」「就是人口光點」): the pillars' party colours (colorOf, no longer the pale line colours, in both modes) and, for
+  // 'margin', the pillars' own four-step wash (pilWash). Hex in, hex out
+  function pilTint(hex, lead) {
+    var w = PIL_COLOR === 'margin' ? pilWash(lead) : 0; if (!w) return hex;
+    var c = hexRgb(hex);
+    return '#' + [0, 1, 2].map(function (i) { return ('0' + Math.round(c[i] + (PIL_PALE[i] - c[i]) * w).toString(16)).slice(-2); }).join('');
+  }
   var PIL_MODE = 'smooth';
   try { if (localStorage.getItem('lf_pil') === 'cell') PIL_MODE = 'cell'; } catch (e) {}
   function pilReset() { PIL_CELLS.concat(PIL_PTS).forEach(function (c) { c.s = null; }); TCSIDE = {}; FLIPS = {}; }
@@ -2007,12 +2077,14 @@
       var t = LF_TOWNS[tc], cs = PIL_SNAP.T[tc]; if (!t || !cs) return;
       if (FILTER && t[0] !== FILTER) return;
       var tot = sumC(cs); if (tot <= 0) return;
-      var top = cs.slice().sort(function (a, b) { return b.v - a.v; })[0], lp = pc('T', tc, top, PIL_FEED.year) || 'other';
-      var col = colorOf(lp);   // the leader's party colour (the green–blue mix was dropped, user 2026-11-07: 「改回之前的」)
-      var prog = Math.max(0, Math.min(1, tcProg(PIL_FEED, PIL_SNAP, tc)));
-      var alpha = Math.round((0.5 + 0.4 * prog) * 10) / 10;   // 1: fuller as the count completes; floor 0.3 → 0.5 so the colours tell apart (user 2026-11-07)
+      var srt = cs.slice().sort(function (a, b) { return b.v - a.v; }), top = srt[0], lp = pc('T', tc, top, PIL_FEED.year) || 'other';
+      // colour: 'winner' = the leader's full party colour; 'margin' = same hue, the lead (vote-share points 1st − 2nd, not raw
+      // votes) sets how vivid it is (pilWash); the counted share no longer sets the opacity (the pillar's height grows with the count)
+      var lead = (top.v - (srt[1] ? srt[1].v : 0)) / tot;
+      var base = hexRgb(colorOf(lp)), wash = PIL_COLOR === 'margin' ? pilWash(lead) : 0;   // the leader's party colour (the green–blue mix was dropped, user 2026-11-07: 「改回之前的」)
+      var col = [0, 1, 2].map(function (i) { return Math.round(base[i] + (PIL_PALE[i] - base[i]) * wash); });
       var fl = FLIPS[tc] && now - FLIPS[tc].t < FLIP_WHITE + FLIP_FADE ? FLIPS[tc] : null;
-      info[tc] = { tot: tot, col: col, alpha: alpha, flip: fl };
+      info[tc] = { tot: tot, rgb: col, flip: fl };
     });
     // one pillar per cell: height from the cell's votes (each township's count shared evenly over its points), colour and
     // brightness from the township that gives the cell most of its votes
@@ -2020,21 +2092,20 @@
       var v = 0, best = null, bv = -1;
       for (var tc in c.by) { var f = info[tc]; if (!f) continue; var x = f.tot * c.by[tc] / PIL_TN[tc]; v += x; if (x > bv) { bv = x; best = f; } }
       if (!best || v <= 0) { c.s = null; return; }
-      var h = PIL_K * Math.sqrt(v);
+      var h = pilK() * Math.sqrt(v);
       // tween from what is on screen to the new target
-      var rgb = hexRgb(best.col), s = c.s;
-      if (!s) s = c.s = { h0: 0, h1: h, th: now, c0: rgb, c1: rgb, tc: now, a0: best.alpha, a1: best.alpha, ta: now };
-      var hx = ease((now - s.th) / 1000), cx = Math.min(1, (now - s.tc) / 1500), ax = ease((now - s.ta) / 1000);
-      var hNow = s.h0 + (s.h1 - s.h0) * hx, aNow = s.a0 + (s.a1 - s.a0) * ax;
+      var rgb = best.rgb, s = c.s;
+      if (!s) s = c.s = { h0: 0, h1: h, th: now, c0: rgb, c1: rgb, tc: now };
+      var hx = ease((now - s.th) / 1000), cx = Math.min(1, (now - s.tc) / 1500);
+      var hNow = s.h0 + (s.h1 - s.h0) * hx, aNow = 1;
       var cNow = [0, 1, 2].map(function (i) { return s.c0[i] + (s.c1[i] - s.c0[i]) * cx; });
       if (h !== s.h1) { s.h0 = hNow; s.h1 = h; s.th = now; hx = 0; }
       if (rgb[0] !== s.c1[0] || rgb[1] !== s.c1[1] || rgb[2] !== s.c1[2]) { s.c0 = cNow; s.c1 = rgb; s.tc = now; cx = 0; }
-      if (best.alpha !== s.a1) { s.a0 = aNow; s.a1 = best.alpha; s.ta = now; ax = 0; }
-      if (hx < 1 || cx < 1 || ax < 1) PIL_ANIM = true;
+      if (hx < 1 || cx < 1) PIL_ANIM = true;
       h = hNow;
       if (best.flip) {   // white, then white → the new colour
         var ft = now - best.flip.t, k = ft < FLIP_WHITE ? 0 : Math.min(1, (ft - FLIP_WHITE) / FLIP_FADE);
-        cNow = [0, 1, 2].map(function (i) { return 255 + (best.flip.rgb[i] - 255) * k; }); aNow = Math.max(aNow, 1 - 0.3 * k);
+        cNow = [0, 1, 2].map(function (i) { return 255 + (best.flip.rgb[i] - 255) * k; }); aNow = 1.35 - 0.35 * k;
         PIL_ANIM = true;
       }
       var key = 'rgb(' + cNow.map(function (x) { return Math.round(x / 6) * 6; }).join(',') + ')|' + (Math.round(aNow * 20) / 20);
@@ -2044,13 +2115,27 @@
     });
     // (no glowing dot at the pillars' feet: drawn with the population sprite at the population points, it looked exactly like
     // the population dots the user wanted gone — removed 2026-11-07)
-    // the pillar lines: normal blending, not additive (added onto the warm lights the KMT blue turned TPP-like cyan)
-    gPil.globalCompositeOperation = 'source-over'; gPil.lineWidth = 1.6;
-    Object.keys(groups).forEach(function (key) {
-      var L2 = groups[key], kp = key.split('|'); gPil.strokeStyle = kp[0]; gPil.globalAlpha = +kp[1]; gPil.beginPath();
-      for (var i = 0; i < L2.length; i += 4) { gPil.moveTo(L2[i], L2[i + 1]); gPil.lineTo(L2[i + 2], L2[i + 3]); }
-      gPil.stroke();
+    // lighter, see-through, glowing pillars (user 2026-11-10: 「不要這麼重有點透明感而且會發光，漸層也可以」): each pillar is a
+    // faint wide halo plus a thin bright core, both cut into PIL_SEG.length pieces that fade from the floor up (bright foot,
+    // still clearly there at the top). Normal blending, not additive (added onto the warm lights the KMT blue turned TPP-like cyan);
+    // two strokes instead of shadowBlur, which is far too slow for thousands of lines
+    gPil.globalCompositeOperation = 'source-over'; gPil.lineCap = 'butt';
+    [[PIL_HALO_W, PIL_HALO_A], [PIL_CORE_W, PIL_CORE_A]].forEach(function (ly) {
+      gPil.lineWidth = ly[0];
+      Object.keys(groups).forEach(function (key) {
+        var L2 = groups[key], kp = key.split('|'), am = +kp[1]; gPil.strokeStyle = kp[0];
+        PIL_SEG.forEach(function (sa, j) {
+          var t0 = j / PIL_SEG.length, t1 = (j + 1) / PIL_SEG.length;
+          gPil.globalAlpha = Math.min(1, ly[1] * sa * am); gPil.beginPath();
+          for (var i = 0; i < L2.length; i += 4) {
+            var dx = L2[i + 2] - L2[i], dy = L2[i + 3] - L2[i + 1];
+            gPil.moveTo(L2[i] + dx * t0, L2[i + 1] + dy * t0); gPil.lineTo(L2[i] + dx * t1, L2[i + 1] + dy * t1);
+          }
+          gPil.stroke();
+        });
+      });
     });
+    pilScale();
     // flip rings on the floor — drawn over the pillars (under them a green ring vanished among green pillars), wide enough
     // to be seen from the default view (~70 frame units ≈ 18 km at their widest)
     Object.keys(FLIPS).forEach(function (tc) {
@@ -2721,6 +2806,9 @@
       (LIE ? '<button type="button" data-pil="1" title="' + T('光柱：平滑＝高度相近（每個人口點一根）；高低＝人口集中區較高（約 3 公里一根）', 'Pillars: smooth = similar heights (one per population point); relief = crowded areas taller (one per ~3 km)') + '">' +
         T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth')) + '</button>' +
         '<button type="button" data-cam0="1" title="' + T('回到預設角度', 'Reset view') + '">⟲</button>' : '');
+    if (!PHONE) ctl +=   // both views (the flat view's lights too, user 2026-11-10)
+        '<button type="button" data-pilc="1" title="' + T('著色：勝者＝領先者的政黨色；差距＝同色相，第一、二名得票率差越大越鮮明（0–5／5–10／10–20／20+ 個百分點）', 'Color by: Winner = the leader\'s party colour; Margin = same hue, more vivid the wider the 1st–2nd vote-share gap (0–5 / 5–10 / 10–20 / 20+ pts)') + '">' +
+        T('著色：' + (PIL_COLOR === 'margin' ? '差距' : '勝者'), 'Color by: ' + (PIL_COLOR === 'margin' ? 'Margin' : 'Winner')) + '</button>';
     if (f && f.sim) ctl += '<button type="button" data-ctl="play">' + (PLAY ? '❚❚' : '▶') + '</button>' +
       '<button type="button" data-ctl="speed">' + SPEED + '×</button><button type="button" data-ctl="restart">↺</button>';
     if (ctl) html += '<span class="lf-ctl">' + ctl + '</span>';
@@ -2740,7 +2828,11 @@
     el.querySelectorAll('button[data-pil]').forEach(function (b) { b.onclick = function () {
       PIL_MODE = PIL_MODE === 'cell' ? 'smooth' : 'cell';
       try { localStorage.setItem('lf_pil', PIL_MODE); } catch (e) {}
-      renderTabs(); drawPillars(); }; });
+      placeSeats(true); renderTabs(); drawPillars(); }; });   // the hemicycle's height follows the pillar style (hemH)
+    el.querySelectorAll('button[data-pilc]').forEach(function (b) { b.onclick = function () {
+      PIL_COLOR = PIL_COLOR === 'margin' ? 'winner' : 'margin';
+      try { localStorage.setItem('lf_pilc', PIL_COLOR); } catch (e) {}
+      renderTabs(); var fv = FEEDS[SRC]; if (fv && PREV) hud(fv, PREV); else drawPillars(); }; });   // hud → ltUpdate (flat lights) + drawPillars
     el.querySelectorAll('button[data-cam0]').forEach(function (b) { b.onclick = function () {
       if (LCAM0) { LMOVED = false; CAM_TW++; LCAM = Object.assign({}, LCAM0); applyCam(); camChanged(); } }; });
     var cs2 = el.querySelector('.lf-ctysel');
