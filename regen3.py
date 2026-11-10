@@ -1,9 +1,10 @@
 import sys, re, math, json
-sys.path.insert(0,'/private/tmp/claude-501/-Users-user/37a16a0f-1924-4555-9741-ade53f6a751a/scratchpad')
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from loadjs import load
 from datetime import datetime
 
-PROJ = '.'
+PROJ = os.path.dirname(os.path.abspath(__file__))
 POLLS_2026 = load(f'{PROJ}/data_polls_2026.js', 'const POLLS_2026')
 POLL_HOUSE_LEAN = load(f'{PROJ}/data_polls_2026.js', 'const POLL_HOUSE_LEAN')
 MAYOR_2022_ACTUAL = load(f'{PROJ}/data_mayor_2022_actual.js', 'const MAYOR_2022_ACTUAL')

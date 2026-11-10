@@ -19,7 +19,7 @@ National row additionally has county='00', citysub='000'.
 import os
 import json
 
-BASE = "."
+BASE = os.path.dirname(os.path.abspath(__file__))
 
 NAME_TO_MODERN = {
     '臺北市': '台北市', '新北市': '新北市', '臺北縣': '新北市',

@@ -4,13 +4,13 @@ Rebuild ED_GJ_2016.js using Shapely union/dissolve.
 KEY FIX: TopoJSON arc index ~idx (bitwise NOT) for negative indices,
          NOT abs(idx) which was off-by-one and caused streak artifacts.
 """
-import csv, json, re
+import csv, json, os, re
 from collections import defaultdict
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.ops import unary_union
 from shapely.validation import make_valid
 
-BASEDIR = '.'
+BASEDIR = os.path.dirname(os.path.abspath(__file__))
 HTMLFILE = f'{BASEDIR}/test.html'
 VD_FILE  = f'{BASEDIR}/data_vd_v64.js'
 OUTFILE  = f'{BASEDIR}/ED_GJ_2016.js'
