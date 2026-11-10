@@ -83,12 +83,14 @@
       <li><b>h（委託方與機構）</b>：政黨或候選人陣營委託（競選總部、辦公室、後援會、之友會等）、樣本結構明顯失衡的委託方 = 0.4；過往結果偏藍或偏綠的民調機構（house effect）= 0.7；其他 = 1.0。</li>
       <li><b>r（新舊）</b>：r = e<sup>−d/120</sup>，d = 民調結束日到今天的天數（約 83 天權重減半）；沒有日期 = 0.5。</li>
       <li><b>m（調查方式 × 縣市年齡結構）</b>：m = 限制在 0.6–1.2 之間的 1 + a·c。網路民調 a = −0.025·Δ，電話民調 a = 0.025·min(0, Δ)；Δ = 該縣市 65 歲以上人口比例 − 全國平均；c = 對該機構調查方式資訊的把握（高 1、中 0.6、低 0.3）。結果是：網路民調在高齡縣市降權、在年輕縣市加權；電話民調只在年輕縣市降權。這一項影響很小——拿掉它重算，各縣市預估得票率最多只差 0.14 個百分點（新竹市），領先者都不變。</li>
+      <li><b>h 的回測</b>：2014、2018、2022 三屆，加上 h 跟只用 r 相比，縣市平均誤差幾乎不變（9.50→9.72、7.20→7.24、6.24→6.25 個百分點，指標是民進黨在藍綠兩黨中的得票比）；誤差的改善幾乎都來自第 2 步的未表態平分。另外，在美國 27 場州長選舉的驗證中，有委託方降權的版本表現較好。</li>
       <li><b>不列入</b>：初選期間的民調、非正式街頭民調，以及少了任何一位曾在某份民調達 10% 的候選人的民調（例如一對一假想對決）。</li>
     </ul>
     <ul lang="en">
       <li><b>h (sponsor and pollster)</b>: commissioned by a party or a campaign (headquarters, office, support or friends' group), or by a sponsor whose samples are clearly unbalanced = 0.4; pollsters whose past results lean blue or green (house effect) = 0.7; otherwise 1.0.</li>
       <li><b>r (age of the poll)</b>: r = e<sup>−d/120</sup>, d = days from the poll's last fieldwork day to today (weight halves in about 83 days); no date = 0.5.</li>
       <li><b>m (survey mode × county age profile)</b>: m = 1 + a·c, clipped to 0.6–1.2. Online polls a = −0.025·Δ, phone polls a = 0.025·min(0, Δ); Δ = the county's share of residents aged 65+ minus the national average; c = confidence in what we know about the pollster's method (high 1, medium 0.6, low 0.3). So online polls count less in older counties and more in younger ones; phone polls count less only in younger counties. The effect is small: without it, no county's vote-share estimate moves by more than 0.14 points (Hsinchu City), and no leader changes.</li>
+      <li><b>Backtest of h</b>: across 2014, 2018 and 2022, adding h to r alone leaves the average county error almost unchanged (9.50→9.72, 7.20→7.24, 6.24→6.25 points, measured on the DPP share of the DPP + KMT vote); nearly all the improvement comes from the even split of the undecided in step 2. In a separate check on 27 US governor races, the version with the sponsor discount did better.</li>
       <li><b>Left out</b>: polls taken during a party primary, informal street polls, and any poll missing a candidate who reached 10% in some poll (e.g. one-on-one hypotheticals).</li>
     </ul>
 
@@ -98,12 +100,12 @@
     <ul lang="zh-Hant">
       <li>p<sub>i</sub> = 該份民調中候選人 i 的支持度；U = 未表態（民調沒寫就用 100 − Σp）；k = 主要候選人人數。</li>
       <li><b>主要候選人</b> = 該份民調的前兩名；三強縣市（三位以上候選人曾在某份民調達 10%）改為這幾位。</li>
-      <li>依據：2018、2022 兩屆回測，原本按目前支持比例分配會高估領先者，在高雄、台南、屏東尤其明顯；改成平分後，兩屆的縣市平均誤差都下降（7.2→5.1、6.3→5.2 個百分點）。</li>
+      <li>依據：2018、2022 兩屆回測，原本按目前支持比例分配會高估領先者，在高雄、台南、屏東尤其明顯；改成平分後，兩屆的縣市平均誤差都下降（7.2→5.1、6.3→5.2 個百分點）。之後補測民進黨大勝的 2014 年（民調逐筆核對原文），一樣有效（9.7→4.6）。</li>
     </ul>
     <ul lang="en">
       <li>p<sub>i</sub> = candidate i's support in that poll; U = undecided (100 − Σp when the poll doesn't say); k = number of main candidates.</li>
       <li><b>Main candidates</b> = the poll's top two; in three-way races (three or more candidates who reached 10% in some poll), those candidates.</li>
-      <li>Why: backtests on 2018 and 2022 showed that reallocating in proportion to current support overstates the leader, most of all in Kaohsiung, Tainan and Pingtung; the even split lowered the average county error in both cycles (7.2→5.1 and 6.3→5.2 points).</li>
+      <li>Why: backtests on 2018 and 2022 showed that reallocating in proportion to current support overstates the leader, most of all in Kaohsiung, Tainan and Pingtung; the even split lowered the average county error in both cycles (7.2→5.1 and 6.3→5.2 points). A later test on 2014, a strong DPP year (every poll checked against its original report), showed the same (9.7→4.6).</li>
     </ul>
 
     <h3 lang="zh-Hant">3. 縣市預估得票率</h3>
@@ -115,12 +117,14 @@ E<sub>i</sub> = T·P<sub>i</sub> + (1 − T)·A<sub>i</sub>      → 各候選�
       <li>P<sub>i</sub> = 加權民調平均；M = 該縣市所有民調的權重總和；N = 其中中立機構所占的權重比例。</li>
       <li><b>T（信任度）</b>：民調越多、越新、越中立，T 越接近 1。</li>
       <li><b>A<sub>i</sub>（歷史錨點）</b> = 候選人本人 2022 年同一選舉的實際得票率。本人沒有可比的紀錄時不用錨點，直接 E<sub>i</sub> = P<sub>i</sub>；但民調只有 1–2 筆時，以 0.4·P<sub>i</sub> + 0.6·B 估計，B = 該政黨陣營在此縣市的政黨基本盤得票比（無黨籍候選人、雲林縣除外）。</li>
+      <li><b>錨點的回測與風險</b>：用 2018、2022 兩屆測試（只在上一屆是兩人對決、本人是前兩名時用錨點），2018 年誤差變大（5.2→6.0 個百分點），2022 年變小（5.0→4.5）。錨點有沒有幫助，取決於這一屆的選舉氣氛跟上一屆像不像：2014 年民進黨大勝、2018 年換成國民黨大勝，錨點就把預估拉往錯的方向。今年用到錨點的是台北市、桃園市、新竹市、基隆市的現任者，錨點都來自 2022 年；如果 2026 年的氣氛明顯不同於 2022 年，這四個縣市的預估可能偏向現任者。（2014 年缺 2010 年開票資料，沒有測；2018、2022 的民調取自維基百科，未逐筆核對。）</li>
       <li><b>沒有任何可用民調的縣市</b>（目前是南投縣、嘉義縣、屏東縣、苗栗縣、連江縣）不做民調預測，地圖顯示灰色；面板上的數字是歷屆縣市長選舉結果的加權估計，僅供參考。</li>
     </ul>
     <ul lang="en">
       <li>P<sub>i</sub> = weighted poll average; M = the county's total poll weight; N = the share of that weight from neutral pollsters.</li>
       <li><b>T (trust)</b>: more, newer and more neutral polls push T toward 1.</li>
       <li><b>A<sub>i</sub> (historical anchor)</b> = the candidate's own actual share in the same race in 2022. Without a comparable record there is no anchor and E<sub>i</sub> = P<sub>i</sub>; but with only 1–2 polls the estimate is 0.4·P<sub>i</sub> + 0.6·B, B = the party camp's base-vote share in the county (not for independents, nor in Yunlin).</li>
+      <li><b>Backtest and risk of the anchor</b>: tested on 2018 and 2022 (anchor used only when the previous race was a two-way contest and the candidate finished in the top two), it made 2018 worse (5.2→6.0 points) and 2022 better (5.0→4.5). Whether the anchor helps depends on whether this cycle's mood resembles the last one: 2014 was a strong DPP year and 2018 a strong KMT year, so the anchor pulled the 2018 estimates the wrong way. This year the anchor is used for the incumbents in Taipei, Taoyuan, Hsinchu City and Keelung, all anchored to 2022; if the 2026 mood differs clearly from 2022, those four estimates may lean toward the incumbents. (2014 was not tested — no 2010 results on file; the 2018 and 2022 polls come from Wikipedia and were not checked one by one.)</li>
       <li><b>Counties with no usable poll</b> (now Nantou, Chiayi County, Pingtung, Miaoli, Lienchiang) get no poll-based forecast and are grey on the map; the panel's figures are a weighted estimate from past mayoral results, for reference only.</li>
     </ul>
 
