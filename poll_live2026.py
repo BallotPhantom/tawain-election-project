@@ -551,6 +551,8 @@ def fetch_ltn(tc_pool, council_seats, year=2026):
                 tc_out.update(t1)
             except Exception as e:
                 print(f'  [ltn] {county} 縣市長/鄉鎮層解析失敗(網站結構可能變了): {e}', file=sys.stderr)
+        if cc not in cc_out:   # 2026-11-09：資料檔回 data:null、頁面也沒表格時原本一聲不吭（2022 封存已下架就是這樣）
+            print(f'  [ltn] {county} 沒有抓到縣市長資料（資料檔空的、頁面也沒有表格）', file=sys.stderr)
         got_council = False
         if rno:
             try:
@@ -966,6 +968,22 @@ def _append_margin_log(cc_fresh, accepted_keys, source_key='auto_poll'):
     MARGIN_LOG_FILE.write_text(new_content, encoding='utf-8')
 
 
+def save_snapshot():
+    """2026-11-09（使用者：開票當晚不即時上線，開完票再把「真實的開票過程」上線）：每一輪抓完後把整個資料檔
+    原封不動存一份 gzip 快照到 <資料檔名>_snaps/<台灣時間>.js.gz——之後 build_live2026_replay.py 把這些快照
+    整理成 v2/data_liveflow_r2026.js（2026 重播）。快照資料夾不在 .gitignore 白名單裡，永遠只留本機。
+    存檔失敗只印警告，不影響這一輪的主要資料。"""
+    try:
+        d = DATA_FILE.with_name(DATA_FILE.stem + '_snaps')
+        d.mkdir(exist_ok=True)
+        out = d / (datetime.now(TW).strftime('%Y%m%d-%H%M%S') + '.js.gz')
+        with gzip.open(out, 'wb') as fh:
+            fh.write(DATA_FILE.read_bytes())
+        print(f'  快照：{out.parent.name}/{out.name}')
+    except Exception as e:
+        print(f'  快照：這一輪存檔失敗，不影響主要開票資料（{e}）', file=sys.stderr)
+
+
 def run_once(source, allow_all_zero, tc_pool, council_seats, year=2026):
     print(f'[{datetime.now().strftime("%H:%M:%S")}] 抓取中（來源={source}, year={year}）...')
     cc_fresh, tc_fresh, ed_fresh = FETCHERS[source](tc_pool, council_seats, year)
@@ -1017,6 +1035,7 @@ if __name__ == '__main__':
     ap.add_argument('--data-file', default=None,
                      help='寫入的資料檔（預設 data_live2026.js）；測試時指到暫存副本，正式檔不會被動到。'
                           '領先幅度紀錄跟著放在同一個資料夾（<檔名>_margin_log.js）')
+    ap.add_argument('--no-snapshot', action='store_true', help='不要存每一輪的快照（預設會存到 <資料檔名>_snaps/，給 2026 重播用）')
     ap.add_argument('--county', action='append', default=None, help='只抓這個縣市（可重複），測試用，例如 --county 嘉義市')
     args = ap.parse_args()
     ONLY_COUNTIES = set(args.county) if args.county else None
@@ -1045,6 +1064,8 @@ if __name__ == '__main__':
                 run_once(src, args.allow_all_zero_first_run and first, tc_pool, council_seats, args.year)
             except Exception as e:
                 print(f'  [{src}] 這一輪失敗：{e}', file=sys.stderr)
+        if not args.no_snapshot:
+            save_snapshot()   # 所有來源都抓完後存一份（2026 重播用）
     if args.once:
         one_round(True)
     else:
