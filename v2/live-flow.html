@@ -1293,6 +1293,17 @@
       var proj = false;
       if (st === 'lead') { var cr = CALLS[cc]; proj = !!(cr && cr.tag === 'proj' && cr.leadName === top.n); }
       if (s.st !== st || s.p !== p || !!s.proj !== proj) { s.st = st; s.p = p; s.proj = proj; changed = true; }
+      // pie ring (user 2026-11-10: 「縣市長點點有一點點一圈…按照粒子匯入…pie chart」→ 環的總長＝已開票比例): counted share × the
+      // three sides' vote shares (the same 綠 / 藍 / 灰 split as the mayor lines)
+      var pie = null;
+      if (cs && sumC(cs) > 0) {
+        // by each candidate's own party (user 2026-11-10: 「外圍的得票率應該要按照黨籍」 — 民眾黨 cyan etc., not merged into 灰)
+        var tot = sumC(cs), sh = {};
+        cs.forEach(function (c) { var q = pc('M', cc, c, f.year) || 'other'; sh[q] = (sh[q] || 0) + (c.v || 0) / tot; });
+        var g = f.sim ? (snap.prog && snap.prog[cc]) : (f.prog && f.prog[cc] && f.prog[cc][1] ? f.prog[cc][0] / f.prog[cc][1] : null);
+        pie = { k: Math.max(0, Math.min(1, st === 'final' ? 1 : g != null ? g : 0)), sh: sh };
+      }
+      s.pie = pie;
     });
     // council seats: the top-n candidates of the district
     Object.keys(LF_SEATS.council).forEach(function (dk) {
@@ -1397,6 +1408,7 @@
     if (PARTS.length > 400) PARTS.shift();
     var hex = p && p.charAt(0) === '#';   // a colour given straight (the referendum's agree / disagree lines)
     PARTS.push({ x0: q0[0], y0: q0[1], mx: x, my: y, tc: tc, pi: pi, ox: ox, oy: oy, seat: seat, c: hex ? p : p ? (LIE ? colorOf(p) : lineOf(p)) : '#e8ebf2',   /* 3D: the pillars' party colour (user 2026-11-10: D 顏色統一) */ a: hex ? 0.3 : (p === 'ind' || p === 'other' || !p) ? 0.17 : 0.36,
+                 pk: seat.ring === 'M' ? (p === 'dpp' || p === 'kmt' ? p : 'other') : null, gj: Math.random() * 2 - 1,
                  sp: Math.random() * 2 - 1,   // sideways spread of its arc (user 2026-11-07: 「粒子飛去圓形圖的可以再散開一點」)
                  w: lineW(v || 1000), t: stagger ? -Math.random() * 1.2 : 0, dur: 1.4 + Math.random() * 1.4, bend: 0.25 + Math.random() * 0.5, px: null, py: null });
   }
@@ -1429,6 +1441,31 @@
     // 3D: 97% — up to the hemicycle's underside, gone just before the seat (user 2026-11-10: B 「飛到半圓底面才消失」; 82% left them
     // fading in mid-air once the hemicycle was lifted)
     var END = LIE ? 0.97 : 0.82, BATCH = {};
+    // mayor lines in three streams (user 2026-11-10: 「光粒子調整成三股光束往縣市長圓點衝」→ 「可以試試」, both views): each line
+    // first bends into its side's gather point (綠 left, 灰 middle, 藍 right, 45% of the way from the island's centre up to the
+    // mayors' dots), then the side's lines climb together as one beam to 25% under the dots, and only there fan out into their
+    // own county's mayor dot. Path: [0, .45] quadratic start → gather; [.45, 1] cubic gather → (split, split) → dot. Drawn as
+    // short polylines; they run to 95% of the way, so the fan into the dots shows
+    var GATH = null, SEND = 0.95, TG = 0.45;
+    (function () {
+      var ms = SEATS.filter(function (z) { return z.ring === 'M' && z.x != null; }); if (!ms.length) return;
+      var xa = Infinity, xb = -Infinity, ys = 0; ms.forEach(function (z) { xa = Math.min(xa, z.x); xb = Math.max(xb, z.x); ys += z.y; }); ys /= ms.length;
+      var mc = P(ICX, ICY), xm = (xa + xb) / 2, gy = ys + (mc[1] - ys) * 0.45, hw = Math.max(30, (xb - xa) * 0.22);
+      GATH = { dpp: xm - hw, other: xm, kmt: xm + hw, gy: gy, sy: ys + (gy - ys) * 0.25, j: Math.max(3, hw * 0.06) };
+    })();
+    var streamAt = function (q, gx, t) {   // a point of a mayor line's path, t in [0, 1]
+      var x0 = q.x0, y0 = q.y0, x1 = q.seat.x, y1 = q.seat.y, u;
+      if (t <= TG) { u = t / TG; var cx = x0, cy = GATH.gy + (y0 - GATH.gy) * 0.35;   // rise first, then swing into the gather point
+        return [(1 - u) * (1 - u) * x0 + 2 * u * (1 - u) * cx + u * u * gx, (1 - u) * (1 - u) * y0 + 2 * u * (1 - u) * cy + u * u * GATH.gy]; }
+      u = (t - TG) / (1 - TG);
+      var w0 = (1 - u) * (1 - u) * (1 - u), w3 = u * u * u, w1 = 1 - w0 - w3;
+      return [w0 * gx + w1 * gx + w3 * x1, w0 * GATH.gy + w1 * GATH.sy + w3 * y1];
+    };
+    var addStream = function (key, q, gx, s0, s1) {
+      var path = BATCH[key] || (BATCH[key] = new Path2D()), n = Math.max(2, Math.ceil((s1 - s0) * 24)), pt = streamAt(q, gx, s0);
+      path.moveTo(pt[0], pt[1]);
+      for (var k = 1; k <= n; k++) { pt = streamAt(q, gx, s0 + (s1 - s0) * k / n); path.lineTo(pt[0], pt[1]); }
+    };
     var addPiece = function (key, x0, y0, cx, cy, x1, y1, s0, s1) {
       var Bx = function (t) { var u = 1 - t; return u * u * x0 + 2 * u * t * cx + t * t * x1; };
       var By = function (t) { var u = 1 - t; return u * u * y0 + 2 * u * t * cy + t * t * y1; };
@@ -1446,6 +1483,13 @@
       if (b - a < 1e-3) continue;
       if (LIE) { var qq = (q.tc && pilStart(q)) || (CAM_MOVED ? P(q.mx, q.my) : null); if (qq) { q.x0 = qq[0]; q.y0 = qq[1]; } }   // follows its pillar's top as it grows / the camera moves
       var x0 = q.x0, y0 = q.y0, x1 = q.seat.x, y1 = q.seat.y;
+      if (q.pk && GATH && LIE) {   // a mayor line in 3D: through its side's gather point (flat: back to its own arc, user 2026-11-10: 「平面光束又太刻意」)
+        var gx = GATH[q.pk] + q.gj * GATH.j;
+        var r0 = a * SEND, r1 = b * SEND, rm = (r0 + r1) / 2, wq = Math.max(0.5, Math.round(q.w * 2) / 2);
+        addStream(q.c + '|' + wq + '|' + q.a + '|h', q, gx, rm, r1);
+        addStream(q.c + '|' + wq + '|' + q.a + '|t', q, gx, r0, rm);
+        continue;
+      }
       var cx = (x0 + x1) / 2 + (x1 - x0) * 0.1, cy = Math.min(y0, y1) - Math.abs(y0 - y1) * q.bend;
       if (LIE) { cx = x0 + (x1 - x0) * (0.1 + q.bend * 0.2); cy = y1 + (y0 - y1) * 0.12; }
       cx += (q.sp || 0) * (0.52 * Math.abs(y0 - y1) + 60) * (LIE ? 0.5 : 1);   // the bundle fans out sideways (wider, user: 「再分散一些」); half
@@ -1570,6 +1614,32 @@
     if (performance.now() - lastHud > 180) { lastHud = performance.now(); hud(f, snap); }
   }
 
+  // a mayor dot's pie ring: a thin ring ~3 px outside the dot, as long as the county's counted share, split by vote share in
+  // each candidate's party colour — 民進黨 grows from 12 o'clock to the left, 國民黨／民眾黨 to the right, the rest at 6 o'clock;
+  // alpha PIE_A, dimmer than the dot's own lead / 推估 / 確定 marks (user: 「不能比預測跟領先的圖例還要亮」). 3D: the dot's
+  // projected disc, scaled out
+  var PIE_A = 0.55, PIE_W = 1.5, PIE_GAP = 3;   // a bit stronger (user 2026-11-10: 「可以明顯一點」; was 0.4 / 1 px) — still under the dot's own marks
+  function pieRing(s, r) {
+    var flat = !(LIE && !CMODE), m = flat ? 0 : 1 + PIE_GAP / Math.max(2, Math.hypot(s.ax, s.ay)), R = r + PIE_GAP;
+    var pt = function (th) { var c = Math.cos(th), n = Math.sin(th);
+      return flat ? [s.x + R * c, s.y - R * n] : [s.x + m * (s.ax * c + s.bx * n), s.y + m * (s.ay * c + s.by * n)]; };
+    var arc = function (t0, t1, col) {
+      if (t1 - t0 < 1e-3) return;
+      var n = Math.max(2, Math.ceil((t1 - t0) / 0.2)); gTop.beginPath();
+      for (var i = 0; i <= n; i++) { var q = pt(t0 + (t1 - t0) * i / n); if (i) gTop.lineTo(q[0], q[1]); else gTop.moveTo(q[0], q[1]); }
+      gTop.strokeStyle = col; gTop.stroke();
+    };
+    var a0 = gTop.globalAlpha, L = Math.PI * 2 * s.pie.k, sh = s.pie.sh, N = Math.PI / 2;
+    gTop.globalAlpha = a0 * PIE_A; gTop.lineWidth = PIE_W;
+    // 民進黨 from 12 o'clock to the left; 國民黨 then 民眾黨 to the right (the 在野 side); every other party / independent in its
+    // own colour, together centred at 6 o'clock
+    arc(N, N + L * (sh.dpp || 0), colorOf('dpp'));
+    var t = N; ['kmt', 'tpp'].forEach(function (k) { var d = L * (sh[k] || 0); arc(t - d, t, colorOf(k)); t -= d; });
+    var rest = Object.keys(sh).filter(function (k) { return k !== 'dpp' && k !== 'kmt' && k !== 'tpp'; }).sort();
+    var rl = rest.reduce(function (a, k) { return a + L * sh[k]; }, 0), u = 3 * N - rl / 2;
+    rest.forEach(function (k) { var d = L * sh[k]; arc(u, u + d, colorOf(k)); u += d; });
+    gTop.globalAlpha = a0;
+  }
   function drawSeats(dt) {
     gTop.clearRect(0, 0, SW, SH);
     var k = Math.min(1, dt * 3.5);
@@ -1593,6 +1663,7 @@
       else if (s.st === 'lead' && s.proj) { gTop.globalAlpha *= 0.55; gTop.fillStyle = c; gTop.fill(); gTop.globalAlpha /= 0.55; gTop.lineWidth = 1.6; gTop.strokeStyle = c; gTop.stroke(); }   // 推估當選
       else if (s.st === 'lead') { gTop.lineWidth = s.ring === 'M' ? 1.6 : 0.9; gTop.strokeStyle = c; gTop.stroke(); }
       else { gTop.fillStyle = '#2e3340'; gTop.fill(); }
+      if (s.ring === 'M' && s.pie && s.pie.k > 0) pieRing(s, r);
       if (HOVER_CC && s.cc === HOVER_CC && !LIE) {   // the hovered county's seats: a white ring
         gTop.beginPath(); gTop.arc(s.x, s.y, r + (s.ring === 'M' ? 2.2 : 1.3), 0, Math.PI * 2);
         gTop.lineWidth = s.ring === 'M' ? 1.4 : 0.8; gTop.strokeStyle = '#fff'; gTop.stroke();
