@@ -2916,17 +2916,23 @@
         'This page is not updated live on election night; the full count goes up as a replay after counting ends (around 8 pm Taiwan time). Meanwhile, try the 2022 rehearsal, or tap ⚠ for the outlets\' results pages.');
   }
   // the ⚠ note: the statement + every outlet with a public results page (agreed 2026-11-08: regardless of leaning, a fixed
-  // neutral order — 中選會 first, then the outlets by their English names —, each URL added only once verified live; the
-  // 2026 pages go up ~11/27–28, until then 「網址待公布」). To add one: set its url below.
+  // neutral order — 中選會 first, then the outlets by their English names —, user 2026-11-10 「全部先更新」: each outlet's
+  // 2026 election hub for now — swap in the dedicated 開票 page where one goes up ~11/27–28; url null = 「網址待公布」).
   var OUTLETS = [
-    { zh: '中選會（官方）', en: 'Central Election Commission (official)', url: null },
-    { zh: '中央社', en: 'CNA', url: null },
-    { zh: 'ETtoday', en: 'ETtoday', url: null },
-    { zh: '自由時報', en: 'Liberty Times', url: null },
-    { zh: '公視', en: 'PTS', url: null },
-    { zh: '三立', en: 'SET', url: null },
-    { zh: 'TVBS', en: 'TVBS', url: null },
-    { zh: '聯合報', en: 'United Daily News', url: null }
+    { zh: '中選會（官方）', en: 'Central Election Commission (official)', url: 'https://info.cec.gov.tw/vote2026/' },
+    { zh: '中央社', en: 'CNA', url: 'https://www.cna.com.tw/topic/newstopic/5056.aspx' },
+    { zh: '中天', en: 'CTi News', url: 'https://ctinews.com/tags/2026%E7%B8%A3%E5%B8%82%E9%95%B7%E9%81%B8%E8%88%89' },
+    { zh: 'CTWANT', en: 'CTWANT', url: 'https://www.ctwant.com/election2026/' },
+    { zh: 'ETtoday', en: 'ETtoday', url: 'https://www.ettoday.net/events/election2026/index.php7' },
+    { zh: '民視', en: 'FTV', url: 'https://topic.ftvnews.com.tw/2026election/index2' },
+    { zh: '知新聞', en: 'Knews', url: 'https://event.knews.com.tw/2026election' },
+    { zh: '自由時報', en: 'Liberty Times', url: 'https://election.ltn.com.tw/2026/' },
+    { zh: '公視', en: 'PTS', url: 'https://news.pts.org.tw/projects' },
+    { zh: '三立', en: 'SET', url: 'https://elect.setn.com/2026' },
+    { zh: '風傳媒', en: 'Storm Media', url: 'https://www.storm.mg/2026Election/live.html' },
+    { zh: 'TVBS', en: 'TVBS', url: 'https://news.tvbs.com.tw/events/2026election/analysis' },
+    { zh: '聯合報', en: 'United Daily News', url: 'https://udn.com/vote2026/index' },
+    { zh: 'Yahoo新聞', en: 'Yahoo News', url: 'https://tw.news.yahoo.com/topic/2026election/' }
   ];
   function warnHtml() {
     var esc = function (t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
