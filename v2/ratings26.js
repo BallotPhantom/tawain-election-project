@@ -199,7 +199,7 @@
   // 「全台總覽搬到左邊」). Bare like the Profile page — no panel box, no header, footnotes as hover titles, only the charts
   // (user: 「跟profile一樣盡量把資訊面板刪掉就只留圖表」). A county row: hover = its outline on the map + its panel on the
   // right; click = open it (the engine's goTC(cc), as a map click does).
-  var LEFT_CSS = '#v2-r26-left{position:absolute;top:64px;left:16px;bottom:16px;width:264px;overflow-y:auto;z-index:10;font-size:12px;' +
+  var LEFT_CSS = '#v2-r26-left{position:absolute;top:64px;left:16px;bottom:16px;width:284px;overflow-y:auto;z-index:10;font-size:12px;' +
     'scrollbar-width:none;word-break:break-word}#v2-r26-left::-webkit-scrollbar{display:none}' +
     '#v2-r26-left .sec-title{border-top:0;padding-top:0;margin-top:14px}#v2-r26-left .sec-title:first-child{margin-top:0}' +
     '#v2-r26-left .v2-r26-row{cursor:pointer!important}';
