@@ -975,6 +975,13 @@
     if (FILTER && LF_TOWNLINE[FILTER]) {   // the picked county's townships: faint lines under its outline (user 2026-11-08)
       gBg.globalAlpha = ZOOM ? 0.75 : 0.35; gBg.strokeStyle = ZOOM ? '#b4bccb' : '#8f98a8'; gBg.lineWidth = ZOOM ? 0.9 : 0.5; ltRings(LF_TOWNLINE[FILTER]);
     }
+    // followed counties (★ on their box, user 2026-11-14: 「星星點亮就地圖也選取」「小卡的星星」): outlined on the map too, a bit
+    // lighter than the hovered one
+    PINS.forEach(function (cc) {
+      if (cc === hl || !CC_HOLED[cc]) return;
+      gBg.globalAlpha = 0.04; gBg.fillStyle = '#fff'; ltRings(CC_HOLED[cc]); gBg.fill('evenodd');
+      gBg.globalAlpha = 0.75; gBg.strokeStyle = '#fff'; gBg.lineWidth = 1.1; ltRings(CC_HOLED[cc]);
+    });
     if (hl && LF_COUNTY[hl]) {   // the lit county: a faint white wash and a white outline
       gBg.globalAlpha = 0.07; gBg.fillStyle = '#fff'; ltRings(CC_HOLED[hl]); gBg.fill('evenodd');
       gBg.globalAlpha = 0.95; gBg.strokeStyle = '#fff'; gBg.lineWidth = 1.4; ltRings(CC_HOLED[hl]);
@@ -2427,7 +2434,7 @@
       e.stopPropagation();
       var i = PINS.indexOf(cc); if (i >= 0) PINS.splice(i, 1); else PINS.push(cc);
       try { localStorage.setItem('lf_pins', JSON.stringify(PINS)); } catch (er) {}
-      showPin();
+      showPin(); LT_DIRTY = true; if (LIE) drawPillars();   // the map's outline follows
     };
     el.__showPin = showPin; showPin();
     return (CROWS[cc] = el);
@@ -2952,7 +2959,7 @@
   // 2026-11-14: 「從遠方看可以穿透中央山脈看到台北的邊線」). Same colours as drawCoast / drawCountyLines and the hover outline;
   // rebuilt when the picked or hovered county changes
   function m3Lines() {
-    var S = M3S, THREE = S.THREE, key = (FILTER || '') + '|' + (HOVER_CC || '') + '|' + (HOVER_TC || '');
+    var S = M3S, THREE = S.THREE, key = (FILTER || '') + '|' + (HOVER_CC || '') + '|' + (HOVER_TC || '') + '|' + PINS.join(',');
     if (S.lkey === key) return; S.lkey = key;
     (S.lines || []).forEach(function (o) { S.scene.remove(o); o.geometry.dispose(); o.material.dispose(); });
     S.lines = [];
@@ -2979,6 +2986,7 @@
       add(close([].concat.apply([], LF_TOWN_ORDER.filter(function (tc) { return LF_TOWNS[tc] && LF_TOWNS[tc][0] === FILTER; }).map(function (tc) { return hiTown(tc) || []; }))), 0xa9b3c4, 0.5);
       if (CC_HOLED[FILTER]) add(close(hiCounty(FILTER)), 0xffffff, 0.9);
     }
+    if (!FILTER) PINS.forEach(function (cc) { if (cc !== HOVER_CC && CC_HOLED[cc]) add(close(hiCounty(cc)), 0xffffff, 0.75); });   // followed (★)
     if (HOVER_CC && HOVER_CC !== FILTER && CC_HOLED[HOVER_CC]) add(close(hiCounty(HOVER_CC)), 0xffffff, 0.95);
     if (HOVER_TC && LF_TOWNPOLY[HOVER_TC]) add(close(hiTown(HOVER_TC)), 0xffffff, 0.95);   // the hovered township (township layer)
     M3DIRTY = true;
@@ -3636,6 +3644,7 @@
     if (QS.cty && LF_COUNTY[QS.cty]) pickCounty(QS.cty);
     if (QS.play === '1' && m) PLAY = true;   // testing: start playing from the &at= time
     var cm = /^(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)(?:,(-?[\d.]+),(-?[\d.]+),(-?[\d.]+))?$/.exec(QS.cam || '');   // testing: 3D camera az (rad), height, distance [, target x, z, height]
+    if (QS.pins) { PINS = QS.pins.split(',').filter(function (c) { return LF_COUNTY[c]; }); Object.keys(CROWS).forEach(function (c) { if (CROWS[c].__showPin) CROWS[c].__showPin(); }); LT_DIRTY = true; if (LIE) drawPillars(); }   // testing (not stored)
     if (QS.hov && LF_COUNTY[QS.hov]) setTimeout(function () { setHover(QS.hov); }, 50);   // testing: hover a county
     if (cm && LIE && LCAM) { LCAM.az = +cm[1]; LCAM.y = +cm[2]; LCAM.d = +cm[3]; if (cm[4] != null) { LCAM.fx = +cm[4]; LCAM.fz = +cm[5]; LCAM.ty = +cm[6]; } LMOVED = true; applyCam(); camChanged(); drawPillars(); }
     renderTabs();
