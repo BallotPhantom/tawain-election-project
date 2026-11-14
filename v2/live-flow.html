@@ -2800,8 +2800,11 @@
   // #cv-3d under the 2D canvases; its camera is set from CAM (position, yaw, pitch, FOC) so the hemicycle wall, lines and
   // county lines drawn by proj3 sit exactly on it. Lights behind a ridge are hidden by the depth test. No surf, no rivers.
   // The pillar button cycles 地圖 → 平滑 → 高低 (lf_3d / lf_pil)
+  // pillars dropped from the interface 2026-11-14 (user: 「光柱就是炫但是也不客觀」→「改」): their height was a township's votes
+  // spread evenly over its population points (looked like a real vote map), one colour per pillar (winner takes all) and a
+  // second meaning of "height" next to the terrain's. The 3D view is the map only; the pillar code stays (M3 = false brings
+  // it back), its button and the colour-by button are hidden in 3D
   var M3 = true;
-  try { if (localStorage.getItem('lf_3d') === 'pil') M3 = false; } catch (e) {}
   var M3S = null, M3DIRTY = true, M3_DIM = 0.15, M3_LIFT = 0.5;
   function m3Show() { var on = LIE && M3, cv3d = document.getElementById('cv-3d'); cv3d.style.display = on ? '' : 'none'; if (on) M3DIRTY = true; }
   function m3Init() {
@@ -2874,6 +2877,7 @@
       pts.frustumCulled = false; scene.add(pts);
       M3S = { THREE: THREE, R: R, scene: scene, cam: cam, lg: lg, lp: lp, lc: lc, ti: ti, rL: rL, rC: rC, ly: ly, N: N, sig: {},
         land: land, coastWall: coastWall, landMat: landMat, wallMat: wallMat, geo: g, ff: undefined };
+      m3Filter(FILTER); m3Lines();   // clip mask, picked county, outlines — also when a county was picked before this finished loading
       if (PIL_FEED && PIL_SNAP) m3Paint(PIL_FEED, PIL_SNAP);
       M3DIRTY = true;
     }).catch(function (e) { console.warn('3D map: Three.js failed to load', e); M3S = null; });
@@ -2901,7 +2905,7 @@
     if (S.fwall) { S.scene.remove(S.fwall); S.fwall.geometry.dispose(); S.fwall = null; }
     var rings = cc && CC_HOLED[cc] ? hiCounty(cc) : null;
     S.land.visible = S.coastWall.visible = !rings;
-    if (!rings) { M3DIRTY = true; return; }
+    if (!rings) { if (PIL_FEED && PIL_SNAP) m3Paint(PIL_FEED, PIL_SNAP); M3DIRTY = true; return; }
     var W = TERR.w, Hh = TERR.h, c = TERR.cell, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
     rings.forEach(function (r) { for (var i = 0; i < r.length; i += 2) { x0 = Math.min(x0, r[i]); x1 = Math.max(x1, r[i]); y0 = Math.min(y0, r[i + 1]); y1 = Math.max(y1, r[i + 1]); } });
     var i0 = Math.max(0, Math.floor(x0 / c) - 1), i1 = Math.min(W - 2, Math.ceil(x1 / c) + 1), j0 = Math.max(0, Math.floor(y0 / c) - 1), j1 = Math.min(Hh - 2, Math.ceil(y1 / c) + 1);
@@ -2930,6 +2934,7 @@
     var wg = new THREE.BufferGeometry();
     wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); wg.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
     S.fwall = new THREE.Mesh(wg, S.wallMat); S.scene.add(S.fwall);
+    if (PIL_FEED && PIL_SNAP) m3Paint(PIL_FEED, PIL_SNAP);
     M3DIRTY = true;
   }
   // county / township / coast lines in the 3D map: in the Three.js scene, draped on the terrain (subdivided every ~1.5 units,
@@ -2972,7 +2977,7 @@
     if (!M3S || !M3S.lg) return;
     var V = raceT(f, snap), byI = new Array(LF_TOWN_ORDER.length), changed = false, S = M3S;
     LF_TOWN_ORDER.forEach(function (tc, i) {
-      var cs = V.T[tc]; if (!cs || sumC(cs) <= 0 || (FILTER && LF_TOWNS[tc][0] !== FILTER)) { byI[i] = null; return; }
+      var cs = V.T[tc]; if (!cs || sumC(cs) <= 0 || (FILTER && LF_TOWNS[tc][0] !== FILTER)) { byI[i] = null; if (S.sig[i] !== null) { S.sig[i] = null; changed = true; } return; }   // (a county picked: the others' lights must go too — 2026-11-14 they stayed and floated under the picked county)
       var tot = sumC(cs), top = cs.reduce(function (a, b) { return b.v > a.v ? b : a; }), by = {};
       cs.forEach(function (cc) { var h = colorOf(pc('T', tc, cc, f.year) || 'other'); by[h] = (by[h] || 0) + cc.v; });
       var lead = colorOf(pc('T', tc, top, f.year) || 'other'), acc = 0, segs = [];
@@ -3333,10 +3338,10 @@
         return '<button type="button" data-race="' + z[0] + '" aria-pressed="' + (raceOf(f) === z[0]) + '">' + T(z[1], z[2]) + '</button>';
       }).join('') + '</span>';
     if (!PHONE) ctl += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / 3D') + '">' + (LIE ? T('平躺', '3D') : T('平面', 'Flat'))   /* EN 「Lying」 → 「3D」 (user 2026-11-08: 「平躺模式應該英文不叫lying吧」) */ + '</button>' +
-      (LIE ? '<button type="button" data-pil="1" title="' + T('光柱：平滑＝高度相近（每個人口點一根）；高低＝人口集中區較高（約 3 公里一根）', 'Pillars: smooth = similar heights (one per population point); relief = crowded areas taller (one per ~3 km)') + '">' +
-        (M3 ? T('3D：地圖', '3D: map') : T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth'))) + '</button>' +
-        '<button type="button" data-cam0="1" title="' + T('回到預設角度', 'Reset view') + '">⟲</button>' : '');
-    if (!PHONE) ctl +=   // both views (the flat view's lights too, user 2026-11-10)
+      (LIE && !M3 ? '<button type="button" data-pil="1" title="' + T('光柱：平滑＝高度相近（每個人口點一根）；高低＝人口集中區較高（約 3 公里一根）', 'Pillars: smooth = similar heights (one per population point); relief = crowded areas taller (one per ~3 km)') + '">' +
+        T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth')) + '</button>' : '') +
+      (LIE ? '<button type="button" data-cam0="1" title="' + T('回到預設角度', 'Reset view') + '">⟲</button>' : '');   // 3D map only since 2026-11-14: no pillar button
+    if (!PHONE && !(LIE && M3)) ctl +=   // the flat view's lights (and the pillars); the 3D map always uses 領先亮
         '<button type="button" data-pilc="1" title="' + T('著色：勝者＝領先者的政黨色；差距＝同色相，第一、二名得票率差越大越鮮明（0–5／5–10／10–20／20+ 個百分點）', 'Color by: Winner = the leader\'s party colour; Margin = same hue, more vivid the wider the 1st–2nd vote-share gap (0–5 / 5–10 / 10–20 / 20+ pts)') + '">' +
         T('著色：' + (PIL_COLOR === 'margin' ? '差距' : '勝者'), 'Color by: ' + (PIL_COLOR === 'margin' ? 'Margin' : 'Winner')) + '</button>';
     if (f && f.sim) ctl += '<button type="button" data-ctl="play">' + (PLAY ? '❚❚' : '▶') + '</button>' +
@@ -3534,7 +3539,7 @@
       T('空心＝目前領先・半實心＝推估當選（模型）・實心＝確定', 'Hollow = leading · half-filled = projected (model) · solid = final'),
       T('縣市長標籤：Too early（開票未滿 5%）・Toss-up 拉鋸（勝率<70%）・Lean 傾向（70–90%）・Likely 可能（90–99.5%）・Certain 推估當選（>99.5%）；D 民進黨・K 國民黨・T 民眾黨・I 無黨；依開出的票與上屆各鄉鎮得票推估', 'Mayor tags: Too early (<5% counted) · Toss-up (<70%) · Lean (70–90%) · Likely (90–99.5%) · Certain (>99.5%); D DPP · K KMT · T TPP · I independent; from the votes in vs each township\'s last result'), T('平躺視角：拖曳轉角度・右鍵或 Shift＋拖曳（雙指拖曳）平移・方向鍵／WASD 移動・滾輪拉近拉遠', '3D view: drag to turn · right-drag or Shift-drag (two-finger drag) to pan · arrow keys / WASD to move · wheel to zoom'), T('線越粗＝那個鄉鎮這一批開出的票越多', 'Thicker line = a bigger batch of votes from that township')]
       .concat(LIE ? [] : [T('光點＝鄉鎮已開票的比例亮起，顏色＝該鄉鎮目前領先的政黨；灰線＝縣市界', 'Lights = the share of a township already counted, in the colour of the party leading it; grey lines = county borders')])
-      .concat(LIE ? [T('光柱＝鄉鎮已開出的縣市長票，鄉鎮內依人口平均分配（示意）', 'Pillars = a township\'s counted mayoral votes, spread by population (illustrative)')] : [])
+      .concat(LIE ? [M3 ? T('3D 地圖：地形高度 ×4；光點＝人口（每點約 64 人），鄉鎮開出多少就亮多少，顏色依各候選人得票比例分配，領先者全亮、其他壓暗（示意分配，不代表個別選民）', '3D map: terrain height ×4; lights = population (~64 people each), lit with each township\'s counted share, coloured by vote share — the leader bright, the others dim (an illustration, not individual voters)') : T('光柱＝鄉鎮已開出的縣市長票，鄉鎮內依人口平均分配（示意）', 'Pillars = a township\'s counted mayoral votes, spread by population (illustrative)')] : [])
       .concat(LIE ? [] : [T('滑過縣市或圓點＝點亮該縣市；點圓點＝選取（再點一次取消）', 'Hover a county or a seat = light that county; click a seat = select it (click again to clear)')])
       .concat(MODE === 'live' ? [T('黨籍＝來源網站的政黨圖示；沒有圖示的以白色表示', 'Party = the source\'s party icon; none shown white')] : [])
       .concat([T('左右兩欄：滑鼠移到兩側顯示各縣市；左＝民進黨領先，右＝在野或無黨籍領先', 'Side columns: hover a side to see the counties; left = DPP leads, right = opposition / independent leads')]).join('\n');
