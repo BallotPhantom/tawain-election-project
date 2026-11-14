@@ -315,6 +315,7 @@
   <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
 </div>
 <div id="lf">
+  <canvas id="cv-3d" style="display:none"></canvas>
   <canvas id="cv-bg"></canvas>
   <canvas id="cv-pil"></canvas>
   <canvas id="cv-trail"></canvas>
@@ -412,6 +413,7 @@
     SW = root.clientWidth; SH = root.clientHeight;
     [cvBg, cvPil, cvTr, cvTop].forEach(function (c) { c.width = Math.round(SW * DPR); c.height = Math.round(SH * DPR); });
     [gBg, gPil, gTr, gTop].forEach(function (g) { g.setTransform(DPR, 0, 0, DPR, 0, 0); });
+    M3DIRTY = true;
     var narrow = SW < 640;
     // the 「▾ 各縣市票數」 button is in the bottom block before its height is read (layout runs once before these are set)
     if (narrow && !PHKEY && CSIDE && CROWS && GEO) phPlace(null, null);
@@ -623,7 +625,7 @@
   // hill-shade image as the flat view (lf_relief.png) draped over the heights — no live lighting. Pillars, their lines, the
   // coast and county lines, the flip rings all stand on the terrain (FH). Loaded the first time the 3D view is used; until
   // then the floor is flat. The flat view (seen from straight above) shows the land through the same shading only
-  var TERR = null, TERR_REQ = false, TERR_EX = 5;
+  var TERR = null, TERR_REQ = false, TERR_EX = +((location.search.match(/[?&]texag=([\d.]+)/) || [])[1] || 4);   // ?texag= for testing   // × 4 (user 2026-11-14: 「3d地圖＊4」; was 5)
   function terrLoad() {
     if (TERR || TERR_REQ) return; TERR_REQ = true;
     fetch('terrain_lf.bin?v=20261114a').then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(function (b) {
@@ -1476,7 +1478,8 @@
     // lines: each one a comet along its arc — bright head, tail fading to nothing — that slides into the seat and is gone.
     // Redrawn from scratch every frame: no accumulating trail canvas, so nothing is left behind (user 2026-11-05: the old
     // fading trails never fully cleared — 8-bit alpha — and left 「一個陰影在那邊」, which looked cheap)
-    if (CAM_DIRTY && LIE && LCAM) { CAM_DIRTY = false; CAM_MOVED = true; applyCam(); drawBg(!!LDRAG); placeSeats(true); drawPillars(); }
+    if (CAM_DIRTY && LIE && LCAM) { CAM_DIRTY = false; CAM_MOVED = true; applyCam(); drawBg(!!LDRAG); placeSeats(true); drawPillars(); M3DIRTY = true; }
+    if (M3DIRTY && LIE && M3) m3Render();
     zoomStep(now);
     gTr.clearRect(0, 0, SW, SH);
     gTr.globalCompositeOperation = 'lighter'; gTr.lineCap = 'round';
@@ -1581,8 +1584,11 @@
     var rr = root.getBoundingClientRect(), x = e.clientX - rr.left, y = e.clientY - rr.top, s = seatAt(x, y);
     var fr = s ? null : screenToFrame(x, y);
     setTownHover(FILTER && fr ? townAtFrame(FILTER, fr) : null, x, y);
-    if (LIE) return;
-    setHover(s ? s.cc : countyAtFrame(fr));
+    var hc = s ? s.cc : countyAtFrame(fr);
+    // 3D too (user 2026-11-14: 「應該可以跟鄉鎮市區層互動」): hovering a county outlines it on the floor; a click opens its
+    // township layer (seatClick), where hovering a township shows its numbers, as in the flat view
+    if (LIE) { if (hc !== HOVER_CC) { setHover(hc); drawPillars(); } root.style.cursor = hc ? 'pointer' : 'grab'; return; }
+    setHover(hc);
   });
   root.addEventListener('pointerleave', function () { setHover(null); setTownHover(null); });
   var LDRAG = null, CAM_DIRTY = false, CAM_MOVED = false, camIdle = 0;
@@ -2068,7 +2074,7 @@
   function pilStart(q) {
     var c = PIL_MODE === 'cell' ? PIL_CELL_AT[Math.floor(q.ox / PIL_G) + ',' + Math.floor(q.oy / PIL_G)] : (PIL_PT_BY[q.tc] || [])[q.pi];
     if (!c) return null;
-    var s = c.s, h = s ? s.h0 + (s.h1 - s.h0) * ease((performance.now() - s.th) / 1000) : 0;
+    var s = c.s, h = s && !M3 ? s.h0 + (s.h1 - s.h0) * ease((performance.now() - s.th) / 1000) : 0;   // 3D map: from the land itself
     var w = W3(c.x, c.y), r = proj3(w[0], FH(c.x, c.y) + h, w[2]);
     return r ? [r[0], r[1]] : null;
   }
@@ -2266,11 +2272,24 @@
       });
     });
     gPil.stroke(); gPil.globalAlpha = 1;
+    if (LIE && HOVER_CC && HOVER_CC !== FILTER && CC_HOLED[HOVER_CC]) {   // the hovered county (3D), outlined white
+      gPil.beginPath();
+      CC_HOLED[HOVER_CC].forEach(function (r) {
+        var first = true;
+        for (var i = 0; i < r.length; i += 2) { var q = P(r[i], r[i + 1]); if (q[2] <= 0) { first = true; continue; } if (first) { gPil.moveTo(q[0], q[1]); first = false; } else gPil.lineTo(q[0], q[1]); }
+      });
+      gPil.globalAlpha = 0.95; gPil.strokeStyle = '#ffffff'; gPil.lineWidth = 1.6; gPil.stroke(); gPil.globalAlpha = 1;
+    }
   }
   function drawPillars() {
     gPil.clearRect(0, 0, SW, SH);
     dimFloor(true);
-    if (LIE) { terrLoad(); floorPaint(gPil); drawCoast(); drawCountyLines(); drawWall(gPil); }
+    m3Show();
+    // the black wall: in the 3D map it is part of the Three.js scene (depth-tested); drawn on this 2D canvas over the land it
+    // blacked out the mountains from low angles (user 2026-11-14: 「地形在平躺時山體是0」「可能半圓形黑牆擋了」). Pillars: drawn
+    // first, the floor over it (seen from the south the wall is always behind the island)
+    if (LIE && M3) { terrLoad(); m3Init(); M3DIRTY = true; drawCoast(); drawCountyLines(); return; }   // 3D map: Three.js draws land + lights + wall (see M3)
+    if (LIE) { terrLoad(); drawWall(gPil); floorPaint(gPil); drawCoast(); drawCountyLines(); }
     if (!LIE || !PIL_SNAP) return;
     var now = performance.now(), groups = {}, info = {};
     PIL_ANIM = false;
@@ -2760,6 +2779,128 @@
     }
     g.restore();
   }
+  // ---------- 3D map (user 2026-11-14: 「我想加入3d地圖把光柱模式改成3d地圖＊4然後是領先亮沒有浪花」) ----------
+  // The lying view's default look: instead of pillars, the land itself in 3D (terrain_lf.bin × TERR_EX = 4, textured with the
+  // flat view's hill shade, lf_relief.png, unlit — same light as the flat map) and the population lights (64-people tier)
+  // standing on it in 領先亮 colours, as in v2/terrain_test.html: a township's lights come on with its counted share (a fixed
+  // random order per light), each lit light takes a party by its fixed random number against the township's vote shares,
+  // the leader's lights full colour and the others at M3_DIM. Drawn by Three.js (loaded on first use, cdn.jsdelivr.net) on
+  // #cv-3d under the 2D canvases; its camera is set from CAM (position, yaw, pitch, FOC) so the hemicycle wall, lines and
+  // county lines drawn by proj3 sit exactly on it. Lights behind a ridge are hidden by the depth test. No surf, no rivers.
+  // The pillar button cycles 地圖 → 平滑 → 高低 (lf_3d / lf_pil)
+  var M3 = true;
+  try { if (localStorage.getItem('lf_3d') === 'pil') M3 = false; } catch (e) {}
+  var M3S = null, M3DIRTY = true, M3_DIM = 0.15, M3_LIFT = 0.5;
+  function m3Show() { var on = LIE && M3, cv3d = document.getElementById('cv-3d'); cv3d.style.display = on ? '' : 'none'; if (on) M3DIRTY = true; }
+  function m3Init() {
+    if (M3S || !TERR || !RELIEF) return;
+    M3S = { loading: true };
+    import('https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js').then(function (THREE) {
+      var R = new THREE.WebGLRenderer({ canvas: document.getElementById('cv-3d'), antialias: true });
+      R.setClearColor(0x000000, 1);
+      var scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(40, 1, 2, 30000);
+      // terrain: one vertex per height cell, land quads only; three (x, y, z) = (frame x − ICX, height, frame y − ICY)
+      var W = TERR.w, Hh = TERR.h, c = TERR.cell, k = TERR_EX / 286, z = TERR.z;
+      var pos = new Float32Array(W * Hh * 3), uv = new Float32Array(W * Hh * 2);
+      for (var j = 0; j < Hh; j++) for (var i = 0; i < W; i++) {
+        var n = j * W + i, fx = (i + 0.5) * c, fy = (j + 0.5) * c;
+        pos[3 * n] = fx - ICX; pos[3 * n + 1] = z[n] ? z[n] * k : -0.5; pos[3 * n + 2] = fy - ICY;
+        uv[2 * n] = fx / LF_FRAME.w; uv[2 * n + 1] = 1 - fy / LF_FRAME.h;
+      }
+      var idx = [];
+      for (var j2 = 0; j2 < Hh - 1; j2++) for (var i2 = 0; i2 < W - 1; i2++) {
+        var a = j2 * W + i2, b = a + 1, d = a + W, e = d + 1;
+        if (!(z[a] || z[b] || z[d] || z[e])) continue;
+        idx.push(a, d, b, b, d, e);
+      }
+      // solid (user 2026-11-14: 「地形圖不是實心的」): a wall along the coastline (LF_COAST, subdivided every ~2 units, smooth —
+      // the height grid's own land edge is a staircase) from the land's height down to M3_BASE, so the island reads as a solid
+      // relief block instead of a thin sheet; lighter at the top edge, dark at the foot. 金門／馬祖／澎湖 get the same slab
+      var wp = [], wc = [], M3_BASE = -18, top = 0.11, bot = 0.015;
+      LF_COAST.forEach(function (r) {
+        var pts = [];
+        for (var i5 = 0; i5 + 1 < r.length; i5 += 2) {
+          var ax = r[i5], ay = r[i5 + 1], bx = r[(i5 + 2) % r.length], by = r[(i5 + 3) % r.length], n5 = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 2));
+          for (var k5 = 0; k5 < n5; k5++) { var fx5 = ax + (bx - ax) * k5 / n5, fy5 = ay + (by - ay) * k5 / n5; pts.push([fx5 - ICX, Math.max(0, FH(fx5, fy5)), fy5 - ICY]); }
+        }
+        for (var m5 = 0; m5 < pts.length; m5++) {
+          var A = pts[m5], B = pts[(m5 + 1) % pts.length];
+          wp.push(A[0], A[1], A[2], B[0], B[1], B[2], A[0], M3_BASE, A[2], B[0], B[1], B[2], B[0], M3_BASE, B[2], A[0], M3_BASE, A[2]);
+          wc.push(top, top, top, top, top, top, bot, bot, bot, top, top, top, bot, bot, bot, bot, bot, bot);
+        }
+      });
+      var g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
+      var tex = new THREE.Texture(RELIEF); tex.needsUpdate = true; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+      scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex })));
+      // the hemicycle's black wall (drawWall's quad), in the scene so the land in front of it stays visible
+      var xw = RH + WALL_PAD, yt = WALL_Y0 + RH + WALL_PAD;
+      var wq = new THREE.Mesh(new THREE.PlaneGeometry(2 * xw, yt), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide }));
+      wq.position.set(0, yt / 2, -(WALL_Z + 2)); scene.add(wq);
+      var wg = new THREE.BufferGeometry();
+      wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); wg.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+      scene.add(new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+      // lights: the 64-people tier (LIGHTS[j], its township index from LF_LIGHTS[j].t)
+      var tj = LF_LIGHTS.findIndex(function (t) { return t.P === 64; }); if (tj < 0) tj = LF_LIGHTS.length - 1;
+      var L64 = LIGHTS[tj], N = L64.n, tb = atob(LF_LIGHTS[tj].t);
+      var lp = new Float32Array(N * 3), lc = new Float32Array(N * 3), ti = new Uint16Array(N), rL = new Float32Array(N), rC = new Float32Array(N), ly = new Float32Array(N);
+      var seed = 20261114, rnd = function () { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+      for (var q = 0; q < N; q++) {
+        var fx2 = L64.u[2 * q] / 65535 * LF_FRAME.w, fy2 = L64.u[2 * q + 1] / 65535 * LF_FRAME.h;
+        ti[q] = tb.charCodeAt(2 * q) | (tb.charCodeAt(2 * q + 1) << 8);
+        ly[q] = FH(fx2, fy2) + M3_LIFT;
+        lp[3 * q] = fx2 - ICX; lp[3 * q + 1] = -9999; lp[3 * q + 2] = fy2 - ICY;   // unlit: parked below the floor
+        rL[q] = rnd(); rC[q] = rnd();
+      }
+      var lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.BufferAttribute(lp, 3)); lg.setAttribute('color', new THREE.BufferAttribute(lc, 3));
+      var spr = (function () { var cv = document.createElement('canvas'); cv.width = cv.height = 32; var x = cv.getContext('2d'), gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,1)'); gr.addColorStop(0.75, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        x.fillStyle = gr; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(cv); })();
+      var pts = new THREE.Points(lg, new THREE.PointsMaterial({ size: 1.6, map: spr, vertexColors: true, transparent: true, alphaTest: 0.3, depthWrite: false, sizeAttenuation: true }));
+      pts.frustumCulled = false; scene.add(pts);
+      M3S = { THREE: THREE, R: R, scene: scene, cam: cam, lg: lg, lp: lp, lc: lc, ti: ti, rL: rL, rC: rC, ly: ly, N: N, sig: {} };
+      if (PIL_FEED && PIL_SNAP) m3Paint(PIL_FEED, PIL_SNAP);
+      M3DIRTY = true;
+    }).catch(function (e) { console.warn('3D map: Three.js failed to load', e); M3S = null; });
+  }
+  function m3Paint(f, snap) {   // lights from the current snapshot: which are on, and their colours
+    if (!M3S || !M3S.lg) return;
+    var V = raceT(f, snap), byI = new Array(LF_TOWN_ORDER.length), changed = false, S = M3S;
+    LF_TOWN_ORDER.forEach(function (tc, i) {
+      var cs = V.T[tc]; if (!cs || sumC(cs) <= 0 || (FILTER && LF_TOWNS[tc][0] !== FILTER)) { byI[i] = null; return; }
+      var tot = sumC(cs), top = cs.reduce(function (a, b) { return b.v > a.v ? b : a; }), by = {};
+      cs.forEach(function (cc) { var h = colorOf(pc('T', tc, cc, f.year) || 'other'); by[h] = (by[h] || 0) + cc.v; });
+      var lead = colorOf(pc('T', tc, top, f.year) || 'other'), acc = 0, segs = [];
+      Object.keys(by).sort().forEach(function (h) { acc += by[h] / tot; var r = hexRgb(h).map(function (v) { return Math.pow(v / 255, 2.2); });   // vertex colours are linear in Three: sRGB → linear, so the party colours come out as themselves
+        segs.push({ u: acc, c: h === lead ? r : r.map(function (v) { return v * M3_DIM; }) }); });
+      var prog = Math.max(0, Math.min(1, raceProg(f, snap, V, tc)));
+      var sig = Math.round(prog * 200) + '|' + segs.map(function (x) { return Math.round(x.u * 100) + x.c.join(); }).join(';');
+      if (S.sig[i] !== sig) { S.sig[i] = sig; changed = true; }
+      byI[i] = { prog: prog, segs: segs };
+    });
+    if (!changed && S.painted) return;
+    for (var q = 0; q < S.N; q++) {
+      var o = byI[S.ti[q]];
+      if (!o || S.rL[q] >= o.prog) { S.lp[3 * q + 1] = -9999; continue; }
+      var r2 = S.rC[q] * o.segs[o.segs.length - 1].u, sg = o.segs[0];
+      for (var m = 0; m < o.segs.length; m++) { if (r2 < o.segs[m].u) { sg = o.segs[m]; break; } sg = o.segs[m]; }
+      S.lp[3 * q + 1] = S.ly[q]; S.lc[3 * q] = sg.c[0]; S.lc[3 * q + 1] = sg.c[1]; S.lc[3 * q + 2] = sg.c[2];
+    }
+    S.lg.attributes.position.needsUpdate = true; S.lg.attributes.color.needsUpdate = true; S.painted = true;
+    M3DIRTY = true;
+  }
+  function m3Render() {   // Three's camera = CAM (proj3): same position, yaw, pitch and vertical focal length
+    M3DIRTY = false;
+    if (!M3S || !M3S.R) return;
+    var S = M3S, cp = Math.cos(CAM.pitch), fwd = [Math.sin(CAM.yaw) * cp, Math.sin(CAM.pitch), -Math.cos(CAM.yaw) * cp];
+    S.R.setPixelRatio(DPR); S.R.setSize(SW, SH, false);
+    S.cam.aspect = SW / SH; S.cam.fov = 2 * Math.atan(SH / 2 / FOC) * 180 / Math.PI; S.cam.updateProjectionMatrix();
+    S.cam.position.set(CAM.pos[0], CAM.pos[1], -CAM.pos[2]); S.cam.up.set(0, 1, 0);
+    S.cam.lookAt(CAM.pos[0] + fwd[0], CAM.pos[1] + fwd[1], -CAM.pos[2] + fwd[2]);
+    S.R.render(S.scene, S.cam);
+  }
   // once per county and story: a tag that flickers (Lean ↔ Toss-up, Likely ↔ Certain) as the count moves no longer repeats
   // the same line — a Toss-up again only under another leader, a projection once per candidate, a final once
   var NEWSEEN = {};
@@ -2907,7 +3048,7 @@
     ccFxUpdate(f, snap);
     if (HOVER_TC) townTip();   // the township box follows the count
     if (CMP.open && performance.now() - CMP.at > 1000) cmpRender();   // 各家比較 — once a second
-    PIL_SNAP = snap; PIL_FEED = f; flipUpdate(f, snap); drawPillars(); ltUpdate(f, snap); crUpdate(f, snap);
+    PIL_SNAP = snap; PIL_FEED = f; flipUpdate(f, snap); drawPillars(); ltUpdate(f, snap); crUpdate(f, snap); if (LIE && M3) m3Paint(f, snap);
     ctyPanel(f, snap);
     var tot = { dpp: 0, kmt: 0 }, all = 0, fin = 0;
     Object.keys(snap.M).forEach(function (cc) {
@@ -3090,7 +3231,7 @@
       }).join('') + '</span>';
     if (!PHONE) ctl += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / 3D') + '">' + (LIE ? T('平躺', '3D') : T('平面', 'Flat'))   /* EN 「Lying」 → 「3D」 (user 2026-11-08: 「平躺模式應該英文不叫lying吧」) */ + '</button>' +
       (LIE ? '<button type="button" data-pil="1" title="' + T('光柱：平滑＝高度相近（每個人口點一根）；高低＝人口集中區較高（約 3 公里一根）', 'Pillars: smooth = similar heights (one per population point); relief = crowded areas taller (one per ~3 km)') + '">' +
-        T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth')) + '</button>' +
+        (M3 ? T('3D：地圖', '3D: map') : T('光柱：' + (PIL_MODE === 'cell' ? '高低' : '平滑'), 'Pillars: ' + (PIL_MODE === 'cell' ? 'relief' : 'smooth'))) + '</button>' +
         '<button type="button" data-cam0="1" title="' + T('回到預設角度', 'Reset view') + '">⟲</button>' : '');
     if (!PHONE) ctl +=   // both views (the flat view's lights too, user 2026-11-10)
         '<button type="button" data-pilc="1" title="' + T('著色：勝者＝領先者的政黨色；差距＝同色相，第一、二名得票率差越大越鮮明（0–5／5–10／10–20／20+ 個百分點）', 'Color by: Winner = the leader\'s party colour; Margin = same hue, more vivid the wider the 1st–2nd vote-share gap (0–5 / 5–10 / 10–20 / 20+ pts)') + '">' +
@@ -3112,8 +3253,11 @@
       // redraw at once (paused, the lying view's floor and pillars stayed empty until the next HUD tick)
       var fv = FEEDS[SRC]; if (fv && PREV) hud(fv, PREV); else drawPillars(); }; });
     el.querySelectorAll('button[data-pil]').forEach(function (b) { b.onclick = function () {
-      PIL_MODE = PIL_MODE === 'cell' ? 'smooth' : 'cell';
-      try { localStorage.setItem('lf_pil', PIL_MODE); } catch (e) {}
+      // 地圖 → 平滑 → 高低 → 地圖 (3D map added 2026-11-14)
+      if (M3) { M3 = false; PIL_MODE = 'smooth'; } else if (PIL_MODE === 'smooth') PIL_MODE = 'cell'; else { M3 = true; PIL_MODE = 'smooth'; }
+      PIL_CELLS.concat(PIL_PTS).forEach(function (c) { c.s = null; });
+      try { localStorage.setItem('lf_pil', PIL_MODE); localStorage.setItem('lf_3d', M3 ? 'map' : 'pil'); } catch (e) {}
+      if (M3 && PIL_FEED && PIL_SNAP) m3Paint(PIL_FEED, PIL_SNAP);
       placeSeats(true); renderTabs(); drawPillars(); }; });   // the hemicycle's height follows the pillar style (hemH)
     el.querySelectorAll('button[data-race]').forEach(function (b) { b.onclick = function () { setRace(b.dataset.race); }; });
     el.querySelectorAll('button[data-pilc]').forEach(function (b) { b.onclick = function () {
@@ -3363,7 +3507,7 @@
     setTimeout(function () { var seen = '1'; try { seen = localStorage.getItem('lf_tour_seen'); } catch (e) {} if (!seen) tourStart(); }, 900);
   });
   // URL parameters for checks (user 2026-11-12: 「加」— so a headless browser can open any state without clicking):
-  // ?mode=r2022|r2026|live  &race=M|R  &view=lie|flat  &cty=<county code>  &at=HH:MM (rehearsal clock, paused there)  &tour=0  &cam=az,y,d (3D).
+  // ?mode=r2022|r2026|live  &race=M|R  &view=lie|flat  &cty=<county code>  &at=HH:MM (rehearsal clock, paused there)  &tour=0  &cam=az,y,d[,fx,fz,ty] (3D)  &play=1  &texag=<terrain ×>.
   // Nothing set: the page opens exactly as before; the race is not stored (localStorage untouched)
   function applyQS() {
     if (QS.mode && QS.mode !== MODE && /^(r2022|r2026|live)$/.test(QS.mode)) setMode(QS.mode);
