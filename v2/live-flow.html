@@ -23,6 +23,14 @@
   html, body { height: 100%; overflow: hidden; }
   body { background: #000; color: #e7eaf0; margin: 0; }
   #lf { position: absolute; top: 46px; left: 0; right: 0; bottom: 0; }
+  /* one top row (user 2026-11-14: 「把2026開票那一行按鈕跟最上面一層的中英文那一行合併然後把那一長方形黑色底拿掉」): wider
+     than a phone, the site bar loses its dark band and floats over the stage, which starts at the window's top; the button
+     row (#tabs, still inside the stage) is placed in the bar's line between the title and 中文／EN (barRow()) */
+  @media (min-width: 641px) {
+    #v2-bar { position: absolute; top: 0; left: 0; right: 0; background: transparent; border-bottom: 0; backdrop-filter: none; -webkit-backdrop-filter: none; pointer-events: none; }
+    #v2-bar > * { pointer-events: auto; }
+    #lf { top: 0; }
+  }
   #lf > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .lf-tabs { position: absolute; top: 8px; left: 12px; right: 12px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; z-index: 3; }
   /* smaller (user 2026-11-08: 「2026 排練那一行按鈕可以再小一些」): 12 → 11 px, padding 4×10 → 2×8 */
@@ -393,6 +401,18 @@
   // under the arc (English labels are longer; a short window makes the arc taller relative to the row), the arc is lowered
   // just enough that its width at the row's bottom clears the row's right end (user 2026-11-08: 「英文版會在鄉鎮市區層蓋過
   // 半圓形圖」)
+  function barRow() {   // the button row into the site bar's line (desktop; see #v2-bar's min-width rule)
+    var tabs = document.getElementById('tabs'), bar = document.getElementById('v2-bar'); if (!tabs || !bar) return;
+    if (window.innerWidth <= 640) { tabs.style.left = tabs.style.right = tabs.style.top = ''; return; }
+    var t = bar.querySelector('.v2-title'), lg = bar.querySelector('.v2-lang'), rb = bar.getBoundingClientRect();
+    if (!t || !lg) return;
+    var tr = t.getBoundingClientRect(), lr = lg.getBoundingClientRect();
+    tabs.style.left = Math.round(tr.right + 18) + 'px';
+    tabs.style.right = Math.round(window.innerWidth - lr.left + 14) + 'px';
+    tabs.style.top = Math.max(4, Math.round(lr.top + lr.height / 2 - 11)) + 'px';
+  }
+  var HEMI_DROP = 60;
+  function tabsH() { var t = document.getElementById('tabs'); if (!t) return 40; return t.offsetTop + t.offsetHeight - 8 + (window.innerWidth > 640 ? 34 : 0); }   // the row's height as the old code meant it (row at top 8), measured from its real bottom; + room on desktop, where the row sits in the site bar's line
   function hemiCy(R, cx) {
     var tabs = document.getElementById('tabs'); if (!tabs) return R + 10;
     var rr = root.getBoundingClientRect(), right = 0, bottom = 0;
@@ -401,7 +421,8 @@
       var b = el.getBoundingClientRect(); if (!b.width) return;
       right = Math.max(right, b.right - rr.left); bottom = Math.max(bottom, b.bottom - rr.top);
     });
-    var cy = R + 10, top0 = cy - R, d = bottom + 4 - top0;   // how deep the row reaches into the arc
+    // a little lower (user 2026-11-14: 「半圓形圖可以移下面一點點」, with the stage now reaching the window's top): HEMI_DROP px
+    var cy = R + 10 + HEMI_DROP, top0 = cy - R, d = bottom + 4 - top0;   // how deep the row reaches into the arc
     if (d <= 0) return cy;
     var w = cx - right - 8;                                  // the half-width the arc may have at the row's bottom
     if (w <= 0) return bottom + 4 + R;                       // the row runs past the centre: the arc goes below it
@@ -412,7 +433,7 @@
   function layout() {
     // the stage starts under the header as it actually stands (on a phone the header can wrap to two lines and used to
     // cover the tab row)
-    var bar = document.getElementById('v2-bar'); if (bar) root.style.top = bar.offsetHeight + 'px';
+    var bar = document.getElementById('v2-bar'); if (bar) root.style.top = window.innerWidth > 640 ? '0' : bar.offsetHeight + 'px';   // desktop: the bar floats over the stage (one top row)
     // a phone: the stage in the page flow, one (small-viewport) screen high, with the county list scrolling under it
     if (window.innerWidth < 640) { root.style.position = 'relative'; root.style.top = '0'; root.style.bottom = 'auto'; root.style.height = 'calc(100svh - ' + (bar ? bar.offsetHeight : 46) + 'px)'; }
     else { root.style.position = root.style.bottom = root.style.height = ''; }
@@ -424,7 +445,8 @@
     var narrow = SW < 640;
     // the 「▾ 各縣市票數」 button is in the bottom block before its height is read (layout runs once before these are set)
     if (narrow && !PHKEY && CSIDE && CROWS && GEO) phPlace(null, null);
-    var top = document.getElementById('tabs').offsetHeight + 16;
+    barRow();
+    var top = tabsH() + 16;
     document.getElementById('cty').style.top = (top + 4) + 'px'; document.getElementById('cty').style.zIndex = 4;
     // hemicycle on top, the map under it. (The 3D views — tilted, room, orbit, wall — were tried 2026-11-05…07 and
     // dropped by the user: 「算了算了…刪掉」; only this flat view stays.)
@@ -585,7 +607,9 @@
     if (LCAM && LMOVED) { applyCam(); return; }   // a camera the user moved survives a resize
     // facing north from the south, so the 3D map has the flat map's orientation, only tilted back (user 2026-11-08: 「3d 預設的
     // 地圖角度應該跟平面一樣只是是躺的」; replaces the 11-07 dragged angle az 0.10, kept in the comment above)
-    LCAM0 = { az: Math.PI / 2, y: 3250, d: 2300 * Math.max(1, 1000 / SW), fx: 0, fz: 0, ty: HH * 0.5 };
+    // fitted to the user's own dragged view (2026-11-14, Screenshot 1.27.01 PM: 「我想預設的角度是這樣」) — five landmarks (the
+    // hemicycle's two ends and apex, 富貴角, 鵝鑾鼻), least squares, residual ≈ 1 px
+    LCAM0 = { az: 1.464, y: 2268, d: 2561 * Math.max(1, 1000 / SW), fx: 24, fz: 278, ty: 236 };
     LCAM = Object.assign({}, LCAM0); applyCam();
     if (FILTER) flyToCounty(FILTER, true);
   }
@@ -2568,7 +2592,7 @@
   var LASTF = null;
   function placeFocus() {   // focus column at the top left, the left column below it
     var colF = document.getElementById('col-f'), colL = document.getElementById('col-l'), ctyEl = document.getElementById('cty');
-    var top0 = (document.getElementById('tabs').offsetHeight || 40) + 10;
+    var top0 = tabsH() + 10;
     if (ctyEl.parentNode !== colF) colF.appendChild(ctyEl);
     colF.hidden = !FILTER;
     colF.style.left = (TOUCHUI ? 34 : 12) + 'px'; colF.style.top = top0 + 'px';
@@ -2579,7 +2603,7 @@
   }
   function crUpdate(f, snap) {
     var colL = document.getElementById('col-l'), colR = document.getElementById('col-r'), moved = false;
-    var top0 = (document.getElementById('tabs').offsetHeight || 40) + 10;
+    var top0 = tabsH() + 10;
     colL.style.left = (TOUCHUI ? 34 : 12) + 'px'; colL.style.top = top0 + 'px';   // tablets: clear of the edge tabs
     colR.style.left = (SW - 312 - (TOUCHUI ? 22 : 0)) + 'px'; var hm = document.getElementById('hud-m'), hmB = SW > 640 && hm.classList.contains('tr') ? hm.getBoundingClientRect().bottom - root.getBoundingClientRect().top + 8 : 0;
     colR.style.top = Math.max(top0, hmB) + 'px';   // (below the top-right box when there is one)
@@ -3248,7 +3272,7 @@
   var CMP = { open: false, tab: 'M', at: 0 };
   function cmpOpen(v) {
     CMP.open = v; var el = document.getElementById('lf-cmp'); el.hidden = !v;
-    if (v) { el.style.top = (document.getElementById('tabs').offsetHeight + 16) + 'px'; cmpRender(); }
+    if (v) { el.style.top = (tabsH() + 16) + 'px'; cmpRender(); }
     renderTabs();
   }
   // minutes a source's numbers are behind, or 0. The poller stamps every read in Taiwan time ('2026-11-28 19:03';
@@ -3366,7 +3390,8 @@
       '<button type="button" data-ctl="speed">' + SPEED + '×</button><button type="button" data-ctl="restart">↺</button>';
     if (ctl) html += '<span class="lf-ctl">' + ctl + '</span>';
     el.innerHTML = html;
-    if (L && SW >= 640) { var cyNow = hemiCy(L.R, L.cx); if (Math.abs(cyNow - L.cy) > 1 || (STRIP && (STRIP.lang !== lang || STRIP.top !== el.offsetHeight + 16))) requestAnimationFrame(layout); }   // labels changed width (language) / the tab row its height
+    barRow();
+    if (L && SW >= 640) { var cyNow = hemiCy(L.R, L.cx); if (Math.abs(cyNow - L.cy) > 1 || (STRIP && (STRIP.lang !== lang || STRIP.top !== tabsH() + 16))) requestAnimationFrame(layout); }   // labels changed width (language) / the tab row its height
     var ss = el.querySelector('.lf-srcsel');
     if (ss) ss.onchange = function () {
       if (this.value === '__cmp') { cmpOpen(true); return; }
@@ -3492,7 +3517,7 @@
   function tourSteps() {
     var hemi = STRIP && !FILTER ? { x: STRIP.x0 - 8, y: STRIP.y0 - 6, w: STRIP.x1 - STRIP.x0 + 16, h: STRIP.y1 - STRIP.y0 + 12 } : L ? { x: L.cx - L.R - 10, y: L.cy - L.R - 8, w: 2 * L.R + 20, h: L.R + 52 } : null;
     var map = L && LF_COAST ? (function () { var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; LF_COAST.forEach(function (r) { for (var i = 0; i < r.length; i += 2) { var q = P(r[i], r[i + 1]); if (q[2] <= 0) continue; x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); } }); return x1 > x0 ? { x: x0 - 10, y: y0 - 10, w: x1 - x0 + 20, h: y1 - y0 + 20 } : null; })() : null;
-    var side = SW > 640 ? { x: SW - 320, y: (document.getElementById('tabs').offsetHeight || 40) + 50, w: 312, h: Math.min(SH * 0.55, 380) } : null;
+    var side = SW > 640 ? { x: SW - 320, y: tabsH() + 50, w: 312, h: Math.min(SH * 0.55, 380) } : null;
     var bottom = rectOf(document.querySelector('.lf-hud'));
     var li = function (a) { return '<ul>' + a.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>'; };
     // short, one idea a card (「簡單文字」); the full legend stays on the ⓘ hover
