@@ -513,7 +513,7 @@
   try { localStorage.removeItem(VIEW_KEY); } catch (e) {}
   var LIE = VIEW === 'lie';
   var FOC = 600, CAM = { yaw: 0, pitch: 0, pos: [0, 0, 0] };
-  var HH = 900, RH = 650;   // hemicycle height and radius (map frame px)
+  var HH = 900, RH = 500;   // hemicycle height and radius (map frame px); radius 650 → 500 on the wall (2026-11-14: 「大小不需要這麼大」)
   // with the 高低 pillars the hemicycle floats 15% higher (user 2026-11-10: 「伸長版光柱跟半圓形圖的距離還是大些不然太擠」→ 抬高);
   // the camera targets still use HH
   var HEM_CELL_LIFT = 1.15;
@@ -533,11 +533,29 @@
   // π = west end (left, 綠), 0 = east end (藍), as the flat view
   // true north / east since 2026-11-08: with the default camera facing north (the flat map's orientation, tilted back) the
   // hemicycle's straight side reads level, as in the flat view (it used to follow the island's slanted long axis)
-  var AXN = [0, 1];   // north (floor z)
-  var AXE = [1, 0];   // east (floor x)
+  // ON A WALL since 2026-11-14 (user: 「3d半圓形圖我還是想要移到地圖的後面的牆上這才直覺」→「就是目前南北方向的平躺，然後半圓
+  // 形圖移到台北最北邊做出一個黑色牆面把圖移到他的上面正對著地圖」): the lying view keeps its camera (from the south, facing
+  // north); a black upright wall stands just beyond the island's northern tip, facing south (the map and the camera), and the
+  // hemicycle stands on it — its straight side level along the wall's foot (raised WALL_Y0 above the floor so the tallest
+  // pillars don't hide the inner ring), the arc going up. Same seat order: π = west end (left, 綠), 0 = east end (藍).
+  // The horizontal hemicycle (height HH over the island's centre) is replaced; AXE = east, AXV = the arc's direction
+  // 2026-11-14 second pass: 「不需要有一個外匡然後大小不需要這麼大這麼接近可以往上一點」→ no rim, smaller (RH 500), further
+  // from the island and higher off the floor
+  // third pass (「半圓形圖再往上」): 300 → 480
+  var WALL_GAP = 220, WALL_Y0 = 480, WALL_PAD = 60;
+  var WALL_Z = (ICY - ISLF.y0) + WALL_GAP;   // floor z of the wall (north of the northern tip)
+  var AXE = [1, 0, 0], AXV = [0, 1, 0];
   function ringW(a, r) {
-    var across = Math.cos(a) * r * RH, north = Math.sin(a) * r * RH;
-    return [AXE[0] * across + AXN[0] * north, hemH(), AXE[1] * across + AXN[1] * north];
+    var across = Math.cos(a) * r * RH, up = Math.sin(a) * r * RH, y0 = WALL_Y0 * (hemH() / HH);   // 高低 pillars: wall raised 15 % too
+    return [AXE[0] * across + AXV[0] * up, y0 + AXE[1] * across + AXV[1] * up, WALL_Z + AXE[2] * across + AXV[2] * up];
+  }
+  function drawWall(g) {   // the black wall behind the hemicycle: pure black, no rim
+    var y0 = WALL_Y0 * (hemH() / HH), xw = RH + WALL_PAD, yt = y0 + RH + WALL_PAD;
+    var c = [[-xw, 0], [xw, 0], [xw, yt], [-xw, yt]].map(function (p) { return proj3(p[0], p[1], WALL_Z + 2); });
+    if (c.some(function (q) { return !q; })) return;
+    g.save(); g.beginPath(); c.forEach(function (q, i) { if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); }); g.closePath();
+    g.globalAlpha = 1; g.fillStyle = '#000'; g.fill();   // pure black (2026-11-14: 「半圓形圖背景那層灰改成黑」)
+    g.restore();
   }
   // the lying view's angle can be moved (user: 「平躺你要可以移角度啊」): drag left / right orbits, up / down raises or lowers
   // the camera, the wheel zooms, ⟲ goes back to the fitted default
@@ -599,19 +617,40 @@
     var el = 65 * Math.PI / 180, y = HH * 0.6;
     camTo({ fx: c.x, fz: c.z, ty: 0, y: y, d: Math.max(60, y / Math.tan(el)) }, now);
   }
+  // 3D terrain (user 2026-11-14: 「先嘗試把3d地形加入平面跟立體然後那層陰影打光要跟目前的這一層其實是平面的一樣」): the lying
+  // view's floor rises with the land — v2/terrain_lf.bin (build_terrain_lf.py: SRTM 90 m in the map frame, 500 × 727 cells of
+  // 2 units, metres) × TERR_EX exaggeration (1 map unit ≈ 286 m, so 玉山 ≈ 13 units true, ≈ 67 at × 5). The floor keeps the same
+  // hill-shade image as the flat view (lf_relief.png) draped over the heights — no live lighting. Pillars, their lines, the
+  // coast and county lines, the flip rings all stand on the terrain (FH). Loaded the first time the 3D view is used; until
+  // then the floor is flat. The flat view (seen from straight above) shows the land through the same shading only
+  var TERR = null, TERR_REQ = false, TERR_EX = 5;
+  function terrLoad() {
+    if (TERR || TERR_REQ) return; TERR_REQ = true;
+    fetch('terrain_lf.bin?v=20261114a').then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(function (b) {
+      var hl = new DataView(b).getUint32(0, true), h = JSON.parse(new TextDecoder().decode(new Uint8Array(b, 4, hl)));
+      TERR = { w: h.w, h: h.h, cell: h.cell, z: new Uint16Array(b.slice(4 + hl)) }; FLOORKEY = ''; if (LIE) { drawPillars(); camChanged(); }
+    }).catch(function () { TERR_REQ = false; });
+  }
+  function FH(x, y) {   // map frame → floor height (map units), bilinear; 0 off the land or before the heights arrive
+    if (!TERR) return 0;
+    var gx = x / TERR.cell - 0.5, gy = y / TERR.cell - 0.5, W = TERR.w, Hh = TERR.h;
+    if (gx < 0 || gy < 0 || gx > W - 1 || gy > Hh - 1) return 0;
+    var x0 = Math.min(W - 2, Math.floor(gx)), y0 = Math.min(Hh - 2, Math.floor(gy)), tx = gx - x0, ty = gy - y0, i = y0 * W + x0, z = TERR.z;
+    return ((z[i] * (1 - tx) + z[i + 1] * tx) * (1 - ty) + (z[i + W] * (1 - tx) + z[i + W + 1] * tx) * ty) / 286 * TERR_EX;
+  }
   function P(x, y) {   // map frame → screen [x, y, depth scale]
     if (!LIE) return [L.ox + x * L.k, L.oy + y * L.k, 1];
-    var w = W3(x, y), q = proj3(w[0], 0, w[2]);
+    var w = W3(x, y), q = proj3(w[0], FH(x, y), w[2]);
     return q ? [q[0], q[1], FOC / q[2]] : [-9999, -9999, 0];
   }
   // seat → screen [x, y, rx, ry]: flat = a circle; lying = the seat's disc on the hemicycle plane, projected (an ellipse)
   function seatXY(a, r, ring) {
     if (!LIE) return [L.cx + Math.cos(a) * r * L.R, L.cy - Math.sin(a) * r * L.R, 0, 0];
-    var rw = ring === 'M' ? 13 : 7, c = ringW(a, r), q = proj3(c[0], c[1], c[2]);
+    var rw = (ring === 'M' ? 13 : 7) * RH / 650, c = ringW(a, r), q = proj3(c[0], c[1], c[2]);   // discs shrink with the hemicycle
     if (!q) return [-9999, -9999, 0, 0];
-    // the seat's disc lies in the hemicycle plane (horizontal): its two axes (east, north) projected — drawn as the true
+    // the seat's disc lies in the hemicycle plane (the wall): its two axes (east, up) projected — drawn as the true
     // projected disc in drawSeats, not an upright ellipse
-    var qe = proj3(c[0] + AXE[0] * rw, c[1], c[2] + AXE[1] * rw), qn = proj3(c[0] + AXN[0] * rw, c[1], c[2] + AXN[1] * rw);
+    var qe = proj3(c[0] + AXE[0] * rw, c[1] + AXE[1] * rw, c[2] + AXE[2] * rw), qn = proj3(c[0] + AXV[0] * rw, c[1] + AXV[1] * rw, c[2] + AXV[2] * rw);
     if (!qe || !qn) return [q[0], q[1], 1, 1, 0, 0, 0, 0];
     return [q[0], q[1], 1, 1, qe[0] - q[0], qe[1] - q[1], qn[0] - q[0], qn[1] - q[1]];
   }
@@ -697,7 +736,9 @@
   function ltSize(P) { var z = ltZoom(); return Math.max(0.5, LT_TS[P][0] * (BASEL ? BASEL.k : L.k) * 1.6 * Math.sqrt(z)); }
   // brighter lights (user 2026-11-09: 「補強人口光點亮度」, kept when the county glass came back): every tier's alpha × LT_BRIGHT
   var LT_BRIGHT = 1.3;
-  function ltAlpha(P) { return Math.min(0.9, LT_TS[P][1] * LT_BRIGHT * Math.pow(ltZoom(), 0.6)); }
+  // the township layer (a county picked) brighter again (user 2026-11-14: 「鄉鎮市區層的人口光點不夠亮」): × LT_ZBOOST when zoomed in
+  var LT_ZBOOST = 1.7;
+  function ltAlpha(P) { var z = ltZoom(); return Math.min(0.9, LT_TS[P][1] * LT_BRIGHT * Math.pow(z, 0.6) * (z > 1.01 ? LT_ZBOOST : 1)); }
   function ltCanvas(c) {   // a fresh canvas for county c's crop
     var cv = document.createElement('canvas'); cv.width = c.w; cv.height = c.h;
     cv.getContext('2d').setTransform(DPR, 0, 0, DPR, -c.x, -c.y); return cv;
@@ -896,7 +937,7 @@
     gBg.globalCompositeOperation = 'source-over'; gBg.globalAlpha = 1; gBg.fillStyle = '#000'; gBg.fillRect(0, 0, cvBg.width, cvBg.height);
     var hl = HOVER_CC || FILTER;   // a hovered or picked county: the others' lights at 35 %
     gBg.setTransform(DPR, 0, 0, DPR, 0, 0);
-    if (ccFillPaint(gBg, now, hl, CC_HOLED)) LT_DIRTY = true;   // the counties' faint party wash, under the lights; repaint while it fades
+    reliefFlat(gBg);   // the terrain shading, under the lights (replaced the county glass 2026-11-14, see RELIEF)
     gBg.setTransform(1, 0, 0, 1, 0, 0);
     gBg.globalCompositeOperation = 'lighter';   // crops overlap only in empty corners; the cross-fade pair adds up to one
     Object.keys(LT_CTY).forEach(function (cc) {
@@ -1446,38 +1487,8 @@
     // 3D: 97% — up to the hemicycle's underside, gone just before the seat (user 2026-11-10: B 「飛到半圓底面才消失」; 82% left them
     // fading in mid-air once the hemicycle was lifted)
     var END = LIE ? 0.97 : 0.82, BATCH = {};
-    // mayor lines in three streams (user 2026-11-10: 「光粒子調整成三股光束往縣市長圓點衝」→ 「可以試試」, both views): each line
-    // first bends into its side's gather point (綠 left, 灰 middle, 藍 right, 45% of the way from the island's centre up to the
-    // mayors' dots), then the side's lines climb together as one beam to 25% under the dots, and only there fan out into their
-    // own county's mayor dot. Path: [0, .45] quadratic start → gather; [.45, 1] cubic gather → (split, split) → dot. Drawn as
-    // short polylines; they run to 95% of the way, so the fan into the dots shows
-    var GATH = null, SEND = 0.95, TG = 0.45;
-    (function () {
-      var ms = SEATS.filter(function (z) { return z.ring === 'M' && z.x != null; }); if (!ms.length) return;
-      var xa = Infinity, xb = -Infinity, ys = 0; ms.forEach(function (z) { xa = Math.min(xa, z.x); xb = Math.max(xb, z.x); ys += z.y; }); ys /= ms.length;
-      var mc = P(ICX, ICY), xm = (xa + xb) / 2, gy = ys + (mc[1] - ys) * 0.45, hw = Math.max(30, (xb - xa) * 0.22);
-      GATH = { dpp: xm - hw, other: xm, kmt: xm + hw, gy: gy, sy: ys + (gy - ys) * 0.25, j: Math.max(3, hw * 0.06) };
-    })();
-    // the main parties' own streams sit in the hemicycle's party order (user 2026-11-12: 綠→灰→民眾黨→藍): 民進黨 left, 國民黨
-    // right, grey in the middle; a green-side party (台灣基進, 時代力量…) halfway between 綠 and 灰, a blue-side one (民眾黨,
-    // 親民黨…) halfway between 灰 and 藍
-    function gathX(pk) {
-      if (GATH[pk] != null) return GATH[pk];
-      return GATH.other + (orderOf(pk) < ORDER._open ? GATH.dpp - GATH.other : GATH.kmt - GATH.other) / 2;
-    }
-    var streamAt = function (q, gx, t) {   // a point of a mayor line's path, t in [0, 1]
-      var x0 = q.x0, y0 = q.y0, x1 = q.seat.x, y1 = q.seat.y, u;
-      if (t <= TG) { u = t / TG; var cx = x0, cy = GATH.gy + (y0 - GATH.gy) * 0.35;   // rise first, then swing into the gather point
-        return [(1 - u) * (1 - u) * x0 + 2 * u * (1 - u) * cx + u * u * gx, (1 - u) * (1 - u) * y0 + 2 * u * (1 - u) * cy + u * u * GATH.gy]; }
-      u = (t - TG) / (1 - TG);
-      var w0 = (1 - u) * (1 - u) * (1 - u), w3 = u * u * u, w1 = 1 - w0 - w3;
-      return [w0 * gx + w1 * gx + w3 * x1, w0 * GATH.gy + w1 * GATH.sy + w3 * y1];
-    };
-    var addStream = function (key, q, gx, s0, s1) {
-      var path = BATCH[key] || (BATCH[key] = new Path2D()), n = Math.max(2, Math.ceil((s1 - s0) * 24)), pt = streamAt(q, gx, s0);
-      path.moveTo(pt[0], pt[1]);
-      for (var k = 1; k <= n; k++) { pt = streamAt(q, gx, s0 + (s1 - s0) * k / n); path.lineTo(pt[0], pt[1]); }
-    };
+    // (the mayor lines' three streams — 綠 / 灰 / 藍 gather points under the mayors' dots, 2026-11-10 … 11-12 — were dropped
+    // 2026-11-14: 「光束就不匯聚成一團了就自然地往半圓形圖跑」; every line now arcs straight to its own seat, as the council lines)
     var addPiece = function (key, x0, y0, cx, cy, x1, y1, s0, s1) {
       var Bx = function (t) { var u = 1 - t; return u * u * x0 + 2 * u * t * cx + t * t * x1; };
       var By = function (t) { var u = 1 - t; return u * u * y0 + 2 * u * t * cy + t * t * y1; };
@@ -1495,13 +1506,6 @@
       if (b - a < 1e-3) continue;
       if (LIE) { var qq = (q.tc && pilStart(q)) || (CAM_MOVED ? P(q.mx, q.my) : null); if (qq) { q.x0 = qq[0]; q.y0 = qq[1]; } }   // follows its pillar's top as it grows / the camera moves
       var x0 = q.x0, y0 = q.y0, x1 = q.seat.x, y1 = q.seat.y;
-      if (q.pk && GATH && LIE) {   // a mayor line in 3D: through its side's gather point (flat: back to its own arc, user 2026-11-10: 「平面光束又太刻意」)
-        var gx = gathX(q.pk) + q.gj * GATH.j;
-        var r0 = a * SEND, r1 = b * SEND, rm = (r0 + r1) / 2, wq = Math.max(0.5, Math.round(q.w * 2) / 2);
-        addStream(q.c + '|' + wq + '|' + q.a + '|h', q, gx, rm, r1);
-        addStream(q.c + '|' + wq + '|' + q.a + '|t', q, gx, r0, rm);
-        continue;
-      }
       var cx = (x0 + x1) / 2 + (x1 - x0) * 0.1, cy = Math.min(y0, y1) - Math.abs(y0 - y1) * q.bend;
       if (LIE) { cx = x0 + (x1 - x0) * (0.1 + q.bend * 0.2); cy = y1 + (y0 - y1) * 0.12; }
       cx += (q.sp || 0) * (0.52 * Math.abs(y0 - y1) + 60) * (LIE ? 0.5 : 1);   // the bundle fans out sideways (wider, user: 「再分散一些」); half
@@ -1527,7 +1531,7 @@
       gTr.strokeStyle = '#ffffff'; gTr.lineWidth = 1.6; gTr.globalAlpha = 0.9; gTr.stroke(); gTr.globalAlpha = 1;
     }
     ccFxDraw(now);
-    if (LIE && (PIL_ANIM || CCFILL_ANIM)) drawPillars();
+    if (LIE && PIL_ANIM) drawPillars();
     ltStep(now);
     CAM_MOVED = false;
     drawSeats(dt);
@@ -1582,6 +1586,26 @@
   });
   root.addEventListener('pointerleave', function () { setHover(null); setTownHover(null); });
   var LDRAG = null, CAM_DIRTY = false, CAM_MOVED = false, camIdle = 0;
+  // free movement over the map (user 2026-11-14: 「應該要更自由的在縣市上滑來滑去」): right-drag / Shift-drag / two fingers pan the
+  // orbit target along the floor (camera-relative: drag the map the way you want it to go), arrow keys / WASD step it; the
+  // target eases down to the floor while panning, so gliding over the counties looks at the land, not at the air; zoom in to 200
+  var PAN_MIN_D = 200;
+  function camPan(dx, dy) {   // screen px → floor units at the current distance
+    if (!LCAM) return;
+    var k = LCAM.d / FOC * 1.1, fx = Math.cos(LCAM.az), fz = Math.sin(LCAM.az), rx = Math.sin(LCAM.az), rz = -Math.cos(LCAM.az);
+    LCAM.fx = (LCAM.fx || 0) - rx * dx * k + fx * dy * k; LCAM.fz = (LCAM.fz || 0) - rz * dx * k + fz * dy * k;
+    var lim = 1400; LCAM.fx = Math.max(-lim, Math.min(lim, LCAM.fx)); LCAM.fz = Math.max(-lim, Math.min(lim, LCAM.fz));
+    LCAM.ty = (LCAM.ty != null ? LCAM.ty : HH * 0.5) * 0.92;
+    LMOVED = true; CAM_TW++; applyCam(); camChanged();
+  }
+  root.addEventListener('contextmenu', function (e) { if (LIE && !e.target.closest('.lf-tabs, .lf-cty, .lf-hud, #cols, button, select')) e.preventDefault(); });
+  document.addEventListener('keydown', function (e) {
+    if (!LIE || !LCAM || /INPUT|SELECT|TEXTAREA/.test((e.target && e.target.tagName) || '')) return;
+    var tour = document.getElementById('lf-tour'); if (tour && !tour.hidden) return;
+    var st = 40, m = { ArrowLeft: [-st, 0], a: [-st, 0], A: [-st, 0], ArrowRight: [st, 0], d: [st, 0], D: [st, 0], ArrowUp: [0, st], w: [0, st], W: [0, st], ArrowDown: [0, -st], s: [0, -st], S: [0, -st] }[e.key];
+    if (!m) return;
+    e.preventDefault(); camPan(-m[0], m[1]);   // arrow right = move right (the map slides left)
+  });
   function camChanged() { CAM_DIRTY = true; clearTimeout(camIdle); camIdle = setTimeout(function () { CAM_DIRTY = true; }, 180); }   // a full redraw once it settles
   root.addEventListener('pointerdown', function (e) {
     // the side county boxes too (user 2026-11-07: 「隱藏在暗處的詳細開票數字沒辦法點縣議員選單」 — the drag grabbed the pointer
@@ -1590,18 +1614,21 @@
     // two fingers (tablets; user 2026-11-08 平板提案 B): pinch = the wheel's zoom, the one-finger turn stops
     PTRS[e.pointerId] = [e.clientX, e.clientY];
     var ids = Object.keys(PTRS);
-    if (ids.length === 2) { var a = PTRS[ids[0]], b = PTRS[ids[1]]; PINCH = { d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cd: LCAM.d }; LDRAG = null; root.setPointerCapture(e.pointerId); return; }
+    if (ids.length === 2) { var a = PTRS[ids[0]], b = PTRS[ids[1]]; PINCH = { d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cd: LCAM.d, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; LDRAG = null; root.setPointerCapture(e.pointerId); return; }
     CAM_TW++;   // a drag stops a glide
-    LDRAG = { x: e.clientX, y: e.clientY, az: LCAM.az, cy: LCAM.y }; root.setPointerCapture(e.pointerId); root.style.cursor = 'grabbing';
+    LDRAG = { x: e.clientX, y: e.clientY, az: LCAM.az, cy: LCAM.y, pan: e.button === 2 || e.button === 1 || e.shiftKey, px: e.clientX, py: e.clientY }; root.setPointerCapture(e.pointerId); root.style.cursor = LDRAG.pan ? 'move' : 'grabbing';
   });
   root.addEventListener('pointermove', function (e) {
     if (PTRS[e.pointerId]) PTRS[e.pointerId] = [e.clientX, e.clientY];
     if (PINCH && LCAM) {
       var ids = Object.keys(PTRS); if (ids.length < 2) return;
       var a = PTRS[ids[0]], b = PTRS[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
-      LCAM.d = Math.max(FILTER ? 40 : 800, Math.min(20000, PINCH.cd * PINCH.d0 / d)); LMOVED = true; camChanged(); return;
+      LCAM.d = Math.max(FILTER ? 40 : PAN_MIN_D, Math.min(20000, PINCH.cd * PINCH.d0 / d)); LMOVED = true;
+      var mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; camPan(mx - PINCH.mx, my - PINCH.my); PINCH.mx = mx; PINCH.my = my;   // two fingers also pan
+      camChanged(); return;
     }
     if (!LDRAG) return;
+    if (LDRAG.pan) { camPan(e.clientX - LDRAG.px, e.clientY - LDRAG.py); LDRAG.px = e.clientX; LDRAG.py = e.clientY; return; }
     LCAM.az = LDRAG.az + (e.clientX - LDRAG.x) * 0.005; LMOVED = true;
     LCAM.y = Math.max(20, Math.min(4000, LDRAG.cy + (e.clientY - LDRAG.y) * 4));
     camChanged();
@@ -1622,7 +1649,7 @@
     if (!LIE || !LCAM || e.target.closest('.lf-tabs, .lf-cty')) return;
     e.preventDefault();
     CAM_TW++;   // a wheel turn stops a glide
-    LCAM.d = Math.max(FILTER ? 40 : 800, Math.min(20000, LCAM.d * (e.deltaY > 0 ? 1.08 : 1 / 1.08))); LMOVED = true;
+    LCAM.d = Math.max(FILTER ? 40 : PAN_MIN_D, Math.min(20000, LCAM.d * (e.deltaY > 0 ? 1.08 : 1 / 1.08))); LMOVED = true;
     camChanged();
   }, { passive: false });
   var lastHud = 0;
@@ -2042,7 +2069,7 @@
     var c = PIL_MODE === 'cell' ? PIL_CELL_AT[Math.floor(q.ox / PIL_G) + ',' + Math.floor(q.oy / PIL_G)] : (PIL_PT_BY[q.tc] || [])[q.pi];
     if (!c) return null;
     var s = c.s, h = s ? s.h0 + (s.h1 - s.h0) * ease((performance.now() - s.th) / 1000) : 0;
-    var w = W3(c.x, c.y), r = proj3(w[0], h, w[2]);
+    var w = W3(c.x, c.y), r = proj3(w[0], FH(c.x, c.y) + h, w[2]);
     return r ? [r[0], r[1]] : null;
   }
   // pillar look (user 2026-11-10): halo / core widths and opacities, the fade of each pillar's pieces from foot to top, and the
@@ -2162,7 +2189,6 @@
     if (r === RACE) return;
     RACE = r; RT_C = {}; TCSIDE = {}; FLIPS = {};
     try { localStorage.setItem('lf_race', r); } catch (e) {}
-    Object.keys(CCFILL).forEach(function (cc) { ccFillSet(cc, null, 0); });   // the glass fades and comes back in the new race's colours
     var fv = FEEDS[SRC], R = refOf(fv);
     REFPREV = {};   // the referendum's lines start from what is counted now (no burst of everything so far)
     if (fv && PREV && R && R.T) Object.keys(R.T).forEach(function (tc) { if (fv.T && fv.T[tc]) REFPREV[tc] = tcProg(fv, PREV, tc); });
@@ -2244,7 +2270,7 @@
   function drawPillars() {
     gPil.clearRect(0, 0, SW, SH);
     dimFloor(true);
-    if (LIE) { ccFillPaint(gPil, performance.now(), FILTER, CC_HOLED, true); drawCoast(); drawCountyLines(); }
+    if (LIE) { terrLoad(); floorPaint(gPil); drawCoast(); drawCountyLines(); drawWall(gPil); }
     if (!LIE || !PIL_SNAP) return;
     var now = performance.now(), groups = {}, info = {};
     PIL_ANIM = false;
@@ -2286,8 +2312,11 @@
       }
       var key = 'rgb(' + cNow.map(function (x) { return Math.round(x / 6) * 6; }).join(',') + ')|' + (Math.round(aNow * 20) / 20);
       var list = groups[key] || (groups[key] = []);
-      var w = W3(c.x, c.y), a = proj3(w[0], 0, w[2]), b = proj3(w[0], h, w[2]);
-      if (a && b) list.push(a[0], a[1], b[0], b[1]);
+      var w = W3(c.x, c.y), fh = FH(c.x, c.y), a = proj3(w[0], fh, w[2]), b = proj3(w[0], fh + h, w[2]);
+      if (a && b) {
+        var vis = pilVis(a, b);   // behind the terrain: only the part above the ridge (see depthBuild)
+        if (vis > 0.02) list.push(b[0] + (a[0] - b[0]) * vis, b[1] + (a[1] - b[1]) * vis, b[0], b[1]);
+      }
     });
     // (no glowing dot at the pillars' feet: drawn with the population sprite at the population points, it looked exactly like
     // the population dots the user wanted gone — removed 2026-11-07)
@@ -2321,7 +2350,7 @@
       var r = 8 + 62 * (ft / FLIP_RING), first = true;
       gPil.beginPath();
       for (var i = 0; i <= 32; i++) {
-        var ang = i / 32 * Math.PI * 2, w = W3(t[1] + r * Math.cos(ang), t[2] + r * Math.sin(ang)), q = proj3(w[0], 0, w[2]);
+        var ang = i / 32 * Math.PI * 2, fx = t[1] + r * Math.cos(ang), fy = t[2] + r * Math.sin(ang), w = W3(fx, fy), q = proj3(w[0], FH(fx, fy), w[2]);
         if (!q) continue; if (first) { gPil.moveTo(q[0], q[1]); first = false; } else gPil.lineTo(q[0], q[1]);
       }
       gPil.strokeStyle = 'rgb(' + fl.rgb.join(',') + ')'; gPil.globalAlpha = 1 - ft / FLIP_RING; gPil.lineWidth = 2.2; gPil.stroke();
@@ -2636,59 +2665,100 @@
   // its centre in the new leader's colour. Drawn on the trail canvas (cleared every frame), flat and 3D alike; with a
   // county picked, only that county. The lights keep their meaning (each township's leader) — nothing here recolours them.
   var CCLEAD = {}, CCTOSS = {}, CCRIP = [], CCMID = {}, CC_PULSE = 3000, CC_RIP = 1200, CCTAG = {}, NEWS = [];
-  // the counties' party glass (user 2026-11-09: 「22 縣市人口光點的空白可以加非常非常淡的政黨顏色（不可以蓋過人口光點）」
-  // →「以誰領先誰最終拿下這個區域」→ B 依狀態稍微加深 →「從一開始領先時就暗暗的給黑色地圖上一層不超過人口光點的淡藍跟淡綠
-  // （像是一層玻璃那種）而且等開票幾趴時才出現」): from 5% counted (before that the tag is Too early: nothing), the county
-  // gets a pale tint of its mayoral leader's colour — 13% leading, 17% projected, 21% final (「再明顯一點點」) — fading a little from top left
-  // to bottom right, with a hair-thin light rim, like tinted glass. Under the lights (flat) / the pillars (3D); a change
-  // fades over 1.5 s. Hovered or picked county: the others at 35%, as their lights. The lights still show each township's
-  // own leader.
-  var CCFILL = {}, CCFILL_ANIM = false, CCFILL_A = { lead: 0.13, proj: 0.17, final: 0.21 }, CCFILL_FADE = 3000;
-  // with the lights (「換的也不可以太瞬間」「就是搭配人口光點」): the glass thickens with the county's share counted — 30% of
-  // its strength at 5%, full from 50% — in 1% steps, and every change eases over 3 s (a new leader: a 3 s cross-fade)
-  function ccFillAlpha(tg, f) {
-    var ramp = 0.3 + 0.7 * Math.max(0, Math.min(1, ((f || 0) - 0.05) / 0.45));
-    return Math.round(CCFILL_A[tg === 'final' ? 'final' : tg === 'proj' ? 'proj' : 'lead'] * (tg === 'final' ? 1 : ramp) * 100) / 100;
-  }
-  function pale(hex) {   // the party colour lifted toward white — 淡藍 / 淡綠
-    var r = hexRgb(hex); return 'rgb(' + r.map(function (v) { return Math.round(v + (255 - v) * 0.35); }).join(',') + ')';
-  }
-  function ccFillSet(cc, col, a) {   // col null: fade out
-    var o = CCFILL[cc];
-    if (!col && (!o || !o.a)) return;
-    col = col ? pale(col) : o.c;
-    if (o && o.c === col && o.a === a) return;
-    CCFILL[cc] = { c: col, a: a, pc: o ? o.c : null, pa: o ? ccFillNow(o, performance.now()) : 0, t: performance.now() };
-    LT_DIRTY = true; CCFILL_ANIM = true;
-  }
-  function ccFillNow(o, now) {   // the strength on screen right now (same colour: eased from the old strength)
-    var k = ease((now - o.t) / CCFILL_FADE);
-    return o.pc === o.c ? o.pa + (o.a - o.pa) * k : o.a * k;
-  }
-  function ccFillPaint(g, now, hl, rings, lie) {   // → true while a fade is still running
-    var anim = false;
-    g.save(); g.globalCompositeOperation = 'source-over';
-    Object.keys(CCFILL).forEach(function (cc) {
-      var o = CCFILL[cc]; if (!rings[cc]) return;
-      if (lie && FILTER && cc !== FILTER) return;   // 3D with a county picked: only its floor, like its lines
-      var k = ease((now - o.t) / CCFILL_FADE), dim = hl && cc !== hl ? 0.35 : 1;
-      if (k < 1) anim = true;
-      var path = new Path2D(), bb = ccRingsPath(path, rings[cc]);
-      var glass = function (col, a) {   // tinted glass: a touch stronger at the top left, a hair-thin light rim
-        if (a <= 0.002) return;
-        g.globalAlpha = a * 1.2; g.fillStyle = col; g.fill(path, 'evenodd');
-        g.globalCompositeOperation = 'destination-out';   // the far corner a little clearer
-        var fade = g.createLinearGradient(bb[0], bb[1], bb[2], bb[3]); fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(0,0,0,1)');
-        g.globalAlpha = 0.35; g.fillStyle = fade; g.fill(path, 'evenodd');
-        g.globalCompositeOperation = 'source-over';
-        g.globalAlpha = a * 0.9; g.strokeStyle = '#ffffff'; g.lineWidth = 0.6; g.stroke(path);
-      };
-      if (o.pc && o.pc !== o.c && k < 1) glass(o.pc, o.pa * (1 - k) * dim);   // another leader: cross-fade
-      glass(o.c, ccFillNow(o, now) * dim);
-    });
+  // terrain shading (user 2026-11-14: 「平面縣市加入一層贏者全拿的顏色其實讓地圖看起來很髒，或許可以把地形的陰影加入平面層？」
+  // → preview →「好都加都刪」): the county party glass (2026-11-09 … 11-12: a pale wash of each county's leader, 13 / 17 / 21 %)
+  // is gone from both views; under the lights (flat) and the pillars (3D floor) lies a hill shade instead — light and dark
+  // only, no party colour, close to black so the lights stay on top. v2/lf_relief.png (build_relief_lf.py: SRTM 90 m in the
+  // map frame, 2000 × 2906, light from the north-west; 金門／馬祖 outside the SRTM tiles stay black). The lying view draws it
+  // as small tiles, each mapped with the affine of its own corners (the perspective error inside a tile is under a pixel)
+  var RELIEF = null, RELIEF_TILES = null, RELIEF_T = 25, RELIEF_A = 1;
+  (function () {
+    var im = new Image();
+    im.onload = function () {
+      RELIEF = im;
+      // land tiles only (a 1/50-scale copy: any land pixel → the tile's average is above 0)
+      var nx = Math.ceil(LF_FRAME.w / RELIEF_T), ny = Math.ceil(LF_FRAME.h / RELIEF_T), cv = document.createElement('canvas');
+      cv.width = nx; cv.height = ny; var g = cv.getContext('2d'); g.drawImage(im, 0, 0, LF_FRAME.w / RELIEF_T, LF_FRAME.h / RELIEF_T);
+      var d = g.getImageData(0, 0, nx, ny).data; RELIEF_TILES = [];
+      for (var ty = 0; ty < ny; ty++) for (var tx = 0; tx < nx; tx++) if (d[4 * (ty * nx + tx)] > 0) RELIEF_TILES.push([tx * RELIEF_T, ty * RELIEF_T]);
+      LT_DIRTY = true; if (LIE) drawPillars();
+    };
+    im.src = 'lf_relief.png?v=20261114b';
+  })();
+  function reliefFlat(g) {   // flat: one image in map-frame coordinates (g is in CSS px × DPR)
+    if (!RELIEF || !L) return;
+    // zoomed into a county the shade is shown big (its pixels no longer averaged down) and reads grey: lighter there
+    g.save(); g.globalCompositeOperation = 'source-over'; g.globalAlpha = RELIEF_A * (ZOOM ? 0.55 : 1); g.imageSmoothingEnabled = true;
+    g.transform(L.k, 0, 0, L.k, L.ox, L.oy); g.drawImage(RELIEF, 0, 0, LF_FRAME.w, LF_FRAME.h);
     g.restore();
-    CCFILL_ANIM = anim;
-    return anim;
+  }
+  // the 3D floor is drawn into its own canvas and reused until the camera (or the screen, the heights, the image) changes —
+  // pillars redraw every frame while they grow, the floor's ~3,000 tiles only when the view moves
+  var FLOOR = null, FLOORKEY = '';
+  function floorPaint(g) {
+    if (!RELIEF || !RELIEF_TILES || !L) return;
+    var key = [CAM.pos.join(','), CAM.yaw, CAM.pitch, SW, SH, g.canvas.width, !!TERR].join('|');
+    if (!FLOOR) FLOOR = document.createElement('canvas');
+    if (key !== FLOORKEY) {
+      FLOORKEY = key; FLOOR.width = g.canvas.width; FLOOR.height = g.canvas.height;
+      var f = FLOOR.getContext('2d'); f.setTransform(g.getTransform()); relief3D(f);
+      depthBuild();
+    }
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(FLOOR, 0, 0); g.restore();
+  }
+  // pillars hidden behind the terrain (user 2026-11-14: 「光柱應該要被地形遮擋」): with the floor, a coarse screen depth map of the
+  // land is built (DEP_C px cells; each terrain cell's projected corners fill their box with the cell's mean depth, the nearest
+  // kept). A pillar is drawn from its top down to the first cell where land stands in front of it (nearer by more than
+  // DEP_BIAS of its own depth, so the slope it stands on doesn't hide its foot); a pillar wholly behind a ridge is not drawn
+  var DEP = null, DEP_W = 0, DEP_H = 0, DEP_C = 3, DEP_BIAS = 0.02;
+  function depthBuild() {
+    DEP = null; if (!TERR || !LIE) return;
+    DEP_W = Math.ceil(SW / DEP_C); DEP_H = Math.ceil(SH / DEP_C);
+    var D = new Float32Array(DEP_W * DEP_H).fill(Infinity), W = TERR.w, Hh = TERR.h, z = TERR.z, c = TERR.cell, k = TERR_EX / 286;
+    var row0 = new Array(W), row1 = new Array(W);
+    var pr = function (i, j) { var x = (i + 0.5) * c, y = (j + 0.5) * c, w = W3(x, y); return proj3(w[0], z[j * W + i] * k, w[2]); };
+    for (var i0 = 0; i0 < W; i0++) row1[i0] = pr(i0, 0);
+    for (var j = 0; j < Hh - 1; j++) {
+      var t = row0; row0 = row1; row1 = t;
+      for (var i1 = 0; i1 < W; i1++) row1[i1] = z[(j + 1) * W + i1] || z[j * W + i1] ? pr(i1, j + 1) : null;
+      for (var i = 0; i < W - 1; i++) {
+        if (!(z[j * W + i] || z[j * W + i + 1] || z[(j + 1) * W + i] || z[(j + 1) * W + i + 1])) continue;
+        var a = row0[i], b = row0[i + 1], d = row1[i], e = row1[i + 1];
+        if (!a || !b || !d || !e) continue;
+        var x0 = Math.max(0, Math.floor(Math.min(a[0], b[0], d[0], e[0]) / DEP_C)), x1 = Math.min(DEP_W - 1, Math.floor(Math.max(a[0], b[0], d[0], e[0]) / DEP_C));
+        var y0 = Math.max(0, Math.floor(Math.min(a[1], b[1], d[1], e[1]) / DEP_C)), y1 = Math.min(DEP_H - 1, Math.floor(Math.max(a[1], b[1], d[1], e[1]) / DEP_C));
+        if (x1 < x0 || y1 < y0 || (x1 - x0) * (y1 - y0) > 400) continue;
+        var dep = (a[2] + b[2] + d[2] + e[2]) / 4;
+        for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) { var q = yy * DEP_W + xx; if (dep < D[q]) D[q] = dep; }
+      }
+    }
+    DEP = D;
+  }
+  // → the share of the pillar (from its top) that is visible: 1 = all, 0 = none
+  function pilVis(a, b) {
+    if (!DEP) return 1;
+    var d = Math.min(a[2], b[2]) * (1 - DEP_BIAS), n = Math.max(1, Math.ceil(Math.hypot(a[0] - b[0], a[1] - b[1]) / DEP_C));
+    for (var k = 0; k <= n; k++) {
+      var x = b[0] + (a[0] - b[0]) * k / n, y = b[1] + (a[1] - b[1]) * k / n, cx = Math.floor(x / DEP_C), cy = Math.floor(y / DEP_C);
+      if (cx < 0 || cy < 0 || cx >= DEP_W || cy >= DEP_H) continue;
+      if (DEP[cy * DEP_W + cx] < d) return k / n;
+    }
+    return 1;
+  }
+  function relief3D(g) {   // lying: per tile, the image piece mapped onto the floor by the tile's projected corners
+    if (!RELIEF || !RELIEF_TILES || !L) return;
+    var sx = RELIEF.width / LF_FRAME.w, sy = RELIEF.height / LF_FRAME.h, T = RELIEF_T, o = 0.6;   // o: overlap against seams
+    g.save(); g.globalCompositeOperation = 'source-over'; g.globalAlpha = RELIEF_A; g.imageSmoothingEnabled = true;
+    var base = g.getTransform();
+    var sub = TERR ? 3 : 1, t = T / sub;   // with heights: each tile in 3 × 3 pieces (≈ 8 units, under a pixel of bend)
+    for (var i = 0; i < RELIEF_TILES.length; i++) for (var sj = 0; sj < sub; sj++) for (var si = 0; si < sub; si++) {
+      var x0 = RELIEF_TILES[i][0] + si * t - o, y0 = RELIEF_TILES[i][1] + sj * t - o, w = t + 2 * o, h = t + 2 * o;
+      var A = P(x0, y0), B = P(x0 + w, y0), C = P(x0, y0 + h);
+      if (A[2] <= 0 || B[2] <= 0 || C[2] <= 0) continue;
+      g.setTransform(base); g.transform(B[0] - A[0], B[1] - A[1], C[0] - A[0], C[1] - A[1], A[0], A[1]);
+      g.drawImage(RELIEF, Math.max(0, x0 * sx), Math.max(0, y0 * sy), w * sx, h * sy, 0, 0, 1, 1);
+    }
+    g.restore();
   }
   // once per county and story: a tag that flickers (Lean ↔ Toss-up, Likely ↔ Certain) as the count moves no longer repeats
   // the same line — a Toss-up again only under another leader, a projection once per candidate, a final once
@@ -2778,26 +2848,6 @@
         // 2026-11-09: 「把確定鍾東錦當選那行拿掉」「因為左右下角都有了」)
       }
       CCTAG[cc] = tg;
-      if (raceOf(f) !== 'M') return;   // 議員 / 公投: ccFillRace below
-      if (tg && tg !== 'early') ccFillSet(cc, tc, ccFillAlpha(tg, r && r.f));   // from 5% counted
-      else ccFillSet(cc, null, 0);
-    });
-    if (raceOf(f) !== 'M') ccFillRace(f, snap);
-  }
-  // the glass for 議員 / 公投: the county's townships summed (party votes / agree–disagree), from 5% counted, final at 100%
-  // (no model tags for these races)
-  function ccFillRace(f, snap) {
-    var V = raceT(f, snap), by = {}, w = {};
-    Object.keys(V.T).forEach(function (tc) {
-      var cc = LF_TOWNS[tc][0], o = by[cc] || (by[cc] = {}), k = raceProg(f, snap, V, tc), t = sumC(V.T[tc]), q = w[cc] || (w[cc] = [0, 0]);
-      V.T[tc].forEach(function (c) { o[c.p] = (o[c.p] || 0) + c.v; });
-      if (k > 0) { q[0] += t; q[1] += t / k; }
-    });
-    Object.keys(by).concat(Object.keys(CCFILL)).forEach(function (cc) {
-      var o = by[cc], q = w[cc], sh = q && q[1] ? q[0] / q[1] : 0;
-      if (!o || sh < 0.05) { ccFillSet(cc, null, 0); return; }
-      var top = Object.keys(o).sort(function (a, b) { return o[b] - o[a]; })[0];
-      ccFillSet(cc, colorOf(top), ccFillAlpha(sh >= 0.999 ? 'final' : 'lead', sh));
     });
   }
   window.__lfCcFx = function () { return { toss: Object.keys(CCTOSS).filter(function (cc) { return CCTOSS[cc]; }), ripples: CCRIP.map(function (o) { return o.cc; }) }; };   // read-only peek for browser checks
@@ -3235,7 +3285,7 @@
   function legendText() {   // the ⓘ tooltip in the tab row (the legend used to sit at the top right)
     return [STRIP && !FILTER ? T('上排 縣市長 22 席・下方長條 縣市議員（淡＝領先、實心＝確定）', 'Top row: 22 mayors · the bar: councillors (faint = leading, solid = final)') : T('內圈 縣市長 22 席・外圈 縣市議員 910 席', 'Inner ring: 22 mayors · outer ring: 910 councillors'),
       T('空心＝目前領先・半實心＝推估當選（模型）・實心＝確定', 'Hollow = leading · half-filled = projected (model) · solid = final'),
-      T('縣市長標籤：Too early（開票未滿 5%）・Toss-up 拉鋸（勝率<70%）・Lean 傾向（70–90%）・Likely 可能（90–99.5%）・Certain 推估當選（>99.5%）；D 民進黨・K 國民黨・T 民眾黨・I 無黨；依開出的票與上屆各鄉鎮得票推估', 'Mayor tags: Too early (<5% counted) · Toss-up (<70%) · Lean (70–90%) · Likely (90–99.5%) · Certain (>99.5%); D DPP · K KMT · T TPP · I independent; from the votes in vs each township\'s last result'), T('平躺視角：拖曳轉角度・滾輪拉近拉遠', '3D view: drag to turn · wheel to zoom'), T('線越粗＝那個鄉鎮這一批開出的票越多', 'Thicker line = a bigger batch of votes from that township')]
+      T('縣市長標籤：Too early（開票未滿 5%）・Toss-up 拉鋸（勝率<70%）・Lean 傾向（70–90%）・Likely 可能（90–99.5%）・Certain 推估當選（>99.5%）；D 民進黨・K 國民黨・T 民眾黨・I 無黨；依開出的票與上屆各鄉鎮得票推估', 'Mayor tags: Too early (<5% counted) · Toss-up (<70%) · Lean (70–90%) · Likely (90–99.5%) · Certain (>99.5%); D DPP · K KMT · T TPP · I independent; from the votes in vs each township\'s last result'), T('平躺視角：拖曳轉角度・右鍵或 Shift＋拖曳（雙指拖曳）平移・方向鍵／WASD 移動・滾輪拉近拉遠', '3D view: drag to turn · right-drag or Shift-drag (two-finger drag) to pan · arrow keys / WASD to move · wheel to zoom'), T('線越粗＝那個鄉鎮這一批開出的票越多', 'Thicker line = a bigger batch of votes from that township')]
       .concat(LIE ? [] : [T('光點＝鄉鎮已開票的比例亮起，顏色＝該鄉鎮目前領先的政黨；灰線＝縣市界', 'Lights = the share of a township already counted, in the colour of the party leading it; grey lines = county borders')])
       .concat(LIE ? [T('光柱＝鄉鎮已開出的縣市長票，鄉鎮內依人口平均分配（示意）', 'Pillars = a township\'s counted mayoral votes, spread by population (illustrative)')] : [])
       .concat(LIE ? [] : [T('滑過縣市或圓點＝點亮該縣市；點圓點＝選取（再點一次取消）', 'Hover a county or a seat = light that county; click a seat = select it (click again to clear)')])
@@ -3244,7 +3294,7 @@
   }
   function resetState() {
     SEATS.forEach(function (s) { s.p = null; s.st = 'none'; });
-    PREV = null; ACC = {}; LASTE = {}; REFPREV = {}; PARTS = []; HIST = []; RECENT = { g: [], b: [] }; CALLS = {}; CCLEAD = {}; CCTOSS = {}; CCRIP = []; CCTAG = {}; NEWS = []; NEWSEEN = {}; CALLHOLD = {}; CCFILL = {}; LT_DIRTY = true;
+    PREV = null; ACC = {}; LASTE = {}; REFPREV = {}; PARTS = []; HIST = []; RECENT = { g: [], b: [] }; CALLS = {}; CCLEAD = {}; CCTOSS = {}; CCRIP = []; CCTAG = {}; NEWS = []; NEWSEEN = {}; CALLHOLD = {}; LT_DIRTY = true;
     PIL_SNAP = null; gPil.clearRect(0, 0, SW, SH); dimFloor(false); pilReset(); ltReset();
     gTr.clearRect(0, 0, SW, SH); placeSeats(true);
   }
@@ -3313,7 +3363,7 @@
     setTimeout(function () { var seen = '1'; try { seen = localStorage.getItem('lf_tour_seen'); } catch (e) {} if (!seen) tourStart(); }, 900);
   });
   // URL parameters for checks (user 2026-11-12: 「加」— so a headless browser can open any state without clicking):
-  // ?mode=r2022|r2026|live  &race=M|R  &view=lie|flat  &cty=<county code>  &at=HH:MM (rehearsal clock, paused there)  &tour=0.
+  // ?mode=r2022|r2026|live  &race=M|R  &view=lie|flat  &cty=<county code>  &at=HH:MM (rehearsal clock, paused there)  &tour=0  &cam=az,y,d (3D).
   // Nothing set: the page opens exactly as before; the race is not stored (localStorage untouched)
   function applyQS() {
     if (QS.mode && QS.mode !== MODE && /^(r2022|r2026|live)$/.test(QS.mode)) setMode(QS.mode);
@@ -3322,6 +3372,9 @@
     var m = /^(\d{1,2}):(\d{2})$/.exec(QS.at || '');
     if (m) { simT = Math.max(SIM.start, Math.min(SIM.end, +m[1] * 60 + +m[2])); PLAY = false; var fq = FEEDS[SRC]; if (fq && fq.sim) { tick(fq, simT, false); if (PREV) hud(fq, PREV); } }   // paused: one tick so the state shows
     if (QS.cty && LF_COUNTY[QS.cty]) pickCounty(QS.cty);
+    if (QS.play === '1' && m) PLAY = true;   // testing: start playing from the &at= time
+    var cm = /^(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)(?:,(-?[\d.]+),(-?[\d.]+),(-?[\d.]+))?$/.exec(QS.cam || '');   // testing: 3D camera az (rad), height, distance [, target x, z, height]
+    if (cm && LIE && LCAM) { LCAM.az = +cm[1]; LCAM.y = +cm[2]; LCAM.d = +cm[3]; if (cm[4] != null) { LCAM.fx = +cm[4]; LCAM.fz = +cm[5]; LCAM.ty = +cm[6]; } LMOVED = true; applyCam(); camChanged(); drawPillars(); }
     renderTabs();
   }
 })();
