@@ -626,9 +626,18 @@
   // coast and county lines, the flip rings all stand on the terrain (FH). Loaded the first time the 3D view is used; until
   // then the floor is flat. The flat view (seen from straight above) shows the land through the same shading only
   var TERR = null, TERR_REQ = false, TERR_EX = +((location.search.match(/[?&]texag=([\d.]+)/) || [])[1] || 4);   // ?texag= for testing   // × 4 (user 2026-11-14: 「3d地圖＊4」; was 5)
+  // finer outlines for the 3D map (v2/lf_lines_hi.json, build_lf_lines_hi.py: from the full township polygons; user
+  // 2026-11-14: 「台灣邊線跟鄉鎮市區邊界很粗糙」) — coast / county / town rings in the map frame; {} on failure (the coarse
+  // LF_COAST / LF_COUNTY / LF_TOWNPOLY are used then)
+  var LHI = null;
+  function hiCoast() { return LHI && LHI.coast ? LHI.coast : LF_COAST; }
+  function hiCounty(cc) { return LHI && LHI.county && LHI.county[cc] ? LHI.county[cc] : CC_HOLED[cc]; }
+  function hiTown(tc) { return LHI && LHI.town && LHI.town[tc] ? LHI.town[tc] : LF_TOWNPOLY[tc]; }
   function terrLoad() {
     if (TERR || TERR_REQ) return; TERR_REQ = true;
-    fetch('terrain_lf.bin?v=20261114a').then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(function (b) {
+    fetch('lf_lines_hi.json?v=20261114a').then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (j) { LHI = j; }).catch(function () { LHI = {}; }).then(function () { if (LIE) drawPillars(); });
+    fetch('terrain_lf.bin?v=20261114b').then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(function (b) {
       var hl = new DataView(b).getUint32(0, true), h = JSON.parse(new TextDecoder().decode(new Uint8Array(b, 4, hl)));
       TERR = { w: h.w, h: h.h, cell: h.cell, z: new Uint16Array(b.slice(4 + hl)) }; FLOORKEY = ''; if (LIE) { drawPillars(); camChanged(); }
     }).catch(function () { TERR_REQ = false; });
@@ -638,7 +647,10 @@
     var gx = x / TERR.cell - 0.5, gy = y / TERR.cell - 0.5, W = TERR.w, Hh = TERR.h;
     if (gx < 0 || gy < 0 || gx > W - 1 || gy > Hh - 1) return 0;
     var x0 = Math.min(W - 2, Math.floor(gx)), y0 = Math.min(Hh - 2, Math.floor(gy)), tx = gx - x0, ty = gy - y0, i = y0 * W + x0, z = TERR.z;
-    return ((z[i] * (1 - tx) + z[i + 1] * tx) * (1 - ty) + (z[i + W] * (1 - tx) + z[i + W + 1] * tx) * ty) / 286 * TERR_EX;
+    // the same two triangles as the 3D map's mesh (a d b / b d e), so lines, walls and lights sit exactly on its surface
+    var a = z[i], b = z[i + 1], d = z[i + W], e = z[i + W + 1];
+    var h = tx + ty <= 1 ? a + (b - a) * tx + (d - a) * ty : e + (d - e) * (1 - tx) + (b - e) * (1 - ty);
+    return h / 286 * TERR_EX;
   }
   function P(x, y) {   // map frame → screen [x, y, depth scale]
     if (!LIE) return [L.ox + x * L.k, L.oy + y * L.k, 1];
@@ -1528,7 +1540,7 @@
       gTr.stroke(BATCH[key]);
     });
     gTr.globalAlpha = 1; gTr.globalCompositeOperation = 'source-over';
-    if (HOVER_TC && LF_TOWNPOLY[HOVER_TC]) {   // the hovered township, outlined (township layer)
+    if (HOVER_TC && LF_TOWNPOLY[HOVER_TC] && !(LIE && M3)) {   // the hovered township, outlined (township layer; the 3D map draws it in its scene)
       gTr.beginPath();
       LF_TOWNPOLY[HOVER_TC].forEach(function (r) { var first = true; for (var i = 0; i < r.length; i += 2) { var q = P(r[i], r[i + 1]); if (q[2] <= 0) { first = true; continue; } if (first) { gTr.moveTo(q[0], q[1]); first = false; } else gTr.lineTo(q[0], q[1]); } gTr.closePath(); });
       gTr.strokeStyle = '#ffffff'; gTr.lineWidth = 1.6; gTr.globalAlpha = 0.9; gTr.stroke(); gTr.globalAlpha = 1;
@@ -1587,7 +1599,7 @@
     var hc = s ? s.cc : countyAtFrame(fr);
     // 3D too (user 2026-11-14: 「應該可以跟鄉鎮市區層互動」): hovering a county outlines it on the floor; a click opens its
     // township layer (seatClick), where hovering a township shows its numbers, as in the flat view
-    if (LIE) { if (hc !== HOVER_CC) { setHover(hc); drawPillars(); } root.style.cursor = hc ? 'pointer' : 'grab'; return; }
+    if (LIE) { if (hc !== HOVER_CC || (M3 && M3S && M3S.lkey && M3S.lkey.split('|')[2] !== (HOVER_TC || ''))) { setHover(hc); drawPillars(); } root.style.cursor = hc ? 'pointer' : 'grab'; return; }
     setHover(hc);
   });
   root.addEventListener('pointerleave', function () { setHover(null); setTownHover(null); });
@@ -2288,7 +2300,7 @@
     // the black wall: in the 3D map it is part of the Three.js scene (depth-tested); drawn on this 2D canvas over the land it
     // blacked out the mountains from low angles (user 2026-11-14: 「地形在平躺時山體是0」「可能半圓形黑牆擋了」). Pillars: drawn
     // first, the floor over it (seen from the south the wall is always behind the island)
-    if (LIE && M3) { terrLoad(); m3Init(); M3DIRTY = true; drawCoast(); drawCountyLines(); return; }   // 3D map: Three.js draws land + lights + wall (see M3)
+    if (LIE && M3) { terrLoad(); m3Init(); if (M3S && M3S.land && M3S.ff !== FILTER) m3Filter(FILTER); if (M3S && M3S.land) m3Lines(); M3DIRTY = true; return; }   // lines: in the scene (m3Lines)   // 3D map: Three.js draws land + lights + wall (see M3)
     if (LIE) { terrLoad(); drawWall(gPil); floorPaint(gPil); drawCoast(); drawCountyLines(); }
     if (!LIE || !PIL_SNAP) return;
     var now = performance.now(), groups = {}, info = {};
@@ -2793,7 +2805,7 @@
   var M3S = null, M3DIRTY = true, M3_DIM = 0.15, M3_LIFT = 0.5;
   function m3Show() { var on = LIE && M3, cv3d = document.getElementById('cv-3d'); cv3d.style.display = on ? '' : 'none'; if (on) M3DIRTY = true; }
   function m3Init() {
-    if (M3S || !TERR || !RELIEF) return;
+    if (M3S || !TERR || !RELIEF || !LHI) return;
     M3S = { loading: true };
     import('https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js').then(function (THREE) {
       var R = new THREE.WebGLRenderer({ canvas: document.getElementById('cv-3d'), antialias: true });
@@ -2817,10 +2829,10 @@
       // the height grid's own land edge is a staircase) from the land's height down to M3_BASE, so the island reads as a solid
       // relief block instead of a thin sheet; lighter at the top edge, dark at the foot. 金門／馬祖／澎湖 get the same slab
       var wp = [], wc = [], M3_BASE = -18, top = 0.11, bot = 0.015;
-      LF_COAST.forEach(function (r) {
+      hiCoast().forEach(function (r) {
         var pts = [];
         for (var i5 = 0; i5 + 1 < r.length; i5 += 2) {
-          var ax = r[i5], ay = r[i5 + 1], bx = r[(i5 + 2) % r.length], by = r[(i5 + 3) % r.length], n5 = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 2));
+          var ax = r[i5], ay = r[i5 + 1], bx = r[(i5 + 2) % r.length], by = r[(i5 + 3) % r.length], n5 = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 1));
           for (var k5 = 0; k5 < n5; k5++) { var fx5 = ax + (bx - ax) * k5 / n5, fy5 = ay + (by - ay) * k5 / n5; pts.push([fx5 - ICX, Math.max(0, FH(fx5, fy5)), fy5 - ICY]); }
         }
         for (var m5 = 0; m5 < pts.length; m5++) {
@@ -2833,14 +2845,14 @@
       g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
       g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
       var tex = new THREE.Texture(RELIEF); tex.needsUpdate = true; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-      scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex })));
+      var landMat = new THREE.MeshBasicMaterial({ map: tex }), land = new THREE.Mesh(g, landMat); scene.add(land);
       // the hemicycle's black wall (drawWall's quad), in the scene so the land in front of it stays visible
       var xw = RH + WALL_PAD, yt = WALL_Y0 + RH + WALL_PAD;
       var wq = new THREE.Mesh(new THREE.PlaneGeometry(2 * xw, yt), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide }));
       wq.position.set(0, yt / 2, -(WALL_Z + 2)); scene.add(wq);
       var wg = new THREE.BufferGeometry();
       wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); wg.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
-      scene.add(new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+      var wallMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }), coastWall = new THREE.Mesh(wg, wallMat); scene.add(coastWall);
       // lights: the 64-people tier (LIGHTS[j], its township index from LF_LIGHTS[j].t)
       var tj = LF_LIGHTS.findIndex(function (t) { return t.P === 64; }); if (tj < 0) tj = LF_LIGHTS.length - 1;
       var L64 = LIGHTS[tj], N = L64.n, tb = atob(LF_LIGHTS[tj].t);
@@ -2860,10 +2872,101 @@
         x.fillStyle = gr; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(cv); })();
       var pts = new THREE.Points(lg, new THREE.PointsMaterial({ size: 1.6, map: spr, vertexColors: true, transparent: true, alphaTest: 0.3, depthWrite: false, sizeAttenuation: true }));
       pts.frustumCulled = false; scene.add(pts);
-      M3S = { THREE: THREE, R: R, scene: scene, cam: cam, lg: lg, lp: lp, lc: lc, ti: ti, rL: rL, rC: rC, ly: ly, N: N, sig: {} };
+      M3S = { THREE: THREE, R: R, scene: scene, cam: cam, lg: lg, lp: lp, lc: lc, ti: ti, rL: rL, rC: rC, ly: ly, N: N, sig: {},
+        land: land, coastWall: coastWall, landMat: landMat, wallMat: wallMat, geo: g, ff: undefined };
       if (PIL_FEED && PIL_SNAP) m3Paint(PIL_FEED, PIL_SNAP);
       M3DIRTY = true;
     }).catch(function (e) { console.warn('3D map: Three.js failed to load', e); M3S = null; });
+  }
+  // the township layer in the 3D map (user 2026-11-14: 「地形跟鄉鎮市區層邊界應該還是實心」): a picked county stands alone as a
+  // solid block — only its own land (height cells whose centre is inside the county's rings, CC_HOLED: 嘉義市 / 臺北市 cut out
+  // of 嘉義縣 / 新北市) and a wall down to the base along its border; the rest of the island is hidden. Built on the pick
+  // (the county's bounding box first, then the point-in-rings test), dropped again on 全部縣市
+  // the land is cut exactly at the coast (or the picked county's border) by an alpha mask in the texture's own frame — the
+  // height cells along the edge reach half a cell past it, and at steep coasts (柴山 / 鼓山) that overhang stuck out past
+  // the outline and the wall (user 2026-11-14: 「鼓山還是被台灣的外框穿透」)
+  function m3Mask(rings) {
+    var S = M3S, THREE = S.THREE, w = 2048, h = Math.round(w * LF_FRAME.h / LF_FRAME.w), cv = document.createElement('canvas');
+    cv.width = w; cv.height = h; var g = cv.getContext('2d'), k = w / LF_FRAME.w;
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.beginPath();
+    rings.forEach(function (r) { for (var i = 0; i < r.length; i += 2) { if (i) g.lineTo(r[i] * k, r[i + 1] * k); else g.moveTo(r[i] * k, r[i + 1] * k); } g.closePath(); });
+    g.fill('evenodd');
+    if (S.landMat.alphaMap) S.landMat.alphaMap.dispose();
+    S.landMat.alphaMap = new THREE.CanvasTexture(cv); S.landMat.alphaTest = 0.5; S.landMat.needsUpdate = true;
+  }
+  function m3Filter(cc) {
+    var S = M3S, THREE = S.THREE; S.ff = cc;
+    m3Mask(cc && CC_HOLED[cc] ? hiCounty(cc) : hiCoast());
+    if (S.fmesh) { S.scene.remove(S.fmesh); S.fmesh.geometry.dispose(); S.fmesh = null; }
+    if (S.fwall) { S.scene.remove(S.fwall); S.fwall.geometry.dispose(); S.fwall = null; }
+    var rings = cc && CC_HOLED[cc] ? hiCounty(cc) : null;
+    S.land.visible = S.coastWall.visible = !rings;
+    if (!rings) { M3DIRTY = true; return; }
+    var W = TERR.w, Hh = TERR.h, c = TERR.cell, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    rings.forEach(function (r) { for (var i = 0; i < r.length; i += 2) { x0 = Math.min(x0, r[i]); x1 = Math.max(x1, r[i]); y0 = Math.min(y0, r[i + 1]); y1 = Math.max(y1, r[i + 1]); } });
+    var i0 = Math.max(0, Math.floor(x0 / c) - 1), i1 = Math.min(W - 2, Math.ceil(x1 / c) + 1), j0 = Math.max(0, Math.floor(y0 / c) - 1), j1 = Math.min(Hh - 2, Math.ceil(y1 / c) + 1);
+    var idx = [];
+    for (var j = j0; j <= j1; j++) for (var i = i0; i <= i1; i++) {
+      var a = j * W + i, b = a + 1, d = a + W, e = d + 1;   // every land quad in the box: the alpha mask cuts it at the border
+      if (TERR.z[a] || TERR.z[b] || TERR.z[d] || TERR.z[e]) idx.push(a, d, b, b, d, e);
+    }
+    var fg = new THREE.BufferGeometry();
+    fg.setAttribute('position', S.geo.getAttribute('position')); fg.setAttribute('uv', S.geo.getAttribute('uv'));
+    fg.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
+    S.fmesh = new THREE.Mesh(fg, S.landMat); S.scene.add(S.fmesh);
+    var wp = [], wc = [], BASE = -18, top = 0.13, bot = 0.015;
+    rings.forEach(function (r) {
+      var pts = [];
+      for (var i2 = 0; i2 + 1 < r.length; i2 += 2) {
+        var ax = r[i2], ay = r[i2 + 1], bx = r[(i2 + 2) % r.length], by = r[(i2 + 3) % r.length], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 1.5));
+        for (var k = 0; k < n; k++) { var fx = ax + (bx - ax) * k / n, fy = ay + (by - ay) * k / n; pts.push([fx - ICX, Math.max(0, FH(fx, fy)), fy - ICY]); }
+      }
+      for (var m = 0; m < pts.length; m++) {
+        var A = pts[m], B = pts[(m + 1) % pts.length];
+        wp.push(A[0], A[1], A[2], B[0], B[1], B[2], A[0], BASE, A[2], B[0], B[1], B[2], B[0], BASE, B[2], A[0], BASE, A[2]);
+        wc.push(top, top, top, top, top, top, bot, bot, bot, top, top, top, bot, bot, bot, bot, bot, bot);
+      }
+    });
+    var wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); wg.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+    S.fwall = new THREE.Mesh(wg, S.wallMat); S.scene.add(S.fwall);
+    M3DIRTY = true;
+  }
+  // county / township / coast lines in the 3D map: in the Three.js scene, draped on the terrain (subdivided every ~1.5 units,
+  // lifted a little), so the mountains hide them — drawn on the 2D canvas they showed through the central range (user
+  // 2026-11-14: 「從遠方看可以穿透中央山脈看到台北的邊線」). Same colours as drawCoast / drawCountyLines and the hover outline;
+  // rebuilt when the picked or hovered county changes
+  function m3Lines() {
+    var S = M3S, THREE = S.THREE, key = (FILTER || '') + '|' + (HOVER_CC || '') + '|' + (HOVER_TC || '');
+    if (S.lkey === key) return; S.lkey = key;
+    (S.lines || []).forEach(function (o) { S.scene.remove(o); o.geometry.dispose(); o.material.dispose(); });
+    S.lines = [];
+    var add = function (rings, col, op) {
+      var pos = [];
+      rings.forEach(function (r) {
+        for (var i = 0; i + 3 < r.length; i += 2) {
+          var ax = r[i], ay = r[i + 1], bx = r[i + 2], by = r[i + 3], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 1));
+          for (var k = 0; k < n; k++) {
+            var x1 = ax + (bx - ax) * k / n, y1 = ay + (by - ay) * k / n, x2 = ax + (bx - ax) * (k + 1) / n, y2 = ay + (by - ay) * (k + 1) / n;
+            pos.push(x1 - ICX, Math.max(0, FH(x1, y1)) + 0.6, y1 - ICY, x2 - ICX, Math.max(0, FH(x2, y2)) + 0.6, y2 - ICY);
+          }
+        }
+      });
+      var g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      var o = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false }));
+      S.scene.add(o); S.lines.push(o);
+    };
+    var close = function (rs) { return (rs || []).map(function (r) { return r.concat([r[0], r[1]]); }); };   // hi rings are open
+    if (!FILTER) {
+      add(close(hiCoast()), 0x9fb3d1, 0.45);
+      add(close([].concat.apply([], Object.keys(LF_COUNTY).map(function (cc) { return hiCounty(cc) || []; }))), 0x8a93a2, 0.55);
+    } else {
+      add(close([].concat.apply([], LF_TOWN_ORDER.filter(function (tc) { return LF_TOWNS[tc] && LF_TOWNS[tc][0] === FILTER; }).map(function (tc) { return hiTown(tc) || []; }))), 0xa9b3c4, 0.5);
+      if (CC_HOLED[FILTER]) add(close(hiCounty(FILTER)), 0xffffff, 0.9);
+    }
+    if (HOVER_CC && HOVER_CC !== FILTER && CC_HOLED[HOVER_CC]) add(close(hiCounty(HOVER_CC)), 0xffffff, 0.95);
+    if (HOVER_TC && LF_TOWNPOLY[HOVER_TC]) add(close(hiTown(HOVER_TC)), 0xffffff, 0.95);   // the hovered township (township layer)
+    M3DIRTY = true;
   }
   function m3Paint(f, snap) {   // lights from the current snapshot: which are on, and their colours
     if (!M3S || !M3S.lg) return;
