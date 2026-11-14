@@ -132,9 +132,9 @@
   .cb .det select { font: inherit; font-size: 11px; background: #11151f; color: #e7eaf0; border: 1px solid rgba(255,255,255,.2); border-radius: 4px; margin: 2px 0 4px; }
   .cb .det .k { display: grid; grid-template-columns: 16px 1fr 62px; gap: 4px; }
   .cb .det .gap { color: #f5c518; }
-  .col:hover .cb:not(.pin-on):not(.toss-on) { animation: cbGlow .9s forwards; }
-  .col:hover .cb:not(.pin-on):not(.toss-on) .cn { animation: cnGlow .9s forwards; }
-  .col:hover .cb:not(.pin-on):not(.toss-on) .bar { animation: barGlow .9s forwards; }
+  .col:hover .cb:not(.pin-on):not(.toss-on):not(.hov-on) { animation: cbGlow .9s forwards; }
+  .col:hover .cb:not(.pin-on):not(.toss-on):not(.hov-on) .cn { animation: cnGlow .9s forwards; }
+  .col:hover .cb:not(.pin-on):not(.toss-on):not(.hov-on) .bar { animation: barGlow .9s forwards; }
   /* 關注 (user 2026-11-07: 「加入想關注縣市的…開關的按鈕讓他常駐，不會滑鼠移開直接隱藏」, kept in place): ☆ / ★ in the box's
      header; a followed box stays lit where it is (it still changes side with the lead); remembered (localStorage lf_pins) */
   .cb .pin { cursor: pointer; font-weight: 400; margin-left: auto; margin-right: 6px; }
@@ -143,11 +143,18 @@
   .cb.pin-on .bar { background: var(--cc); opacity: .75; }
   .cb.pin-on .bt::after { opacity: 1; }
   .cb.pin-on .pin { color: #f5c518; }
+  /* the county under the mouse on the map lights its box at once, as a followed one (user 2026-11-14: 「平面地圖的滑鼠經過有選取
+     縣市時應該也要及時把該縣市的小卡點亮」) */
+  .cb.hov-on { color: #e7eaf0; border-color: #ffffff; background: rgba(10,13,22,.88); }
+  .cb.hov-on .cn { color: var(--cc); }
+  .cb.hov-on .bar { background: var(--cc); opacity: .75; }
+  .cb.hov-on .bt::after { opacity: 1; }
+  .cb.hov-on .ct { color: var(--tc); }
   /* resting boxes sit under a grey veil — contents faintly readable — so the cards are hinted in the dark; they light up
      as before when the column is hovered or the box is followed (user 2026-11-08: 「預設的縣市長小卡是在黑暗裡有若隱若現的匡」
      →「小卡加一層灰色遮罩」→「只要灰色遮罩、不要淡框」) */
-  #col-l:not(:hover) .cb:not(.pin-on):not(.toss-on), #col-r:not(:hover) .cb:not(.pin-on):not(.toss-on) { color: rgba(160,166,180,.22); background: rgba(120,126,140,.10); }
-  #col-l:not(:hover) .cb:not(.pin-on):not(.toss-on) .bar, #col-r:not(:hover) .cb:not(.pin-on):not(.toss-on) .bar { background: rgba(160,166,180,.25); }
+  #col-l:not(:hover) .cb:not(.pin-on):not(.toss-on):not(.hov-on), #col-r:not(:hover) .cb:not(.pin-on):not(.toss-on):not(.hov-on) { color: rgba(160,166,180,.22); background: rgba(120,126,140,.10); }
+  #col-l:not(:hover) .cb:not(.pin-on):not(.toss-on):not(.hov-on) .bar, #col-r:not(:hover) .cb:not(.pin-on):not(.toss-on):not(.hov-on) .bar { background: rgba(160,166,180,.25); }
   /* a Toss-up county's box lights up by itself, with the map's yellow outline (user 2026-11-08: 「toss up 的縣市小卡也跟著地圖
      自動顯示沒有灰色遮罩」); back under the veil once the race is Lean / Likely / Certain */
   .cb.toss-on { color: #e7eaf0; border-color: #f5c518; background: rgba(10,13,22,.88); }
@@ -1584,7 +1591,10 @@
     tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
   }
   function setTownHover(tc, x, y) { HOVER_TC = tc; TIP_XY = tc ? [x, y] : null; townTip(); }
-  function setHover(cc) { if (cc === HOVER_CC) return; HOVER_CC = cc; LT_DIRTY = true; root.style.cursor = LIE ? 'grab' : (cc ? 'pointer' : ''); }
+  function setHover(cc) { if (cc === HOVER_CC) return;
+    if (HOVER_CC && CROWS[HOVER_CC]) CROWS[HOVER_CC].classList.remove('hov-on');
+    if (cc && CROWS[cc]) CROWS[cc].classList.add('hov-on');   // its county box lit (see .cb.hov-on)
+    HOVER_CC = cc; LT_DIRTY = true; root.style.cursor = LIE ? 'grab' : (cc ? 'pointer' : ''); }
   root.addEventListener('pointermove', function (e) {
     if (STRIP && STRIP.rfY && !FILTER) {   // the referendum row's name: its full title as the hover tip
       var r0 = root.getBoundingClientRect(), hx = e.clientX - r0.left, hy = e.clientY - r0.top, RFt = typeof REFERENDUM !== 'undefined' ? REFERENDUM[MODE === 'r2022' ? '2022' : '2026'] : null;
@@ -3626,6 +3636,7 @@
     if (QS.cty && LF_COUNTY[QS.cty]) pickCounty(QS.cty);
     if (QS.play === '1' && m) PLAY = true;   // testing: start playing from the &at= time
     var cm = /^(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)(?:,(-?[\d.]+),(-?[\d.]+),(-?[\d.]+))?$/.exec(QS.cam || '');   // testing: 3D camera az (rad), height, distance [, target x, z, height]
+    if (QS.hov && LF_COUNTY[QS.hov]) setTimeout(function () { setHover(QS.hov); }, 50);   // testing: hover a county
     if (cm && LIE && LCAM) { LCAM.az = +cm[1]; LCAM.y = +cm[2]; LCAM.d = +cm[3]; if (cm[4] != null) { LCAM.fx = +cm[4]; LCAM.fz = +cm[5]; LCAM.ty = +cm[6]; } LMOVED = true; applyCam(); camChanged(); drawPillars(); }
     renderTabs();
   }
