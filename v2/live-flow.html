@@ -609,7 +609,9 @@
     // 地圖角度應該跟平面一樣只是是躺的」; replaces the 11-07 dragged angle az 0.10, kept in the comment above)
     // fitted to the user's own dragged view (2026-11-14, Screenshot 1.27.01 PM: 「我想預設的角度是這樣」) — five landmarks (the
     // hemicycle's two ends and apex, 富貴角, 鵝鑾鼻), least squares, residual ≈ 1 px
-    LCAM0 = { az: 1.464, y: 2268, d: 2561 * Math.max(1, 1000 / SW), fx: 24, fz: 278, ty: 236 };
+    // then squared up (user 2026-11-14: 「應該半圓形圖跟台灣地圖是平行的，我的角度是有點偏」): az 1.464 → π/2 and target x 24 → 0,
+    // so the camera looks straight at the hemicycle wall down the island's north–south axis; height / distance kept
+    LCAM0 = { az: Math.PI / 2, y: 2268, d: 2561 * Math.max(1, 1000 / SW), fx: 0, fz: 278, ty: 236 };
     LCAM = Object.assign({}, LCAM0); applyCam();
     if (FILTER) flyToCounty(FILTER, true);
   }
@@ -2847,6 +2849,10 @@
   // it back), its button and the colour-by button are hidden in 3D
   var M3 = true;
   var M3S = null, M3DIRTY = true, M3_DIM = 0.15, M3_LIFT = 0.5;
+  // unlit lights are parked at M3_PARK, past the camera's far plane (30000) so they are clipped. They used to sit at y = −9999,
+  // hidden only by the island above them; with a county picked the rest of the land is hidden and they showed through as a
+  // small whole Taiwan under it (user 2026-11-14, Screenshot 4.52.00 PM)
+  var M3_PARK = -1e6;
   function m3Show() { var on = LIE && M3, cv3d = document.getElementById('cv-3d'); cv3d.style.display = on ? '' : 'none'; if (on) M3DIRTY = true; }
   function m3Init() {
     if (M3S || !TERR || !RELIEF || !LHI) return;
@@ -2906,7 +2912,7 @@
         var fx2 = L64.u[2 * q] / 65535 * LF_FRAME.w, fy2 = L64.u[2 * q + 1] / 65535 * LF_FRAME.h;
         ti[q] = tb.charCodeAt(2 * q) | (tb.charCodeAt(2 * q + 1) << 8);
         ly[q] = FH(fx2, fy2) + M3_LIFT;
-        lp[3 * q] = fx2 - ICX; lp[3 * q + 1] = -9999; lp[3 * q + 2] = fy2 - ICY;   // unlit: parked below the floor
+        lp[3 * q] = fx2 - ICX; lp[3 * q + 1] = M3_PARK; lp[3 * q + 2] = fy2 - ICY;   // unlit: parked past the far plane (M3_PARK)
         rL[q] = rnd(); rC[q] = rnd();
       }
       var lg = new THREE.BufferGeometry();
@@ -3033,7 +3039,7 @@
     if (!changed && S.painted) return;
     for (var q = 0; q < S.N; q++) {
       var o = byI[S.ti[q]];
-      if (!o || S.rL[q] >= o.prog) { S.lp[3 * q + 1] = -9999; continue; }
+      if (!o || S.rL[q] >= o.prog) { S.lp[3 * q + 1] = M3_PARK; continue; }
       var r2 = S.rC[q] * o.segs[o.segs.length - 1].u, sg = o.segs[0];
       for (var m = 0; m < o.segs.length; m++) { if (r2 < o.segs[m].u) { sg = o.segs[m]; break; } sg = o.segs[m]; }
       S.lp[3 * q + 1] = S.ly[q]; S.lc[3 * q] = sg.c[0]; S.lc[3 * q + 1] = sg.c[1]; S.lc[3 * q + 2] = sg.c[2];
