@@ -136,8 +136,14 @@
     others.slice(1).forEach(function (k) { pairs.push([null, [groups[k].x, k]]); });
     var counts = '<div style="margin-top:8px" title="' + T('灰色數字＝領先者在模擬中的勝率（%）', 'grey figures = the leader’s chance of winning (%)') + '">' + pairs.map(line).join('') + '</div>';
 
-    // Toss-up: its counties listed, always open
-    var toss = groups['Toss-up'] ? sec(T('Toss-up 縣市（% 為領先者勝率）', 'Toss-up counties (% = leader’s chance)')) + itemsOf(groups['Toss-up'], 0) : '';
+    // 激戰縣市 = Toss-up + Tilt (leader under 65 %), always open, closest first, each with its rating chip
+    // (user 2026-11-14: 「總之tilt and toss up 都是激戰區？」→ list both here; it listed Toss-up alone before)
+    var battle = R.filter(function (x) { return !x.r || x.r[1] === 'Tilt'; }).sort(function (a, b) { return a.pw - b.pw; });
+    var toss = battle.length ? sec(T('激戰縣市：Toss-up＋Tilt（% 為領先者勝率）', 'Battlegrounds: Toss-up + Tilt (% = leader’s chance)')) + battle.map(function (x) {
+      return '<div class="v2-r26-row" data-cc="' + x.cc + '" style="display:flex;align-items:center;gap:6px;padding:2px 4px;border-radius:4px;font-size:11px;cursor:default">' + chip(win, x) +
+        '<span style="flex:1;min-width:0;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + x.cn + ' <span style="color:' + partyClr(win, x.p) + '">' + x.who + '</span></span>' +
+        '<span style="flex-shrink:0;text-align:right;font-weight:700;color:#e8eaed;font-variant-numeric:tabular-nums">' + (x.pw * 100).toFixed(0) + '%</span></div>';
+    }).join('') : '';
 
     return '<div id="v2-r26">' + '<div style="font-size:17px;font-weight:700;color:rgba(255,255,255,.95);margin-bottom:4px">' + T('縣市長預測', 'Mayoral forecast') + '</div>' + seats +
       '<div style="margin-top:10px"></div>' + head + counts +   // no heading (user 2026-10-29: 「美式評級 的字刪掉」)
