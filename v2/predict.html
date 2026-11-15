@@ -32,6 +32,8 @@
 <script src="navbar.js?v=20261101b"></script>
 <script src="disclaimer.js?v=20261031d"></script>
 <script src="south26.js?v=20261101"></script>
+<script src="anchor26_data.js?v=20261114a"></script>
+<script src="anchor26.js?v=20261114a"></script>
 <script src="v2-shell.js?v=20261101tk"></script>
 <script>
   // 2026 mayoral forecast only. No 政黨基本盤 comparison here either (user,
@@ -45,7 +47,7 @@
   V2Shell.boot({
     // &v=: the engine page carries the township forecast (MAYOR_2026_PREDICT_TC) inline, and browsers kept serving a
     // cached copy after a poll update (2026-10-29: transferSize 0 even on a hard reload) — bump it with every data update
-    engine: '../council.html?goto=2026predict&v=20261112b',
+    engine: '../council.html?goto=2026predict&v=20261114a',
     needs: ['setMayor2026PredictMode'],
     title: { zh: '2026 縣市長預測', en: '2026 Mayoral Forecast' },
     // #county-council-panel: the 縣市議會席次 card — empty here (mayors only); the engine hides it only on the first
@@ -99,6 +101,8 @@
       if (window.V2Rate26) window.V2Rate26.attach(win);
       // 高雄 / 台南 / 屏東 panels: the 「南部修正」 scenario as dashed ticks, for comparison only (south26.js; user 2026-10-31)
       if (window.V2South26) window.V2South26.attach(win);
+      // 台北 / 新竹市 panels: the 「不套 2022 錨點」 scenario as dashed ticks, for comparison only (anchor26.js; user 2026-11-14)
+      if (window.V2Anchor26) window.V2Anchor26.attach(win);
       // poll-trend chart: candidates in their forecast party's colour (pollclr26.js; 張啓楷 民眾黨, 高虹安 無黨)
       if (window.V2PollClr26) window.V2PollClr26.attach(win);
       // county white lines / trust dashes above the coloured blocks + the overlay hover outline: in noglow.js (shared
