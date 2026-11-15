@@ -21,19 +21,18 @@ Everything is bilingual (中文 / English).
 
 - **Front end:** vanilla JavaScript (no framework, no build step), **D3.js v7** + **TopoJSON v3** for SVG maps, **Canvas 2D** for the election-night animation, population lights and 3D projection (hand-written camera and projection, no WebGL library).
 - **Data pipeline:** Python — CEC (Central Election Commission) raw result files, household-registration population, WorldPop rasters; `shapely`, `numpy`, `Pillow`, `pypinyin`. Builders write plain `const X = {...}` JS data modules the pages load with `<script src>`.
-- **Election-night scraper:** `poll_live2026.py` — polite polling of public news-site result feeds, every read validated before it is written (no decreasing votes, no changed candidate lists).
+- **Election-night scraper:** polite polling of public news-site result feeds, every read validated before it is written (no decreasing votes, no changed candidate lists).
 - **Testing:** Python tests that rebuild data and check it against the CEC totals; JavaScriptCore syntax checks; every UI change verified in a real browser.
-- **Hosting:** GitHub Pages; `publish.sh` publishes an allow-listed subset of the working tree.
+- **Hosting:** GitHub Pages.
 
 ## Engineering highlights
 
-- **Migrating a 360k-line legacy app without rewriting it.** The V2 History page runs the original V1 map engines unmodified inside iframes and drives them through their own entry points — see [CASE_STUDY_v2.md](CASE_STUDY_v2.md).
+- **Migrating a 360k-line legacy app without rewriting it.** The V2 History page runs the original V1 map engines unmodified inside iframes and drives them through their own entry points.
 - **476,000 population lights at interactive frame rates.** A full redraw costs ~0.9 s, so each county keeps its own cropped canvas: new lights are drawn incrementally, a leader change rebuilds one county a few milliseconds per frame and cross-fades it in; zooming CSS-scales the old bitmap during the animation and redraws only the picked county.
 - **Election-night animation:** 400 batched comet strokes per frame (one `Path2D` per colour × width) after per-comet gradients crashed Chrome at ~2,000 comets; arcs stay inside the hemicycle by construction (quadratic Bézier control point in the convex hull).
 - **Screen ↔ map in a hand-rolled 3D view:** hit-testing counties and townships on the projected floor with Newton iterations on the projection.
-- **Backtested decisions, not guesses:** the election-night models were tested at polling-station level on four past elections before going on the page — details in [docs/MODEL_METHODOLOGY.md](docs/MODEL_METHODOLOGY.md).
+- **Backtested decisions, not guesses:** the election-night models were tested at polling-station level on four past elections before going on the page.
 
-More in [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
 ## Architecture
 
@@ -44,10 +43,9 @@ CEC raw files · population · WorldPop ──► Python builders ──► v2/d
                                                                    │
                      v2/profile.html · v2/predict.html · v2/live-flow.html  (D3 SVG / Canvas)
                                                                    ▲
-       news-site result feeds ──► poll_live2026.py ──► data_live2026.js (validated, every minute on the night)
+       news-site result feeds ──► poller (validated) ──► data_live2026.js (validated, every minute on the night)
 ```
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Model & data methodology
 
@@ -55,34 +53,13 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Election night:** expected final turnout per county from each township's prior and this year's observed turnout (the naive "counted ÷ share of stations" under-estimated by up to ~50% early in simulation), and race calls from township swing against the previous election, calibrated leave-one-election-out.
 - **Sources:** CEC election results; 內政部戶政司 village population; WorldPop R2024B (CC BY 4.0); published polls.
 
-Full write-up: [docs/MODEL_METHODOLOGY.md](docs/MODEL_METHODOLOGY.md) and the site's methodology page.
+Full write-up: the site's methodology page (`v2/methodology.html`).
 
-## Development & testing
+## Source code & license
 
-```bash
-python3 -m http.server 8080          # then open http://localhost:8080/v2/index.html
-python3 tests/test_turnout_prior.py  # e.g. one of the data tests in tests/
-```
+This repository holds the **built site only** — the pages and the data files they load. The Python data pipeline, the
+forecasting model, the election-night poller and the test suite are kept in a **private repository**, available for code
+review on request.
 
-No `npm install`, no compilation — D3 and TopoJSON load from a CDN. Data builders live at the repository root (`build_*.py`, `regen3.py`) and in `prototype_popdots/`.
-
-## Documentation
-
-| File | Contents |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Pages, data flow, modules |
-| [docs/ENGINEERING.md](docs/ENGINEERING.md) | Performance and interaction work, with measurements |
-| [docs/MODEL_METHODOLOGY.md](docs/MODEL_METHODOLOGY.md) | Forecast and election-night models, backtests, assumptions |
-| [CASE_STUDY_v2.md](CASE_STUDY_v2.md) | Engineering case studies from the V2 migration |
-| [docs/V1_FUNCTION_REFERENCE.md](docs/V1_FUNCTION_REFERENCE.md) | V1 map engine: DOM layout, global state, full function table |
-| [README_council.md](README_council.md) | V1 mayor / council engine notes |
-| [CHANGELOG.md](CHANGELOG.md) · [CHANGELOG_council.md](CHANGELOG_council.md) | Version history |
-
-## Roadmap
-
-- Election night, 28 Nov 2026: swap in the CEC's 2026 electorate before the count; keep the first real minute-by-minute count timeline to recalibrate the night models.
-- A global elections map (V3) — in development, not yet published.
-
-## License
-
-See [LICENSE](LICENSE).
+© 2026 BallotPhantom. **All rights reserved** — see [LICENSE](LICENSE). Public records used (CEC results, household
+population, WorldPop, published polls) remain under their owners' terms.

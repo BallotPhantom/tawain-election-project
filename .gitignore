@@ -67,53 +67,25 @@ emblems/.DS_Store
 !v2/**
 
 # Documentation for council.html and test.html
-!README_council.md
-!CHANGELOG_council.md
 !README.md
-!CHANGELOG.md
 
 # Documentation for v2/history.html (Unified History migration)
-!CHANGELOG_v2.md
-!CASE_STUDY_v2.md
 
 # Python build/analysis tooling — the data pipeline behind the site (poll
 # aggregation model, CEC raw-data parsers, live-tracking scraper). Not loaded
 # by the site itself, but documented in CLAUDE.md as real, current parts of
 # the project, unlike the many undocumented one-off/scratch scripts sitting
 # alongside them in this directory (deliberately left untracked).
-!regen3.py
-!loadjs.py
-!build_mayor_tc.py
-!build_mayor_turnout.py
-!build_council_turnout.py
-!build_age_bracket.py
-!build_legis_elig.py
-!build_pres_turnout.py
-!rebuild_ed_gj_2016.py
-!poll_live2026.py
-!us_gov_backtest.py
-!pollster_method.json
-!county_age_demo.json
-!full_roster.json
-!base_model_camp_pct.json
 
 # v2 (profile + history) — tracked on the local v2-dev branch only (2026-10-22);
 # main is what GitHub Pages publishes, so v2 joins main only once it has a home page.
 v2/*.bak-*
 v2/**/.DS_Store
 # profile builders + their tests and inputs
-!build_profile_*.py
-!tests/
-!tests/*.py
-!tests/*.js
-!data_cip/
-!data_cip/*.json
 # per-county village topology, loaded by v2/profile.html (data_vd/<cc>.js)
 !data_vd/
 !data_vd/*.js
 # population-dot builders (prototype_popdots/*.py → v2/popdots_*)
-!prototype_popdots/
-!prototype_popdots/*.py
 
 # Kept on the author's computer only — not published (2026-10-31): the 2027 by-election and 2028 forecasts, the 2026
 # rally map, the PVI page, the 政治家族 drafts (awaiting review), and the dev changelog that describes them. Their links
@@ -136,5 +108,22 @@ v2/live-panel.js
 v2/live-seats2026.js
 v2/live-councilhemi.js
 v2/live-councilind.js
-!docs/
-!docs/*.md
+
+
+# Private since 2026-11-15 (portfolio split): the data pipeline, forecasting model, election-night poller, tests and dev
+# docs live in a private repository; this public repo holds the built site only.
+*.py
+tests/
+docs/
+prototype_popdots/
+data_cip/
+CASE_STUDY_v2.md
+CHANGELOG*.md
+README_council.md
+pollster_method.json
+full_roster.json
+base_model_camp_pct.json
+county_age_demo.json
+v3/
+live_model/
+publish.sh
