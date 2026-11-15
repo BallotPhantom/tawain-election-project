@@ -1740,7 +1740,7 @@
     SEATS.forEach(function (s) {
       s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k;
       if (CMODE && s.cc !== FILTER) return;   // county mode (flat): only the picked county's seats
-      if (STRIP && !CMODE && s.ring === 'C') return;   // the strip: the council is the bar, drawn below
+      if (STRIP && !CMODE) return;   // the strip: both rows are bars (drawRingBar), not seats
       var r = CMODE ? (s.ring === 'M' ? CMODE.dr * 1.8 : CMODE.dr) : (s.sr || (s.ring === 'M' ? Math.max(3.2, L.R * 0.032) : Math.max(1.3, L.R * 0.0125))) * (s.sc || 1);
       gTop.globalAlpha = FILTER && s.cc !== FILTER && s.cc !== HOVER_CC ? 0.14 : (!FILTER && HOVER_CC && s.cc !== HOVER_CC ? 0.3 : 1);
       if (!CMODE) gTop.globalAlpha *= mayorDim();   // 公投 mode: mayors and councillors dimmed like the referendum in 縣市長 mode
@@ -1822,32 +1822,53 @@
   // the strip's council bar: seats in the hemicycle's order — 綠 block from the left (final, then leading), the not yet
   // counted grey in the middle, 藍 from the right — one run per party × state: final solid, projected 70%, leading 40%;
   // each party's count under its part (when there is room); the hovered county's seats as small white ticks
-  function drawCouncilBar() { gTop.save(); gTop.globalAlpha = mayorDim(); drawCouncilBar0(); gTop.restore(); }   // 公投 mode: dimmed (user 2026-11-12: 「議員長條要在公投模式也淡掉」)
-  function drawCouncilBar0() {
-    var S = STRIP, list = SEATS.filter(function (s) { return s.ring === 'C'; });
+  // the strip, both rows as bars (user 2026-11-14: 「台灣的開票地圖也改成一樣的設計，文字內嵌跟縣市長圓點改成一長條」): the mayors' row
+  // and the councillors' bar drawn the same way — seats in party blocks (final full colour, 推估 paler, leading faint, not
+  // counted dark), each party's final seats written inside its block in a darker shade of the same colour (the labels under
+  // the bar are gone). drawRingBar is shared with the US pages (their not-up seats striped, a notch at the half)
+  function drawCouncilBar() { gTop.save(); gTop.globalAlpha = mayorDim(); drawRingBar('C', STRIP.yC0, {}); drawRingBar('M', STRIP.yM, {}); gTop.restore(); }   // 公投 mode: dimmed (user 2026-11-12: 「議員長條要在公投模式也淡掉」)
+  function shadeOf(hex, k) {   // the same hue, k darker (0 = as is, 1 = black)
+    var h = (hex || '#888888').replace('#', ''), n = parseInt(h.length === 3 ? h.split('').map(function (c) { return c + c; }).join('') : h, 16);
+    return 'rgb(' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(function (v) { return Math.round(v * (1 - k)); }).join(',') + ')';
+  }
+  function drawRingBar(ring, yc, o) {
+    var S = STRIP, list = SEATS.filter(function (s) { return s.ring === ring; });
     list.forEach(function (s, i) { s.g = i; });
     list.sort(function (a, b) { return (seatRank(a) - seatRank(b)) || (a.g - b.g); });
-    var n = list.length, w = S.wC / n, y = S.yC0 - S.barH / 2, run = null, runs = [], tot = {};
+    var n = list.length; if (!n) return;
+    var notch = o.notch || 0, half = notch ? Math.floor(n / 2) : n + 1, w = (S.wC - notch) / n, y = yc - S.barH / 2, runs = [], run = null, fin = {};
     list.forEach(function (s, i) {
-      var st = s.st === 'final' ? 'f' : s.st === 'lead' ? (s.proj ? 'p' : 'l') : 'n', key = (st === 'n' ? '' : (s.p || 'other')) + '|' + st;
+      var st = s.hold ? 'h' : s.st === 'final' ? 'f' : s.st === 'lead' ? (s.proj ? 'p' : 'l') : 'n', key = (st === 'n' ? '' : (s.p || 'other')) + '|' + st + '|' + (i >= half ? 1 : 0);
       if (!run || run.key !== key) { run = { key: key, p: s.p || 'other', st: st, i0: i, i1: i }; runs.push(run); } else run.i1 = i;
-      if (st !== 'n') { var t = tot[run.p] || (tot[run.p] = { n: 0, i0: i, i1: i }); t.n++; t.i1 = i; }
     });
+    var xOf = function (i) { return S.xs + i * w + (i >= half ? notch : 0); };
     runs.forEach(function (r) {
+      var x0 = xOf(r.i0), ww = (r.i1 - r.i0 + 1) * w;
+      if (r.st === 'h') {   // not up this year (US): diagonal stripes in the party colour, 「未改選 N」 inside when it fits
+        gTop.globalAlpha = 0.28 * mayorDim(); gTop.fillStyle = colorOf(r.p); gTop.fillRect(x0, y, ww, S.barH);
+        gTop.save(); gTop.beginPath(); gTop.rect(x0, y, ww, S.barH); gTop.clip();
+        gTop.globalAlpha = 0.85 * mayorDim(); gTop.strokeStyle = colorOf(r.p); gTop.lineWidth = 1.6;
+        gTop.beginPath(); for (var sx = x0 - S.barH; sx < x0 + ww; sx += 5) { gTop.moveTo(sx, y + S.barH); gTop.lineTo(sx + S.barH, y); } gTop.stroke(); gTop.restore();
+        var hn = r.i1 - r.i0 + 1, ht = T('未改選 ' + hn, hn + ' not up');
+        gTop.globalAlpha = mayorDim(); gTop.font = '700 ' + Math.max(8, Math.min(10, S.barH - 3)) + 'px system-ui, sans-serif'; gTop.textAlign = 'center';
+        var tw = gTop.measureText(ht).width + 6;
+        if (ww > tw + 2) { gTop.fillStyle = 'rgba(10,12,18,.75)'; gTop.fillRect(x0 + ww / 2 - tw / 2, y + 1, tw, S.barH - 2); gTop.fillStyle = colorOf(r.p); gTop.fillText(ht, x0 + ww / 2, yc + 3.5); }
+        return;
+      }
       gTop.globalAlpha = (r.st === 'f' ? 1 : r.st === 'p' ? 0.7 : r.st === 'l' ? 0.4 : 1) * mayorDim();
       gTop.fillStyle = r.st === 'n' ? '#2e3340' : colorOf(r.p);
-      gTop.fillRect(S.xs + r.i0 * w, y, (r.i1 - r.i0 + 1) * w, S.barH);
+      gTop.fillRect(x0, y, ww, S.barH);
+      if (r.st === 'f') { var q = fin[r.p] || (fin[r.p] = { n: 0, x: x0, w: 0 }); q.n += r.i1 - r.i0 + 1; if (ww > q.w) { q.x = x0; q.w = ww; } }
     });
     gTop.globalAlpha = mayorDim();
     if (HOVER_CC) {   // where the hovered county's seats stand in the bar
       gTop.fillStyle = '#ffffff';
-      list.forEach(function (s, i) { if (s.cc === HOVER_CC) gTop.fillRect(S.xs + (i + 0.5) * w - 0.5, y - 3, 1, S.barH + 6); });
+      list.forEach(function (s, i) { if (s.cc === HOVER_CC) gTop.fillRect(xOf(i) + w / 2 - 0.5, y - 3, 1, S.barH + 6); });
     }
-    gTop.font = '600 9.5px system-ui, sans-serif'; gTop.textAlign = 'center';
-    Object.keys(tot).forEach(function (p) {
-      var t = tot[p], x0 = S.xs + t.i0 * w, x1 = S.xs + (t.i1 + 1) * w; if (x1 - x0 < 34) return;
-      gTop.fillStyle = colorOf(p);
-      gTop.fillText((PSHORT[p] ? T(PSHORT[p][0], PSHORT[p][1]) : (PN[p] ? T(PN[p][0], PN[p][1]) : '')) + ' ' + t.n, (x0 + x1) / 2, y + S.barH + 11);
+    gTop.font = '700 ' + Math.max(8, Math.min(10.5, S.barH - 2)) + 'px system-ui, sans-serif'; gTop.textAlign = 'center';
+    Object.keys(fin).forEach(function (p) {   // the final seats only, inside the party's widest final block
+      var q = fin[p], t = String(q.n); if (q.w < gTop.measureText(t).width + 6) return;
+      gTop.fillStyle = shadeOf(colorOf(p), 0.45); gTop.fillText(t, q.x + q.w / 2, yc + 3.5);
     });
   }
 
