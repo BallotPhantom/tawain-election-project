@@ -583,7 +583,7 @@
   // 2026-11-14 second pass: 「不需要有一個外匡然後大小不需要這麼大這麼接近可以往上一點」→ no rim, smaller (RH 500), further
   // from the island and higher off the floor
   // third pass (「半圓形圖再往上」): 300 → 480
-  var WALL_GAP = 220, WALL_Y0 = 480, WALL_PAD = 60;
+  var WALL_GAP = 110, WALL_Y0 = 290, WALL_PAD = 60;   // hemicycle lower, nearer the map (user 2026-11-15, after the US pages: 「這樣的修正也套用在台灣開票上」; was 220 / 480)
   var WALL_Z = (ICY - ISLF.y0) + WALL_GAP;   // floor z of the wall (north of the northern tip)
   var AXE = [1, 0, 0], AXV = [0, 1, 0];
   function ringW(a, r) {
@@ -621,7 +621,7 @@
     // hemicycle's two ends and apex, 富貴角, 鵝鑾鼻), least squares, residual ≈ 1 px
     // then squared up (user 2026-11-14: 「應該半圓形圖跟台灣地圖是平行的，我的角度是有點偏」): az 1.464 → π/2 and target x 24 → 0,
     // so the camera looks straight at the hemicycle wall down the island's north–south axis; height / distance kept
-    LCAM0 = { az: Math.PI / 2, y: 2268, d: 2561 * Math.max(1, 1000 / SW), fx: 0, fz: 278, ty: 236 };
+    LCAM0 = { az: Math.PI / 2, y: 2090, d: 2330 * Math.max(1, 1000 / SW), fx: 0, fz: 278, ty: 170 };   // 2026-11-15: a bit nearer, aimed lower with the wall (was y 2268 / d 2561 / ty 236)
     LCAM = Object.assign({}, LCAM0); applyCam();
     if (FILTER) flyToCounty(FILTER, true);
   }
@@ -659,8 +659,10 @@
     // looked at steeply (65° down) from just below the hemicycle (first tries sat among the pillars); wheel zooms in
     // pillars keep growing as the count goes on (sizing to the pillars at pick time left the camera among them later):
     // the camera sits at the highest allowed point, 0.6 × the hemicycle's height
-    var el = 65 * Math.PI / 180, y = HH * 0.6;
-    camTo({ fx: c.x, fz: c.z, ty: 0, y: y, d: Math.max(60, y / Math.tan(el)) }, now);
+    // the height follows the county's size, measured from its own ground (user 2026-11-15: 點進去自動放大 — a fixed 0.6 × the
+    // hemicycle left 嘉義市 a speck and put 花蓮 past the screen); still at most 0.6 × the hemicycle above the ground
+    var gh = FH(c.x + ICX, ICY - c.z), el = 65 * Math.PI / 180, y = gh + Math.min(HH * 0.6, Math.max(28, c.r * 5));
+    camTo({ fx: c.x, fz: c.z, ty: gh, y: y, d: Math.max(5, (y - gh) / Math.tan(el)) }, now);
   }
   // 3D terrain (user 2026-11-14: 「先嘗試把3d地形加入平面跟立體然後那層陰影打光要跟目前的這一層其實是平面的一樣」): the lying
   // view's floor rises with the land — v2/terrain_lf.bin (build_terrain_lf.py: SRTM 90 m in the map frame, 500 × 727 cells of
@@ -838,7 +840,10 @@
   }
   function zoomStep(now) {   // per frame while animating: move L, CSS-scale the base canvas; at the end redraw the lights
     if (!ZANIM) return false;
-    var e = Math.min(1, (now - ZANIM.t0) / ZANIM.dur), w = e * e * (3 - 2 * e), a = ZANIM.from, b = ZANIM.to;
+    // timed on performance.now(), the clock t0 was read from (as camTo does), and clamped to 0…1 (2026-11-15): the frame's
+    // own stamp can sit behind t0 — e < 0, where e²(3 − 2e) grows without bound — the zoom shot to 1e288, the map vanished
+    // and the animation never ended (seen switching states on the US flat map)
+    var e = Math.max(0, Math.min(1, (performance.now() - ZANIM.t0) / ZANIM.dur)), w = e * e * (3 - 2 * e), a = ZANIM.from, b = ZANIM.to;
     L.k = a.k * Math.pow(b.k / a.k, w); L.ox = a.ox + (b.ox - a.ox) * w; L.oy = a.oy + (b.oy - a.oy) * w;
     if (BGL) { var sc = L.k / BGL.k; cvBg.style.transformOrigin = '0 0'; cvBg.style.transform = 'translate(' + (L.ox - BGL.ox * sc) + 'px,' + (L.oy - BGL.oy * sc) + 'px) scale(' + sc + ')'; }
     if (e >= 1) { ZANIM = null; cvBg.style.transform = ''; ltLayout(); LT_RUSH = now + 3000; ltPaint(now); }
@@ -3147,7 +3152,9 @@
     fg.setAttribute('position', S.geo.getAttribute('position')); fg.setAttribute('uv', S.geo.getAttribute('uv'));
     fg.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
     S.fmesh = new THREE.Mesh(fg, S.landMat); S.scene.add(S.fmesh);
-    var wp = [], wc = [], BASE = -18, top = 0.13, bot = 0.015;
+    // the base follows the picked county's size (user 2026-11-15: a small district stood on a column taller than itself —
+    // 「小選區的底座…要開始處理」): 0.2 × its larger side, 1.5 … 18 units, so a big county keeps the full 18
+    var BASE = -Math.min(18, Math.max(1.5, 0.2 * Math.max(x1 - x0, y1 - y0))), wp = [], wc = [], top = 0.13, bot = 0.015;
     rings.forEach(function (r) {
       var pts = [];
       for (var i2 = 0; i2 + 1 < r.length; i2 += 2) {
