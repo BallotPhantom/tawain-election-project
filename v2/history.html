@@ -165,6 +165,7 @@
   #v2-lang button[aria-pressed="true"] { background: rgba(40,200,200,.22); }
   #v2-lang button:focus-visible { outline: 2px solid #28c8c8; outline-offset: 2px; }
 </style>
+<style>[data-local-only]{display:none!important}</style>
 </head>
 <body>
 <script src="mhint.js?v=20261031a" data-m="m/history.html"></script>
@@ -194,7 +195,7 @@
       <button class="btn" data-type="councilor" data-type-scope="local" data-zh="縣市議員" data-en="Councilor">縣市議員</button>
       <button class="btn" data-type="township" data-type-scope="local" data-zh-title="鄉鎮市長＋直轄市山地原住民區長；直轄市、省轄市的一般區區長為官派，地圖畫成黑色底圖；點鄉鎮進入村里層" data-en-title="Township mayors + elected heads of the special-municipality indigenous districts; other district heads are appointed (drawn black); click a township for its villages" data-zh="鄉鎮市區長" data-en="Twp Head">鄉鎮市區長</button>
       <button class="btn" data-type="townrep" data-type-scope="local" data-zh-title="鄉鎮市民代表（含平地原住民代表、直轄市山地原住民區民代表）；全台是代表會色塊，點鄉鎮進入村里層；面板上方半圓圖是代表會席次" data-en-title="Township representatives (incl. lowland-indigenous and indigenous-district representatives); the map shows each council, click a township for its villages; the hemicycle shows the council's seats" data-zh="鄉鎮市民代表" data-en="Twp Rep">鄉鎮市民代表</button>
-      <button class="btn" data-type="villchief" data-type-scope="local" data-zh-title="村長／里長；最底層，地圖直接是全台村里，不再往下點" data-en-title="Village / borough chiefs — the lowest level; the map shows every village nationwide" data-zh="村里長" data-en="Village Chief">村里長</button>
+      <button class="btn" data-type="villchief" data-type-scope="local" data-local-only data-zh-title="村長／里長；最底層，地圖直接是全台村里，不再往下點" data-en-title="Village / borough chiefs — the lowest level; the map shows every village nationwide" data-zh="村里長" data-en="Village Chief">村里長</button>
       <button class="btn" data-type="president" data-type-scope="national" data-zh="總統副總統" data-en="President &amp; VP">總統副總統</button>
       <button class="btn" data-type="legislative" data-type-scope="national" data-zh="立法委員" data-en="Legislators">立法委員</button>
     </div>
@@ -286,6 +287,14 @@
 <script src="data_village_chief.js?v=20261027a"></script>
 <script src="data_village_chief_old.js?v=20261101a"></script>
 <script src="history-villchief.js?v=20261101nd"></script>
+<script>
+  // 村里長 stays on the local site only (user 2026-11-22: 「在公開版把村里長在hist裡拿掉（太瑣碎）」→「可以」): the public site
+  // doesn't carry data_village_chief.js, so the button shows only where that file exists (same pattern as the home page's
+  // local-only links)
+  document.querySelectorAll('[data-local-only]').forEach(function (b) {
+    if (typeof VILLAGE_CHIEF !== 'undefined' && window.V2VillageChief) b.removeAttribute('data-local-only');
+  });
+</script>
 <script src="data_township_rep.js?v=20261027a"></script>
 <script src="data_township_rep_old.js?v=20261101a"></script>
 <script src="history-townrep.js?v=20261102a"></script>

@@ -127,3 +127,6 @@ county_age_demo.json
 v3/
 live_model/
 publish.sh
+v2/data_village_chief.js
+v2/data_village_chief_old.js
+v2/history-villchief.js
