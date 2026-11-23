@@ -147,8 +147,45 @@
     .m-hint a { color: #7de3e3; text-decoration: none; }
   }
 </style>
+<style id="simple">
+  /* plain, like the other pages (user 2026-11-22: 「跟其他模式一樣就是簡約的…不要動畫…一堆顏色」) */
+  body { background: #0b0d12; }
+  h1 { font-family: -apple-system, "SF Pro Text", "PingFang TC", "Noto Sans TC", sans-serif; background: none; color: #e7eaf0; -webkit-text-fill-color: #e7eaf0; letter-spacing: 0; }
+  .v2-badge { font-family: inherit; background: transparent; border-color: rgba(255,255,255,.22); color: rgba(231,234,240,.6); -webkit-text-fill-color: rgba(231,234,240,.6); }
+  .lang button[aria-pressed="true"] { background: rgba(255,255,255,.12); text-shadow: none; }
+  .quad { --accent: #e7eaf0; background: rgba(255,255,255,.025); border-color: rgba(255,255,255,.1); border-radius: 10px; transition: border-color .15s; }
+  .quad::before { display: none; }
+  .quad:hover { transform: none; background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.28); }
+  .q-num { font-family: inherit; color: rgba(231,234,240,.4); }
+  .q-title small { font-family: inherit; }
+  .viz, .hub { display: none !important; }
+  .chip.live { background: transparent; border-color: rgba(255,255,255,.22); }
+  .chip.live::before { animation: none; background: #e7eaf0; }
+  .go { color: rgba(231,234,240,.75); }
+  .go-link { color: rgba(231,234,240,.85); border-color: rgba(255,255,255,.18); background: transparent; }
+  .go-link:hover { background: rgba(255,255,255,.06); }
+  .method { border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.025); }
+  .method .m-label { font-family: inherit; color: #e7eaf0; letter-spacing: .04em; }
+  .method .go { color: rgba(231,234,240,.75) !important; }
+  .q-predict .q-head { padding-left: 0; }
+  .m-hint { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.16); }
+  .m-hint a { color: #e7eaf0; }
+</style>
+<style id="hover-bg">
+  /* the hovered mode's own page, blurred and faint, behind everything (user 2026-11-22: 「背景…因為滑鼠在哪個模式就模糊浮現出那個模式的頁面」) */
+  .hbg { position: fixed; inset: -20px; z-index: -1; background-size: cover; background-position: center; opacity: 0; filter: blur(6px) brightness(.55); transition: opacity .35s ease; pointer-events: none; }
+  body { position: relative; z-index: 0; }
+  body.h-history .hbg-history, body.h-profile .hbg-profile, body.h-night .hbg-night, body.h-predict .hbg-predict { opacity: .45; }
+  .quad { backdrop-filter: blur(2px); background: rgba(11,13,18,.55); }
+  @media (max-width: 720px), (prefers-reduced-motion: reduce) { .hbg { transition: none; } }
+  @media (max-width: 720px) { .hbg { display: none; } }
+</style>
 </head>
 <body>
+<div class="hbg hbg-history" style="background-image:url(img/home_bg_history.jpg)" aria-hidden="true"></div>
+<div class="hbg hbg-profile" style="background-image:url(img/home_bg_profile.jpg)" aria-hidden="true"></div>
+<div class="hbg hbg-night" style="background-image:url(img/home_bg_night.jpg)" aria-hidden="true"></div>
+<div class="hbg hbg-predict" style="background-image:url(img/home_bg_predict.jpg)" aria-hidden="true"></div>
 <div class="wrap">
   <header>
     <div class="brand">
@@ -400,6 +437,14 @@
   document.querySelectorAll('a[data-local-only]').forEach(function (a) {
     fetch(a.getAttribute('href'), { method: 'HEAD', cache: 'no-store' })
       .then(function (r) { if (r.ok) a.removeAttribute('data-local-only'); }).catch(function () {});
+  });
+</script>
+<script>
+  // hover a mode → its page shows faintly behind; the images are re-shot from the pages as published (make_home_bg.py, run by publish.sh)
+  [['q-history','history'],['q-profile','profile'],['q-night','night'],['q-predict','predict']].forEach(function (p) {
+    var el = document.querySelector('.' + p[0]); if (!el) return;
+    el.addEventListener('mouseenter', function () { document.body.classList.add('h-' + p[1]); });
+    el.addEventListener('mouseleave', function () { document.body.classList.remove('h-' + p[1]); });
   });
 </script>
 </body>
