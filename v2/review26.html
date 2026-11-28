@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2026 預測檢討 · V2</title>
+<link rel="stylesheet" href="v2-shell.css?v=20261022b">
+<!--
+  2026 縣市長「封關預測 vs 最終結果」(user 2026-11-28: 「總會成一個2026縣市長預測封關跟最終結果的詳細比較」「取代2026公開的預測頁」
+  「把當選分級的項目也列出」). Data: v2/data_review26.js (build_review26.py) — the forecast exactly as it was public before the
+  11/18 blackout (origin/main f900d99, 232 polls, fixed-seed Monte Carlo) and CEC's final counts. The model is frozen: nothing is
+  re-run here. Metrics count candidates whose forecast median is over 2 % (the 0.5 % placeholders of minor candidates left out).
+  Card format follows final26.html (the frozen table): bar = 80 % range, thin line = median, white dot = the actual share.
+-->
+<style>
+  html, body { height: auto; overflow: auto; }
+  body { background: #0a0d16; color: #e7eaf0; margin: 0; }
+  #rv { max-width: 1180px; margin: 0 auto; padding: 18px 16px 48px; }
+  h1 { font-size: 20px; margin: 4px 0 4px; }
+  h2.sec { font-size: 15px; margin: 26px 0 8px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .08); }
+  .meta { font-size: 12px; color: #9aa1b2; line-height: 1.7; }
+  .lead { font-size: 13px; color: #cfd4de; line-height: 1.8; margin: 10px 0 0; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 14px 0 4px; }
+  .tiles > div { padding: 9px 11px; border-radius: 8px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08); }
+  .tiles b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .tiles span { display: block; font-size: 11px; color: #9aa1b2; line-height: 1.5; margin-top: 2px; }
+  table.rt { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.rt th, table.rt td { padding: 6px 8px; border-bottom: 1px solid rgba(255, 255, 255, .07); text-align: left; vertical-align: top; }
+  table.rt th { color: #9aa1b2; font-weight: 600; font-size: 11px; }
+  table.rt td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tw { overflow-x: auto; }
+  .ok { color: #7fd99a; } .no { color: #ff7b7b; }
+  .chip { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 10px; font-weight: 700; line-height: 16px; white-space: nowrap; }
+  .miss { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 10px; }
+  .card { padding: 10px 12px; border-radius: 10px; background: rgba(17, 21, 32, .92); border: 1px solid rgba(255, 255, 255, .08); min-width: 0; }
+  .card.bad { border-color: rgba(255, 123, 123, .45); }
+  .card h3 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card .sub { font-size: 10.5px; color: #8b93a6; margin: 3px 0 8px; line-height: 1.5; }
+  .card p { font-size: 12px; color: #cfd4de; line-height: 1.7; margin: 6px 0 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 10px; }
+  .c-row { display: grid; grid-template-columns: 84px 1fr 44px; gap: 8px; align-items: center; font-size: 11.5px; margin: 5px 0; }
+  .c-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c-row .wp { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .trk { position: relative; height: 12px; background: rgba(255, 255, 255, .06); border-radius: 3px; }
+  .trk .band { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; opacity: .45; }
+  .trk .med { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; opacity: .8; }
+  .trk .act { position: absolute; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #0a0d16; }
+  .trk .act.out { background: #ffd34d; }
+  .trk .half { position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px dashed rgba(255, 255, 255, .22); }
+  .c-num { grid-column: 2 / 4; font-size: 10px; color: #9aa1b2; margin-top: -3px; font-variant-numeric: tabular-nums; }
+  .legend { font-size: 11px; color: #9aa1b2; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
+  .legend i { display: inline-block; vertical-align: middle; margin-right: 4px; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 14px; }
+  .chart { padding: 10px 12px; border-radius: 10px; background: rgba(17, 21, 32, .92); border: 1px solid rgba(255, 255, 255, .08); }
+  .chart h3 { font-size: 13px; margin: 0 0 4px; }
+  .chart .sub { font-size: 10.5px; color: #8b93a6; margin-bottom: 6px; line-height: 1.5; }
+  .chart svg { width: 100%; height: auto; display: block; }
+  .chart text { fill: #9aa1b2; font-size: 10px; }
+  .note { font-size: 11.5px; color: #9aa1b2; line-height: 1.8; margin-top: 22px; border-top: 1px solid rgba(255, 255, 255, .08); padding-top: 12px; }
+  .note b { color: #cfd4de; }
+</style>
+</head>
+<body>
+<div id="v2-bar">
+  <a class="v2-home" href="index.html" data-zh="← 首頁" data-en="← Home">← 首頁</a>
+  <span class="v2-title"><span data-zh="2026 縣市長預測檢討" data-en="2026 Mayoral Forecast Review">2026 縣市長預測檢討</span><span class="v2-badge">V2</span></span>
+  <span class="v2-spacer"></span>
+  <div class="v2-lang" role="group" aria-label="Language"><button type="button" data-lang="zh" aria-pressed="true">中文</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+</div>
+<div id="rv"></div>
+
+<script src="data_review26.js?v=20261128a"></script>
+<script src="m/data_names_m.js?v=20261101p96"></script>
+<script>
+(function () {
+  'use strict';
+  var R = REVIEW26, S = R.summary;
+  var lang = 'zh';
+  try { lang = localStorage.getItem('v2_lang') === 'en' ? 'en' : 'zh'; } catch (e) {}
+  var T = function (zh, en) { return lang === 'en' ? en : zh; };
+  // final26.html's party colours, county order and ratings (ratings26.js)
+  var CLR = { dpp: '#1b9e4b', kmt: '#3b82f6', tpp: '#26b5c4', npp: '#FBBE01', tsr: '#B33A1E', tsu: '#C69E6A', pfp: '#f06a0a', ind: '#888888', other: '#aaaaaa' };
+  var CN_EN = { '台北市': 'Taipei', '新北市': 'New Taipei', '桃園市': 'Taoyuan', '台中市': 'Taichung', '台南市': 'Tainan', '高雄市': 'Kaohsiung',
+    '基隆市': 'Keelung', '新竹市': 'Hsinchu City', '嘉義市': 'Chiayi City', '新竹縣': 'Hsinchu County', '苗栗縣': 'Miaoli', '彰化縣': 'Changhua',
+    '南投縣': 'Nantou', '雲林縣': 'Yunlin', '嘉義縣': 'Chiayi County', '屏東縣': 'Pingtung', '宜蘭縣': 'Yilan', '花蓮縣': 'Hualien',
+    '台東縣': 'Taitung', '澎湖縣': 'Penghu', '金門縣': 'Kinmen', '連江縣': 'Lienchiang' };
+  var ORDER = ['63', '65', '10017', '68', '10018', '10004', '10005', '66', '10007', '10008', '10009', '10020', '10010', '67', '64', '10013',
+               '10002', '10015', '10014', '10016', '09020', '09007'];
+  var RATE = [['Solid', 0.95, 1], ['Likely', 0.80, 0.68], ['Lean', 0.65, 0.42], ['Tilt', 0.55, 0.2]], TOSS = '#cbbf9f';
+  function band(p) { for (var i = 0; i < RATE.length; i++) if (p >= RATE[i][1]) return RATE[i]; return null; }
+  function mix(hex, k) {
+    var h = hex.replace('#', ''), m = function (i) { var c = parseInt(h.substring(i, i + 2), 16); return ~~(255 - (255 - c) * k); };
+    return 'rgb(' + m(0) + ',' + m(2) + ',' + m(4) + ')';
+  }
+  var nm = function (n) { n = String(n).split(/[（(]/)[0].trim(); return lang === 'en' && typeof M_NAMES_EN !== 'undefined' && M_NAMES_EN[n] ? M_NAMES_EN[n] : n; };
+  var cname = function (c) { var n = (c.county_zh || '').replace('臺', '台'); return lang === 'en' ? (CN_EN[n] || n) : n; };
+  var pct = function (x) { return x == null ? '—' : (+x).toFixed(1) + '%'; };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]; }); };
+  var counties = ORDER.filter(function (cc) { return R.counties[cc]; }).map(function (cc) { var c = R.counties[cc]; c.cc = cc; c.r = band(c.favProb); return c; });
+  var favOf = function (c) { return c.cands.filter(function (x) { return x.n === c.fav; })[0]; };
+  function chip(c) {
+    var f = favOf(c), side = f.p === 'dpp' ? ['綠', 'Green'] : f.p === 'kmt' ? ['藍', 'Blue'] : [nm(f.n), nm(f.n)];
+    var bg = c.r ? mix(CLR[f.p] || CLR.other, c.r[2]) : TOSS, dark = !c.r || c.r[2] < 0.5;
+    return '<span class="chip" style="background:' + bg + ';color:' + (dark ? '#15171f' : '#fff') + '">' + (c.r ? c.r[0] + ' ' + T(side[0], side[1]) : 'Toss-up') + '</span>';
+  }
+  var mark = function (ok) { return ok ? '<span class="ok">✓</span>' : '<span class="no">✗</span>'; };
+  var inBand = function (x) { return x.pct10 != null && x.act != null && x.act >= x.pct10 && x.act <= x.pct90; };
+  // the two candidates who mattered: the favourite and the actual winner (or the runner-up when the favourite won)
+  function pair(c) {
+    var main = c.cands.filter(function (x) { return x.pct50 != null; }).sort(function (a, b) { return b.pct50 - a.pct50; }).slice(0, 2);
+    return main;
+  }
+
+  function render() {
+    var h = '';
+    h += '<h1>' + T('2026 縣市長選舉 · 封關預測 vs 最終結果', '2026 Mayoral Elections · Final Forecast vs Results') + '</h1>';
+    h += '<div class="meta">' + T('預測：封關前最後公開的版本（' + R.forecast_date + '、' + R.polls + ' 筆民調、蒙地卡羅模擬 20,000 次）・結果：中選會最終得票',
+      'Forecast: the last version public before the blackout (' + R.forecast_date + ', ' + R.polls + ' polls, 20,000 Monte Carlo runs) · Results: Central Election Commission final counts') + '</div>';
+    h += '<p class="lead">' + T(
+      '模型凍結，選後沒有重算，以下是當時公開的數字原封不動拿來對答案。猜錯的 3 席，模型當時都只給 54%–81% 的勝率，兩位主要候選人的實際得票也都落在模型的 80% 區間內；誤差最大的反而是勝者猜對、但得票率差了 10 個百分點以上的縣市。整體來說中位數沒有偏向哪一黨，但區間給得太窄：應該涵蓋 80% 的區間只涵蓋了 ' + Math.round(S.cover[0] / S.cover[1] * 100) + '%。',
+      'The model is frozen and was not re-run after the vote: the numbers below are the ones that were public, checked against the result. In the 3 misses the model had given the favourite only 54–81 %, and both main candidates’ actual shares fell inside their 80 % ranges; the largest errors came where the winner was right but a share was off by more than 10 points. The medians lean to neither party, but the ranges were too narrow: ranges meant to hold 80 % of outcomes held ' + Math.round(S.cover[0] / S.cover[1] * 100) + ' %.') + '</p>';
+
+    // 1. summary
+    h += '<div class="tiles">' +
+      '<div><b>' + S.hits + '/' + S.n_counties + '</b><span>' + T('勝者猜對（當選機率最高的候選人當選）', 'winners right (the likeliest candidate won)') + '</span></div>' +
+      '<div><b>' + S.mae.toFixed(1) + '</b><span>' + T('得票率平均誤差（百分點，MAE）', 'mean vote-share error (points, MAE)') + '</span></div>' +
+      '<div><b>' + S.rmse.toFixed(1) + '</b><span>' + T('得票率均方根誤差（RMSE；MSE ' + S.mse + '）', 'vote-share RMSE (MSE ' + S.mse + ')') + '</span></div>' +
+      '<div><b>' + (S.bias > 0 ? '+' : '') + S.bias.toFixed(1) + '</b><span>' + T('平均偏差（預測 − 實際）', 'mean bias (forecast − actual)') + '</span></div>' +
+      '<div><b>' + S.margin_mae.toFixed(1) + '</b><span>' + T('前兩名差距的平均誤差（百分點）', 'mean error of the top-two margin (points)') + '</span></div>' +
+      '<div><b>' + S.brier.toFixed(3) + '</b><span>' + T('Brier 分數（當選機率；0 最好）', 'Brier score (win chances; 0 is perfect)') + '</span></div>' +
+      '<div><b>' + S.cover[0] + '/' + S.cover[1] + '</b><span>' + T('實際得票落在 80% 區間內（應約 80%）', 'actual share inside the 80 % range (should be ~80 %)') + '</span></div>' +
+      '</div>';
+    h += '<div class="meta">' + T('誤差只算預測中位數超過 2% 的 ' + S.n_cands + ' 位候選人。', 'Errors count the ' + S.n_cands + ' candidates whose forecast median was over 2 %.') + '</div>';
+
+    // 2. ratings scorecard (user: 「把當選分級的項目也列出」)
+    var groups = RATE.map(function (r) { return { r: r, label: r[0], lo: r[1], hi: r === RATE[0] ? 1 : RATE[RATE.indexOf(r) - 1][1], list: [] }; });
+    groups.push({ r: null, label: 'Toss-up', lo: 0, hi: 0.55, list: [] });
+    counties.forEach(function (c) { groups.filter(function (g) { return g.r === c.r; })[0].list.push(c); });
+    h += '<h2 class="sec">' + T('評級成績表', 'Ratings scorecard') + '</h2>';
+    h += '<div class="meta" style="margin-bottom:8px">' + T('封關時每個縣市依「領先者的當選機率」分級。「模型預期」是該級當選機率的平均，也就是模型自己認為這一級大約會猜對幾成。',
+      'Each county’s rating at the blackout, by the favourite’s win chance. “Model expected” is the average win chance in the tier — how often the model itself expected to be right there.') + '</div>';
+    h += '<div class="tw"><table class="rt"><tr><th>' + T('評級', 'Rating') + '</th><th>' + T('勝率範圍', 'Win chance') + '</th><th>' + T('縣市數', 'Counties') + '</th><th>' + T('猜對', 'Right') + '</th><th>' + T('模型預期', 'Model expected') + '</th><th>' + T('縣市', 'Counties') + '</th></tr>' +
+      groups.map(function (g) {
+        var n = g.list.length, ok = g.list.filter(function (c) { return c.hit; }).length;
+        var exp = n ? g.list.reduce(function (a, c) { return a + c.favProb; }, 0) / n : null;
+        return '<tr><td><b>' + g.label + '</b></td><td class="num">' + (g.r ? (g.r === RATE[0] ? '≥ 95%' : Math.round(g.lo * 100) + '–' + Math.round(g.hi * 100) + '%') : '< 55%') + '</td>' +
+          '<td class="num">' + n + '</td><td class="num">' + (n ? ok + '/' + n : '—') + '</td><td class="num">' + (exp == null ? '—' : Math.round(exp * 100) + '%') + '</td><td>' +
+          g.list.map(function (c) { return mark(c.hit) + ' ' + cname(c) + ' <span style="color:#8b93a6">' + Math.round(c.favProb * 100) + '%</span>'; }).join('、') + '</td></tr>';
+      }).join('') + '</table></div>';
+
+    // 3. the misses
+    var miss = counties.filter(function (c) { return !c.hit; });
+    h += '<h2 class="sec">' + T('猜錯的 ' + miss.length + ' 席', 'The ' + miss.length + ' misses') + '</h2><div class="miss">' + miss.map(function (c) {
+      var f = favOf(c), w = c.cands.filter(function (x) { return x.n === c.winner; })[0];
+      var both = inBand(f) && inBand(w), wv = w.votes, lv = c.cands.filter(function (x) { return x.n !== c.winner && x.votes != null; }).sort(function (a, b) { return b.votes - a.votes; })[0];
+      var gap = wv - lv.votes;
+      var sub = c.polls ? T(c.polls + ' 筆民調', c.polls + ' poll' + (c.polls > 1 ? 's' : '')) : T('無 2026 民調', 'no 2026 poll');
+      return '<div class="card bad"><h3>' + cname(c) + ' ' + chip(c) + '</h3><div class="sub">' + sub + '</div>' +
+        '<p>' + T('模型：<b style="color:' + (CLR[f.p] || CLR.other) + '">' + nm(f.n) + '</b> 當選機率 ' + Math.round(c.favProb * 100) + '%，得票中位數 ' + pct(f.pct50) + '（80% 區間 ' + pct(f.pct10) + '–' + pct(f.pct90) + '）。',
+                  'Model: <b style="color:' + (CLR[f.p] || CLR.other) + '">' + nm(f.n) + '</b> ' + Math.round(c.favProb * 100) + ' % to win, median ' + pct(f.pct50) + ' (80 % range ' + pct(f.pct10) + '–' + pct(f.pct90) + ').') + '</p>' +
+        '<p>' + T('結果：<b style="color:' + (CLR[w.p] || CLR.other) + '">' + nm(w.n) + '</b> ' + pct(w.act) + ' 當選（模型給 ' + pct(w.pct50) + '），' + nm(f.n) + ' ' + pct(f.act) + '，相差 ' + gap.toLocaleString() + ' 票。',
+                  'Result: <b style="color:' + (CLR[w.p] || CLR.other) + '">' + nm(w.n) + '</b> won with ' + pct(w.act) + ' (model ' + pct(w.pct50) + '), ' + nm(f.n) + ' ' + pct(f.act) + ', a gap of ' + gap.toLocaleString() + ' votes.') + '</p>' +
+        '<p style="color:#9aa1b2">' + (both ? T('兩人的實際得票都在模型的 80% 區間內：結果在模型說的不確定範圍裡，只是落在比較不可能的那一邊。', 'Both actual shares were inside the model’s 80 % ranges: the result was within the stated uncertainty, on the less likely side.')
+                                            : T('至少一人的實際得票落在 80% 區間外：模型低估了這一席的不確定性。', 'At least one actual share fell outside its 80 % range: the model underrated the uncertainty here.')) +
+        (c.polls <= 1 ? T('這一席只有 ' + c.polls + ' 筆民調。', ' This race had only ' + c.polls + ' poll' + (c.polls === 1 ? '' : 's') + '.') : '') + '</p></div>';
+    }).join('') + '</div>';
+
+    // 4. charts: forecast vs actual share, and calibration
+    h += '<h2 class="sec">' + T('整體準度', 'Overall accuracy') + '</h2><div class="charts">' + scatter() + calib() + '</div>';
+
+    // 5. every county
+    h += '<h2 class="sec">' + T('22 縣市逐一比較', 'All 22 counties') + '</h2>';
+    h += '<div class="legend"><span><i style="width:22px;height:8px;background:#888;opacity:.45;border-radius:2px"></i>' + T('預測 80% 區間', 'forecast 80 % range') + '</span>' +
+      '<span><i style="width:2px;height:12px;background:#ccc"></i>' + T('預測中位數', 'forecast median') + '</span>' +
+      '<span><i style="width:5px;height:5px;border-radius:50%;background:#fff"></i>' + T('實際得票率', 'actual share') + '</span>' +
+      '<span><i style="width:5px;height:5px;border-radius:50%;background:#ffd34d"></i>' + T('實際落在區間外', 'actual outside the range') + '</span>' +
+      '<span>' + T('右欄：封關時的當選機率', 'right: win chance at the blackout') + '</span></div>';
+    h += '<div class="grid">' + counties.map(function (c) {
+      var shown = c.cands.filter(function (x) { return (x.pct50 != null && x.pct50 > 2) || (x.act != null && x.act > 2) || (x.winProb || 0) >= 0.01; })
+        .sort(function (a, b) { return (b.act || 0) - (a.act || 0); });
+      var rest = c.cands.length - shown.length;
+      var sub = (c.nopoll ? T('無 2026 民調：以 2014–2022 縣長選舉實績估計', 'No 2026 poll: estimated from the 2014–2022 county races') : T(c.polls + ' 筆民調加權', c.polls + ' polls, weighted')) +
+        (c.prog && c.prog[0] < c.prog[1] ? T('・中選會 ' + c.prog[0] + '/' + c.prog[1] + ' 所', ' · CEC ' + c.prog[0] + '/' + c.prog[1] + ' stations') : '');
+      return '<div class="card' + (c.hit ? '' : ' bad') + '"><h3>' + mark(c.hit) + ' ' + cname(c) + ' ' + chip(c) + '</h3><div class="sub">' + sub + '</div>' +
+        shown.map(function (x) {
+          var col = CLR[x.p] || CLR.other, win = x.n === c.winner, out = x.pct10 != null && x.act != null && !inBand(x);
+          return '<div class="c-row"><span class="nm" style="color:' + col + '" title="' + esc(nm(x.n)) + '">' + (win ? '★ ' : '') + esc(nm(x.n)) + '</span>' +
+            '<span class="trk"><span class="half"></span>' +
+            (x.pct10 != null ? '<span class="band" style="left:' + x.pct10 + '%;width:' + Math.max(0.6, x.pct90 - x.pct10) + '%;background:' + col + '"></span>' : '') +
+            (x.pct50 != null ? '<span class="med" style="left:' + x.pct50 + '%;background:' + col + '"></span>' : '') +
+            (x.act != null ? '<span class="act' + (out ? ' out' : '') + '" style="left:' + x.act + '%"></span>' : '') + '</span>' +
+            '<span class="wp" style="color:' + col + '">' + (x.winProb == null ? '—' : Math.round(x.winProb * 100) + '%') + '</span>' +
+            '<span class="c-num">' + T('預測 ', 'forecast ') + pct(x.pct50) + (x.pct10 != null ? '（' + pct(x.pct10) + '–' + pct(x.pct90) + '）' : '') +
+            T('・實際 ', ' · actual ') + pct(x.act) + (x.pct50 != null && x.act != null ? T('・誤差 ', ' · error ') + (x.pct50 - x.act > 0 ? '+' : '') + (x.pct50 - x.act).toFixed(1) : '') + '</span></div>';
+        }).join('') +
+        (rest > 0 ? '<div class="sub" style="margin:4px 0 0">' + T('另有 ' + rest + ' 位候選人（預測與實際皆 < 2%）', rest + ' more candidate(s) under 2 %') + '</div>' : '') + '</div>';
+    }).join('') + '</div>';
+
+    // 6. method
+    h += '<div class="note">' + T(
+      '<b>怎麼比</b>：預測是 11/18 封關前網站上最後公開的版本（' + R.polls + ' 筆民調；民調依機構傾向與委託方降權、時間衰減加權，部分候選人參考歷史得票），模型選前凍結、選後沒有改、也沒有重算。結果是中選會的最終得票（新竹縣中選會網站停在 491/492 所，照實使用）。<br>' +
+      '<b>指標</b>：MAE／RMSE 是預測得票率中位數與實際得票率的差；前兩名差距是預測的領先幅度與實際領先幅度的差；Brier 分數是當選機率與實際結果（當選 1、落選 0）差的平方平均；80% 區間是模擬結果的第 10 到第 90 百分位。<br>' +
+      '<b>主要發現</b>：區間太窄（涵蓋率 ' + Math.round(S.cover[0] / S.cover[1] * 100) + '%，應約 80%），代表模型對單一縣市的不確定性估得不夠；中位數整體沒有黨派偏差（平均偏差 ' + (S.bias > 0 ? '+' : '') + S.bias.toFixed(1) + ' 個百分點）。<br>' +
+      '這是研究性質的推估，不是官方數字；本頁只為事後檢討，不代表對任何候選人或政黨的立場。',
+      '<b>Method</b>: the forecast is the last version public before the 11/18 blackout (' + R.polls + ' polls; polls discounted by pollster lean and sponsor, weighted by recency, some candidates anchored on past results). The model was frozen before the vote and was neither changed nor re-run afterwards. Results are the CEC final counts (Hsinchu County’s CEC page stopped at 491/492 stations and is used as is).<br>' +
+      '<b>Metrics</b>: MAE / RMSE compare the forecast median share with the actual share; the margin error compares the forecast lead with the actual lead; the Brier score is the mean squared difference between win chance and outcome (1 won, 0 lost); the 80 % range is the 10th–90th percentile of the simulations.<br>' +
+      '<b>Main finding</b>: the ranges were too narrow (' + Math.round(S.cover[0] / S.cover[1] * 100) + ' % coverage against ~80 %): the model underrated the uncertainty of single races. The medians show no party lean overall (mean bias ' + (S.bias > 0 ? '+' : '') + S.bias.toFixed(1) + ' points).<br>' +
+      'A research estimate, not official figures; this page is a post-election review and takes no side.') + '</div>';
+
+    document.getElementById('rv').innerHTML = h;
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+    [].forEach.call(document.querySelectorAll('[data-zh]'), function (e) { e.textContent = lang === 'en' ? e.dataset.en : e.dataset.zh; });
+    [].forEach.call(document.querySelectorAll('.v2-lang button'), function (b) { b.setAttribute('aria-pressed', String(b.dataset.lang === lang)); });
+  }
+
+  // forecast median (x) vs actual share (y), one dot per candidate over 2 %
+  function scatter() {
+    var W = 420, H = 340, L = 36, B = 28, Tp = 10, Rr = 10, max = 70;
+    var X = function (v) { return L + v / max * (W - L - Rr); }, Y = function (v) { return H - B - v / max * (H - B - Tp); };
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + T('預測與實際得票率散佈圖', 'Forecast vs actual share') + '">';
+    for (var g = 0; g <= max; g += 10) {
+      s += '<line x1="' + X(0) + '" x2="' + X(max) + '" y1="' + Y(g) + '" y2="' + Y(g) + '" stroke="rgba(255,255,255,.06)"/>' +
+        '<line y1="' + Y(0) + '" y2="' + Y(max) + '" x1="' + X(g) + '" x2="' + X(g) + '" stroke="rgba(255,255,255,.06)"/>' +
+        '<text x="' + (L - 6) + '" y="' + (Y(g) + 3) + '" text-anchor="end">' + g + '</text><text x="' + X(g) + '" y="' + (H - B + 14) + '" text-anchor="middle">' + g + '</text>';
+    }
+    s += '<line x1="' + X(0) + '" y1="' + Y(0) + '" x2="' + X(max) + '" y2="' + Y(max) + '" stroke="rgba(255,255,255,.35)" stroke-dasharray="4 4"/>';
+    counties.forEach(function (c) {
+      c.cands.forEach(function (x) {
+        if (x.pct50 == null || x.act == null || x.pct50 <= 2) return;
+        s += '<circle cx="' + X(x.pct50).toFixed(1) + '" cy="' + Y(x.act).toFixed(1) + '" r="4.5" fill="' + (CLR[x.p] || CLR.other) + '" fill-opacity=".85" stroke="' + (inBand(x) ? '#0a0d16' : '#ffd34d') + '" stroke-width="1.2"><title>' +
+          esc(cname(c) + ' ' + nm(x.n) + T('：預測 ', ': forecast ') + pct(x.pct50) + T('，實際 ', ', actual ') + pct(x.act)) + '</title></circle>';
+      });
+    });
+    s += '<text x="' + ((L + W) / 2) + '" y="' + (H - 2) + '" text-anchor="middle">' + T('預測得票率中位數（%）', 'forecast median share (%)') + '</text>' +
+      '<text transform="translate(10 ' + ((H - B) / 2) + ') rotate(-90)" text-anchor="middle">' + T('實際得票率（%）', 'actual share (%)') + '</text></svg>';
+    return '<div class="chart"><h3>' + T('預測 vs 實際得票率', 'Forecast vs actual share') + '</h3><div class="sub">' +
+      T('每個點是一位候選人（顏色＝政黨），越靠近虛線越準；黃框＝實際落在 80% 區間外。滑鼠移上去看名字。', 'One dot per candidate (colour = party); closer to the dashed line is better; yellow ring = outside the 80 % range. Hover for names.') + '</div>' + s + '</div>';
+  }
+
+  // calibration: candidates grouped by win chance; the share of each group that won
+  function calib() {
+    var bins = [[0, 0.2], [0.2, 0.4], [0.4, 0.6], [0.6, 0.8], [0.8, 1.0001]];
+    var rows = bins.map(function (b) { return { b: b, n: 0, won: 0, sum: 0 }; });
+    counties.forEach(function (c) {
+      c.cands.forEach(function (x) {
+        if (x.pct50 == null || x.pct50 <= 2 || x.winProb == null) return;
+        var r = rows.filter(function (r) { return x.winProb >= r.b[0] && x.winProb < r.b[1]; })[0];
+        r.n++; r.sum += x.winProb; r.won += x.n === c.winner ? 1 : 0;
+      });
+    });
+    var W = 420, H = 340, L = 36, B = 28, Tp = 10, Rr = 10;
+    var X = function (v) { return L + v * (W - L - Rr); }, Y = function (v) { return H - B - v * (H - B - Tp); };
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + T('校準圖', 'Calibration') + '">';
+    for (var g = 0; g <= 100; g += 20) {
+      s += '<line x1="' + X(0) + '" x2="' + X(1) + '" y1="' + Y(g / 100) + '" y2="' + Y(g / 100) + '" stroke="rgba(255,255,255,.06)"/>' +
+        '<text x="' + (L - 6) + '" y="' + (Y(g / 100) + 3) + '" text-anchor="end">' + g + '</text><text x="' + X(g / 100) + '" y="' + (H - B + 14) + '" text-anchor="middle">' + g + '</text>';
+    }
+    s += '<line x1="' + X(0) + '" y1="' + Y(0) + '" x2="' + X(1) + '" y2="' + Y(1) + '" stroke="rgba(255,255,255,.35)" stroke-dasharray="4 4"/>';
+    rows.forEach(function (r) {
+      if (!r.n) return;
+      var ex = r.sum / r.n, ac = r.won / r.n, rad = 4 + Math.sqrt(r.n) * 2.2;
+      s += '<circle cx="' + X(ex).toFixed(1) + '" cy="' + Y(ac).toFixed(1) + '" r="' + rad.toFixed(1) + '" fill="#cfd4de" fill-opacity=".75" stroke="#0a0d16"><title>' +
+        esc(T('當選機率 ', 'win chance ') + Math.round(r.b[0] * 100) + '–' + Math.min(100, Math.round(r.b[1] * 100)) + '%：' + r.n + T(' 位，平均 ', ' candidates, average ') + Math.round(ex * 100) + T('%，實際當選 ', ' %, won ') + r.won) + '</title></circle>' +
+        '<text x="' + (X(ex) + rad + 4).toFixed(1) + '" y="' + (Y(ac) + 3).toFixed(1) + '" style="fill:#cfd4de">' + r.won + '/' + r.n + '</text>';
+    });
+    s += '<text x="' + ((L + W) / 2) + '" y="' + (H - 2) + '" text-anchor="middle">' + T('模型給的當選機率（%）', 'model win chance (%)') + '</text>' +
+      '<text transform="translate(10 ' + ((H - B) / 2) + ') rotate(-90)" text-anchor="middle">' + T('實際當選比例（%）', 'share that won (%)') + '</text></svg>';
+    return '<div class="chart"><h3>' + T('校準：模型說幾成，實際中幾成', 'Calibration: stated vs actual win rate') + '</h3><div class="sub">' +
+      T('候選人依當選機率分 5 組，橫軸是該組平均機率、縱軸是實際當選比例（圓越大人數越多，旁邊是當選/人數）。落在虛線上＝機率準確；人數少，僅供參考。', 'Candidates in 5 groups by win chance: x = the group’s average chance, y = the share that won (bigger circle = more candidates; label = won/total). On the dashed line = well calibrated; small numbers, indicative only.') + '</div>' + s + '</div>';
+  }
+
+  [].forEach.call(document.querySelectorAll('.v2-lang button'), function (b) {
+    b.onclick = function () { lang = b.dataset.lang; try { localStorage.setItem('v2_lang', lang); } catch (e) {} render(); };
+  });
+  render();
+})();
+</script>
+</body>
+</html>
