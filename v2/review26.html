@@ -69,7 +69,7 @@
 </div>
 <div id="rv"></div>
 
-<script src="data_review26.js?v=20261128a"></script>
+<script src="data_review26.js?v=20261128c"></script>
 <script src="m/data_names_m.js?v=20261101p96"></script>
 <script>
 (function () {
@@ -127,7 +127,8 @@
       '<div><b>' + S.rmse.toFixed(1) + '</b><span>' + T('得票率均方根誤差（RMSE；MSE ' + S.mse + '）', 'vote-share RMSE (MSE ' + S.mse + ')') + '</span></div>' +
       '<div><b>' + (S.bias > 0 ? '+' : '') + S.bias.toFixed(1) + '</b><span>' + T('平均偏差（預測 − 實際）', 'mean bias (forecast − actual)') + '</span></div>' +
       '<div><b>' + S.margin_mae.toFixed(1) + '</b><span>' + T('前兩名差距的平均誤差（百分點）', 'mean error of the top-two margin (points)') + '</span></div>' +
-      '<div><b>' + S.brier.toFixed(3) + '</b><span>' + T('Brier 分數（當選機率；0 最好）', 'Brier score (win chances; 0 is perfect)') + '</span></div>' +
+      '<div><b>' + S.brier.toFixed(3) + '</b><span>' + T('Brier 分數（多類別，0–2，0 最好；平分機率 ' + S.brier_base.toFixed(3) + '）', 'Brier score (multi-class, 0–2, 0 is perfect; equal odds ' + S.brier_base.toFixed(3) + ')') + '</span></div>' +
+      '<div><b>' + S.logloss.toFixed(3) + '</b><span>' + T('Log loss（越低越好；平分機率 ' + S.logloss_base.toFixed(3) + '）', 'log loss (lower is better; equal odds ' + S.logloss_base.toFixed(3) + ')') + '</span></div>' +
       '<div><b>' + S.cover[0] + '/' + S.cover[1] + '</b><span>' + T('實際得票落在 80% 區間內（應約 80%）', 'actual share inside the 80 % range (should be ~80 %)') + '</span></div>' +
       '</div>';
     h += '<div class="meta">' + T('誤差只算預測中位數超過 2% 的 ' + S.n_cands + ' 位候選人。', 'Errors count the ' + S.n_cands + ' candidates whose forecast median was over 2 %.') + '</div>';
@@ -147,6 +148,26 @@
           '<td class="num">' + n + '</td><td class="num">' + (n ? ok + '/' + n : '—') + '</td><td class="num">' + (exp == null ? '—' : Math.round(exp * 100) + '%') + '</td><td>' +
           g.list.map(function (c) { return mark(c.hit) + ' ' + cname(c) + ' <span style="color:#8b93a6">' + Math.round(c.favProb * 100) + '%</span>'; }).join('、') + '</td></tr>';
       }).join('') + '</table></div>';
+
+    // 2b. against simple baselines (user 2026-11-28 「好」「都做」): the same 54 candidates, the same 232 polls
+    var BL = R.baselines;
+    if (BL) {
+      var cn = function (cc) { return cname(R.counties[cc]); };
+      var rowsB = [['model', T('本站模型', 'This model'), T('民調加權（機構傾向、委託方、時間衰減）＋歷史錨點', 'weighted polls (lean, sponsor, recency) + history anchors')],
+                   ['polls', T('只用民調平均', 'Polls only'), T('最近 45 天民調的簡單平均；無民調縣市用 2022 結果', 'plain average of the last 45 days of polls; no-poll counties use 2022')],
+                   ['y2022', T('照 2022 年結果', '2022 result'), T('同一人或同黨在 2022 的得票率', 'the same person’s, or party’s, 2022 share')]];
+      h += '<h2 class="sec">' + T('跟簡單方法比', 'Against simple baselines') + '</h2>';
+      h += '<div class="meta" style="margin-bottom:8px">' + T('同一批候選人、同一份 ' + R.polls + ' 筆民調，換成兩種不用模型的簡單方法，看模型有沒有真的比較好。', 'The same candidates and the same ' + R.polls + ' polls, scored with two methods that need no model — does the model actually beat them?') + '</div>';
+      h += '<div class="tw"><table class="rt"><tr><th>' + T('方法', 'Method') + '</th><th>' + T('勝者猜對', 'Winners') + '</th><th>MAE</th><th>RMSE</th><th>' + T('差距誤差', 'Margin error') + '</th><th>' + T('猜錯', 'Missed') + '</th></tr>' +
+        rowsB.map(function (r) {
+          var b = BL[r[0]], me = r[0] === 'model';
+          return '<tr' + (me ? ' style="background:rgba(255,255,255,.04)"' : '') + '><td><b>' + r[1] + '</b><div style="font-size:10.5px;color:#8b93a6">' + r[2] + '</div></td>' +
+            '<td class="num">' + b.hits + '/' + S.n_counties + '</td><td class="num">' + b.mae.toFixed(1) + '</td><td class="num">' + b.rmse.toFixed(1) + '</td><td class="num">' + b.margin_mae.toFixed(1) + '</td>' +
+            '<td>' + b.wrong.map(cn).join('、') + '</td></tr>';
+        }).join('') + '</table></div>';
+      h += '<div class="meta">' + T('誤差單位都是百分點。模型的得票率誤差大約是只用民調的三分之二、照 2022 的三分之一；民調平均多猜錯新北，2022 結果多猜錯宜蘭、新竹縣、彰化、澎湖。',
+        'Errors in points. The model’s share error is about two-thirds of polls-only and a third of the 2022 carry-over; the poll average also missed New Taipei, the 2022 carry-over also missed Yilan, Hsinchu County, Changhua and Penghu.') + '</div>';
+    }
 
     // 3. the misses
     var miss = counties.filter(function (c) { return !c.hit; });
@@ -199,11 +220,11 @@
     // 6. method
     h += '<div class="note">' + T(
       '<b>怎麼比</b>：預測是 11/18 封關前網站上最後公開的版本（' + R.polls + ' 筆民調；民調依機構傾向與委託方降權、時間衰減加權，部分候選人參考歷史得票），模型選前凍結、選後沒有改、也沒有重算。結果是中選會的最終得票（新竹縣中選會網站停在 491/492 所，照實使用）。<br>' +
-      '<b>指標</b>：MAE／RMSE 是預測得票率中位數與實際得票率的差；前兩名差距是預測的領先幅度與實際領先幅度的差；Brier 分數是當選機率與實際結果（當選 1、落選 0）差的平方平均；80% 區間是模擬結果的第 10 到第 90 百分位。<br>' +
+      '<b>指標</b>：MAE／RMSE 是預測得票率中位數與實際得票率的差；前兩名差距是預測的領先幅度與實際領先幅度的差；Brier 分數用標準的多類別定義：每個縣市把每位候選人「當選機率 − 實際結果（當選 1、落選 0）」的平方加總（0 到 2），再對 22 縣市平均；Log loss 是實際當選人被給的機率取 −ln 後的平均，對「很有把握卻猜錯」罰得特別重。兩者都附上「每縣市主要候選人平分機率」的基準作對照。沒有任何落選人被給到 90% 以上的當選機率（最高是雲林張嘉郡 ' + Math.round(S.max_loser_prob * 100) + '%）。80% 區間是模擬結果的第 10 到第 90 百分位。<br>' +
       '<b>主要發現</b>：區間太窄（涵蓋率 ' + Math.round(S.cover[0] / S.cover[1] * 100) + '%，應約 80%），代表模型對單一縣市的不確定性估得不夠；中位數整體沒有黨派偏差（平均偏差 ' + (S.bias > 0 ? '+' : '') + S.bias.toFixed(1) + ' 個百分點）。<br>' +
       '這是研究性質的推估，不是官方數字；本頁只為事後檢討，不代表對任何候選人或政黨的立場。',
       '<b>Method</b>: the forecast is the last version public before the 11/18 blackout (' + R.polls + ' polls; polls discounted by pollster lean and sponsor, weighted by recency, some candidates anchored on past results). The model was frozen before the vote and was neither changed nor re-run afterwards. Results are the CEC final counts (Hsinchu County’s CEC page stopped at 491/492 stations and is used as is).<br>' +
-      '<b>Metrics</b>: MAE / RMSE compare the forecast median share with the actual share; the margin error compares the forecast lead with the actual lead; the Brier score is the mean squared difference between win chance and outcome (1 won, 0 lost); the 80 % range is the 10th–90th percentile of the simulations.<br>' +
+      '<b>Metrics</b>: MAE / RMSE compare the forecast median share with the actual share; the margin error compares the forecast lead with the actual lead; the Brier score uses the standard multi-class form — per county, the sum over candidates of (win chance − outcome)² with 1 for the winner and 0 otherwise (0 to 2), averaged over the 22 counties; log loss is the mean of −ln(the chance given to the actual winner), which punishes confident misses hardest. Both are shown against an equal-odds baseline (the main candidates in each county given equal chances). No losing candidate had been given 90 % or more (the highest was ' + Math.round(S.max_loser_prob * 100) + ' %, Yunlin). The 80 % range is the 10th–90th percentile of the simulations.<br>' +
       '<b>Main finding</b>: the ranges were too narrow (' + Math.round(S.cover[0] / S.cover[1] * 100) + ' % coverage against ~80 %): the model underrated the uncertainty of single races. The medians show no party lean overall (mean bias ' + (S.bias > 0 ? '+' : '') + S.bias.toFixed(1) + ' points).<br>' +
       'A research estimate, not official figures; this page is a post-election review and takes no side.') + '</div>';
 
