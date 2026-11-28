@@ -140,6 +140,22 @@
   .cb .det select { font: inherit; font-size: 11px; background: #11151f; color: #e7eaf0; border: 1px solid rgba(255,255,255,.2); border-radius: 4px; margin: 2px 0 4px; }
   .cb .det .k { display: grid; grid-template-columns: 16px 1fr 62px; gap: 4px; }
   .cb .det .gap { color: #f5c518; }
+  /* followed council districts (user 2026-11-27: 「點開縣市的左方小卡可能加入關注市議員選區的選項而不是選單只能選看一個」): ☆ by the
+     menu follows the shown district; followed ones are listed above the menu, one line each (the edge: last seat vs first
+     loser and the gap), a click opens its full list; remembered (localStorage lf_dpins) */
+  .cb .det .dsr { display: flex; align-items: center; gap: 6px; }
+  .cb .det .dp { cursor: pointer; user-select: none; }
+  .cb .det .dp.on { color: #f5c518; }
+  .cb .det .fl:empty { display: none; }
+  .cb .det .fl { margin: 2px 0 4px; }
+  .cb .det .fr { cursor: pointer; padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,.12); }
+  .cb .det .fr .fh { display: flex; gap: 5px; align-items: baseline; white-space: nowrap; overflow: hidden; }
+  .cb .det .fr .fh .dp { color: #f5c518; flex: 0 0 auto; }
+  .cb .det .fr .fh .fn { flex: 0 0 auto; color: #e7eaf0; }
+  .cb .det .fr .fh .fe { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #9aa1b2; }
+  .cb .det .fr .fb { padding: 2px 0 2px; cursor: default; }
+  /* the followed list folds (user 2026-11-27: 「要可以摺疊」): a header 「▾ 關注選區 (N)」; folded state remembered (lf_dfold) */
+  .cb .det .fhd { cursor: pointer; user-select: none; color: #f5c518; padding: 1px 0; }
   .col:hover .cb:not(.pin-on):not(.toss-on):not(.hov-on) { animation: cbGlow .9s forwards; }
   .col:hover .cb:not(.pin-on):not(.toss-on):not(.hov-on) .cn { animation: cnGlow .9s forwards; }
   .col:hover .cb:not(.pin-on):not(.toss-on):not(.hov-on) .bar { animation: barGlow .9s forwards; }
@@ -364,7 +380,7 @@
 </div>
 <div id="ph-list"></div>
 <script src="data_liveflow.js?v=20261108d"></script>
-<script src="data_liveflow_r2022.js?v=20261105b"></script>
+<script src="data_liveflow_r2022.js?v=20261127a"></script>
 <script src="data_council_seats_2026.js?v=20261107a"></script>
 <script src="data_turnout_prior.js?v=20261108a"></script>
 <script src="data_call_model.js?v=20261108e"></script>
@@ -492,7 +508,12 @@
         var sy0 = top - 2, barH = 12;
         var wC = 2 * half - lw, rM = Math.min(7, (wC / LF_SEATS.mayor.length) / 2 - 2), yM = sy0 + rM + 1, yC0 = yM + rM + 10 + barH / 2;
         STRIP = { lang: lang, top: top, x0: cx - half, x1: cx + half, xs: cx - half + lw, y0: sy0, yM: yM, rM: rM, wC: wC, barH: barH, yC0: yC0, y1: yC0 + barH / 2 + 16 };
-        if (RF0) { STRIP.rfY = STRIP.y1 + 4; STRIP.y1 = STRIP.rfY + 6 + 15; }   // the referendum row: a 6 px bar and its numbers
+        // one race's rows only, flat view (user 2026-11-23: 「公投的平面的那一長條在縣市長層隱藏…這樣台灣地圖可以再放大些」「同樣公投的平面就不給
+        // 縣市長跟議員只給公投」「但只僅限平面」): 縣市長 mode = the mayors' row and the council bar, no referendum row; 公投 mode = the
+        // referendum row alone, at the top (the mayors' / council seats' places moved off screen, nothing drawn or hovered there).
+        // The map takes the freed height. The 3D view keeps everything. A race change re-lays the page (STRIP.race, see frame)
+        var sRace = raceOf(FEEDS[SRC]); STRIP.race = sRace;   // (no feed yet — 2026 before the night: 縣市長, like the rest of the page; not the stored race)
+        if (RF0 && sRace === 'R') { STRIP.refOnly = true; STRIP.yM = STRIP.yC0 = -200; STRIP.rfY = sy0 + 2; STRIP.y1 = STRIP.rfY + 6 + 4; }
         mapTop = STRIP.y1 + 16; mapH = Math.max(120, SH - hudH - mapTop - 4);
       }
     }
@@ -1146,7 +1167,7 @@
 
   // ---------- data sources ----------
   // a "feed" = one source's numbers through time: votes(layer, key) at the current clock
-  // r2022: CEC-final numbers (ltn_cec) + TVBS / SETN snapshots, the counting timeline simulated; 2026: data_live2026.js
+  // r2022: CEC-final numbers (ltn_cec) + the simulated TV stations (addSimTv), the counting timeline simulated; 2026: data_live2026.js
   var FILTER = null, MODE = 'r2022', SRC = null, FEEDS = {}, CLOCK = 0, PLAY = true, SPEED = 1, LAST_TS = null;
   var SIM = { start: 16 * 60, end: 22.5 * 60, secs: 150 };   // 16:00 → 22:30 in 150 s at 1×
   var MAYOR_END = 270, COUNCIL_LAG = 40;                       // minutes after 16:00 (mayor done by 20:30; council from 16:40)
@@ -1207,7 +1228,7 @@
       var srcs = R.LIVE_TRACK_ED[dk].sources;
       Object.keys(srcs).forEach(function (k) { var f = feed(k); f.label = srcs[k].label; f.C[dk] = { cands: dedupe(srcs[k].cands), final: R.LIVE_TRACK_ED[dk].final }; });
     });
-    // the CEC-final source's township split, reused to spread a snapshot-only source (TVBS / SETN, county level) over townships
+    // the CEC-final source's township split, reused to spread a snapshot-only source (county level; none left since SETN went 2026-11-27) over townships
     var base = feeds.ltn_cec;
     // early-count bias (user 2026-11-07: 「早開票偏差，尤其激烈區開始大概會緊咬」, mild): each candidate's running count is
     // final × progress^a — a < 1 counted early, a > 1 late; exact at 100% and never decreasing. A county leans one way
@@ -1282,7 +1303,61 @@
       f.finalAt = function (layer, key, snap) { return f.sim && snap.prog[key] != null && snap.prog[key] >= 0.999; };
       f.lastTs = function () { var m = null; Object.keys(f.M).forEach(function (cc) { if (f.M[cc].at != null) m = Math.max(m || 0, f.M[cc].at); }); return m; };
     });
+    // 模擬電視台 (user 2026-11-27: 「2022 排練把三立那份拿掉，改用同一套模擬台」): the same model as build_live2026_replay.py
+    // add_sim_tv — synthetic, not any real station: starts 16:03–16:15, ~45% of the final at 17:24, a Weibull rise (k 2.5) to a
+    // 101–108% peak, corrected from the CEC count's 85% to exactly the CEC final the minute that count is done; candidate shares
+    // = final share + a seeded deviation shrinking as the count grows; shown progress capped at 99% until then. Mayors only;
+    // townships get the county total spread by the CEC-final township split.
+    if (base) addSimTv(feeds, base, pAt, feed);
     return feeds;
+  }
+  var SIMTV = [['sim_a', '模擬電視台 A（合成資料）', 1.10], ['sim_b', '模擬電視台 B（合成資料）', 1.0], ['sim_c', '模擬電視台 C（合成資料）', 0.85]];
+  function seedOf(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function addSimTv(feeds, base, pAt, feed) {
+    var N = Math.round(SIM.end - SIM.start), CS = {};
+    // per county: the CEC-final source's share counted, minute by minute from SIM.start, and its township split
+    Object.keys(base.M).forEach(function (cc) {
+      var tcs = Object.keys(LF_TOWNS).filter(function (tc) { return LF_TOWNS[tc][0] === cc && base.T[tc]; });
+      var ws = tcs.map(function (tc) { return sumC(base.T[tc]); }), W = ws.reduce(function (a, b) { return a + b; }, 0), arr = [];
+      for (var m = 0; m <= N; m++) { var s = 0; for (var i = 0; i < tcs.length; i++) s += ws[i] * pAt(tcs[i], SIM.start + m); arr.push(W ? s / W : 0); }
+      if (W && arr[N] >= 0.999) CS[cc] = { arr: arr, tcs: tcs, frac: ws.map(function (w) { return w / W; }) };
+    });
+    SIMTV.forEach(function (st) {
+      var f = feed(st[0]), P = {};
+      f.label = st[1];
+      Object.keys(CS).forEach(function (cc) {
+        var fin = base.M[cc].cands, tot = sumC(fin); if (!tot) return;
+        var r = mulberry32(seedOf(st[0] + '-' + cc));
+        var gs = function () { var u = r() || 1e-9, v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+        var arr = CS[cc].arr, iEnd = 0, iFix = -1;
+        while (arr[iEnd] < 0.999) iEnd++;
+        for (var i = 0; i <= iEnd; i++) if (arr[i] >= 0.85) { iFix = i; break; }
+        if (iFix < 0) iFix = iEnd;
+        var start = SIM.start + (3 + r() * 12) / st[2], peak = 1.01 + r() * 0.07;
+        var a = Math.min(0.65, Math.max(0.2, (0.45 + 0.08 * gs()) * st[2]));
+        var share = fin.map(function (c) { return c.v / tot; });
+        P[cc] = { fin: fin, tot: tot, share: share, start: start, peak: peak, tEnd: SIM.start + iEnd, tFix: SIM.start + iFix,
+                  tau: (17 * 60 + 24 - start) / Math.pow(-Math.log(1 - a / peak), 1 / 2.5),
+                  dev: share.map(function (s) { return gs() * 0.15 * Math.sqrt(s * (1 - s)); }) };
+        f.M[cc] = { cands: fin, at: null, final: true };
+      });
+      f.votesAt = function (t) {
+        var out = { T: {}, M: {}, C: {}, prog: {} };
+        Object.keys(P).forEach(function (cc) {
+          var q = P[cc], arr = CS[cc].arr, m = Math.max(0, Math.min(N, Math.floor(t - SIM.start)));
+          var g = t > q.start ? q.peak * (1 - Math.exp(-Math.pow((t - q.start) / q.tau, 2.5))) : 0, p = Math.max(g, arr[m]), done = t >= q.tEnd;
+          if (done) p = 1; else if (t > q.tFix) { var w = (t - q.tFix) / (q.tEnd - q.tFix); p = (1 - w) * p + w; }
+          var amp = Math.max(0, 1 - Math.min(p, 1)), sh = q.share.map(function (s, i) { return Math.max(0, s + q.dev[i] * amp); });
+          var z = sh.reduce(function (x, y) { return x + y; }, 0) || 1;
+          out.M[cc] = q.fin.map(function (c, i) { return { n: c.n, v: done ? c.v : Math.round(q.tot * p * sh[i] / z) }; });
+          out.prog[cc] = done ? 1 : Math.min(0.99, p);
+          CS[cc].tcs.forEach(function (tc, i) { var k = CS[cc].frac[i]; out.T[tc] = out.M[cc].map(function (c) { return { n: c.n, v: Math.round(c.v * k) }; }); });
+        });
+        return out;
+      };
+      f.finalAt = function (layer, key, snap) { return snap.prog[key] != null && snap.prog[key] >= 0.999; };
+      f.lastTs = function () { return null; };
+    });
   }
 
   // 2026 重播 (user 2026-11-09: 開票當晚不即時上線 —「開完了再把真實的過程上線」): v2/data_liveflow_r2026.js, made by
@@ -1295,13 +1370,14 @@
     var FR = R.frames || [], feeds = {};
     Object.keys(R.src || {}).forEach(function (k) {
       var S = R.src[k], f = feeds[k] = { key: k, label: S.label, ts: null, T: {}, C: {}, M: {}, year: String(R.year || '2026'), sim: true, replay: true };
-      function cursor() { return { i: 0, V: { M: {}, T: {}, C: {} }, P: {}, F: {} }; }
+      function cursor() { return { i: 0, V: { M: {}, T: {}, C: {} }, P: {}, F: {}, R: null }; }
       function advance(cur, t) {
         for (; cur.i < FR.length && FR[cur.i].t <= t; cur.i++) {
           var x = FR[cur.i].s[k]; if (!x) continue;
           ['M', 'T', 'C'].forEach(function (L) { if (x[L]) Object.keys(x[L]).forEach(function (key) { cur.V[L][key] = x[L][key]; }); });
           if (x.P) Object.keys(x.P).forEach(function (key) { cur.P[key] = x.P[key]; });
           if (x.F) x.F.forEach(function (key) { cur.F[key] = 1; });
+          if (x.R) cur.R = x.R;   // 公投 [同意, 不同意]（2026-11-28 使用者「做」）
         }
       }
       function cands(L, key, vec, fin) {
@@ -1316,7 +1392,7 @@
       f.votesAt = function (t) {
         if (cur.i && t < FR[cur.i - 1].t) cur = cursor();   // played back / restarted
         advance(cur, t);
-        var out = { T: {}, M: {}, C: {}, prog: {}, fin: {} };
+        var out = { T: {}, M: {}, C: {}, prog: {}, fin: {}, R: cur.R };
         Object.keys(cur.F).forEach(function (key) { out.fin[key] = 1; });
         function prog(L, key, cs, fin) { var p = cur.P[L + key]; if (p && p[1]) return p[0] / p[1]; var d = sumC(fin); return d ? sumC(cs) / d : 0; }
         Object.keys(cur.V.M).forEach(function (cc) { var cs = cands('M', cc, cur.V.M[cc]); if (!cs) return; out.M[cc] = cs; out.prog[cc] = prog('M', cc, cs, f.M[cc] && f.M[cc].cands); });
@@ -1349,13 +1425,24 @@
     SIM.start = r.start; SIM.end = r.end; SIM.secs = r.secs;
   }
 
-  // 2026: data_live2026.js, re-read every 60 s; each source's latest numbers (no timeline: deltas between reads fly)
+  // 2026: data_live2026.js, checked every 5 s locally / 30 s public (LIVE_EVERY); each source's latest numbers (no timeline: deltas between reads fly)
   var LIVE = null;
   // ?livefile=data_live2026_2022rehearsal.js.bak tests this path with the rehearsal file (same-origin data_live2026* only)
   var LIVEFILE = (function () { var m = /[?&]livefile=(data_live2026[\w.]*)/.exec(location.search); return m ? m[1] : 'data_live2026.js'; })();
-  function loadLive(cb) {
-    fetch('../' + LIVEFILE + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (txt) {
+  // 2026-11-28 使用者「好」：本機每 5 秒看一次資料檔、公開網站每 30 秒；內容跟上次一樣就什麼都不做（不重畫、不跑動畫）
+  var LIVE_EVERY = /^(127\.0\.0\.1|localhost|\[::1\])?$/.test(location.hostname) ? 5000 : 30000;
+  var LIVE_TXT = null, LIVE_BUSY = false;
+  // poll = true：定時檢查用。檔案沒變、讀不到、或剛好寫到一半解析失敗，都保留目前的數字，不呼叫 cb
+  function loadLive(cb, poll) {
+    if (poll && LIVE_BUSY) return;
+    LIVE_BUSY = true;
+    fetch('../' + LIVEFILE + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }).then(function (txt) {
+      LIVE_BUSY = false;
+      if (poll && txt === LIVE_TXT) return;
+      var prevTxt = LIVE_TXT; LIVE_TXT = txt;
+      try {
       var o = new Function(txt + '\n;return { CC: LIVE_TRACK_CC, TC: LIVE_TRACK_TC, ED: LIVE_TRACK_ED };')();
+      } catch (e) { if (poll) { LIVE_TXT = prevTxt; return; } throw e; }
       var feeds = {};
       function feed(key) { return feeds[key] || (feeds[key] = { key: key, label: '', ts: null, T: {}, C: {}, M: {}, year: '2026', sim: false, fin: {}, warn: {}, prog: {} }); }
       [['CC', 'M'], ['TC', 'T'], ['ED', 'C']].forEach(function (pair) {
@@ -1363,7 +1450,15 @@
         Object.keys(tab).forEach(function (key) {
           var e = tab[key], srcs = (e && e.sources) || {};
           Object.keys(srcs).forEach(function (k) {
-            var s = srcs[k], f = feed(k); f.label = s.label; if (s.ts && (!f.ts || s.ts > f.ts)) f.ts = s.ts;
+            var s = srcs[k], f = feed(k);
+            // 公投（2026-11-28 使用者「還是抓吧」）：抓資料的程式把全國同意／不同意放在縣市長層的 'REF' 這個 key
+            // （候選人「同意」「不同意」），這裡轉成 refCalc 讀的 f.R，不當成縣市
+            if (pair[0] === 'CC' && key === 'REF') {
+              var rv = function (nm) { var c = (s.cands || []).filter(function (x) { return x.n === nm; })[0]; return c ? +c.v || 0 : 0; };
+              f.R = { agree: rv('同意'), disagree: rv('不同意') }; if (!f.label) f.label = s.label;
+              return;
+            }
+            f.label = s.label; if (s.ts && (!f.ts || s.ts > f.ts)) f.ts = s.ts;
             if (s.ts) (f.tsBy || (f.tsBy = {}))[pair[1] + key] = s.ts;   // per county / district, for 各家比較's 「N 分鐘前」
             s.cands = dedupe(s.cands); f[pair[1]][key] = s.cands;
             if (s.prog) f.prog[key] = s.prog;
@@ -1386,7 +1481,7 @@
         f.lastTs = function () { return f.ts; };
       });
       LIVE = feeds; cb && cb();
-    }).catch(function (e) { console.warn('[live-flow] data_live2026.js unreadable:', e); LIVE = {}; cb && cb(); });
+    }).catch(function (e) { LIVE_BUSY = false; console.warn('[live-flow] data_live2026.js unreadable:', e); if (poll) return; LIVE = {}; cb && cb(); });
   }
 
   // ---------- state from a snapshot ----------
@@ -1456,6 +1551,23 @@
           batch(k, d, f.sim, function (v) { spawnLine(tc, SEAT_BY[LF_TOWNS[tc][0]][0], p, v, !f.sim); });
         });
       });
+      // 只有縣市總數、沒有鄉鎮票數的來源（2026 開票夜每一家都是；使用者「中選會沒有光粒子動畫」）：縣市票數增加的部分，
+      // 從這個縣市隨機一個鄉鎮飛出去，顏色、數量規則跟鄉鎮的一樣
+      if (lr === 'M') {
+        var hasT = {}; Object.keys(snap.T).forEach(function (tc) { if (LF_TOWNS[tc]) hasT[LF_TOWNS[tc][0]] = 1; });
+        Object.keys(snap.M).forEach(function (cc) {
+          if (hasT[cc] || !SEAT_BY[cc]) return;
+          var tcs = CC_TOWNS[cc] || (CC_TOWNS[cc] = Object.keys(LF_TOWNS).filter(function (tc) { return LF_TOWNS[tc][0] === cc; }));
+          if (!tcs.length) return;
+          var a = {}; (PREV.M[cc] || []).forEach(function (c) { a[c.n] = c.v; });
+          var mp = MAINP[cc] || {};
+          snap.M[cc].forEach(function (c) {
+            var d = c.v - (a[c.n] || 0); if (d <= 0) return;
+            var p = pc('M', cc, c, f.year) || 'other'; p = mp[p] ? p : 'other'; var k = 'M' + cc + p;
+            batch(k, d, f.sim, function (v) { spawnLine(tcs[Math.floor(Math.random() * tcs.length)], SEAT_BY[cc][0], p, v, !f.sim); });
+          });
+        });
+      }
       if (lr === 'C') Object.keys(snap.C).forEach(function (dk) {
         var a = {}; (PREV.C[dk] || []).forEach(function (c) { a[c.n] = c.v; });
         var tcs = LF_SEATS.council[dk] ? LF_SEATS.council[dk][2] : [];
@@ -1500,6 +1612,7 @@
     var w = Math.max(4, side === 'a' ? wa : wd), x0 = side === 'a' ? S.xs : S.xs + S.wC - w;   // agree from the left end, disagree from the right
     return { x: x0 + Math.random() * w, y: S.rfY + 3, cc: null };
   }
+  var CC_TOWNS = {};   // 縣市 → 它的鄉鎮（縣市層粒子用）
   function batch(k, d, sim, send) {
     ACC[k] = (ACC[k] || 0) + d;
     var now = performance.now();
@@ -1533,14 +1646,20 @@
   function frame(now) {
     var dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
     var f = FEEDS[SRC];
-    if (f) {
-      if (f.sim) {
-        if (PLAY) { simT = Math.min(SIM.end, simT + dt * SPEED * (SIM.end - SIM.start) / SIM.secs); }
-        if (PLAY || !PREV) tick(f, simT, true);
-      } else if (now > nextLive) {
-        nextLive = now + 60000;
-        loadLive(function () { FEEDS = LIVE; renderTabs(); if (FEEDS[SRC]) tick(FEEDS[SRC], null, true); });
-      }
+    if (f && f.sim) {
+      if (PLAY) { simT = Math.min(SIM.end, simT + dt * SPEED * (SIM.end - SIM.start) / SIM.secs); }
+      if (PLAY || !PREV) tick(f, simT, true);
+    } else if ((f || MODE === 'live') && now > nextLive) {
+      // 2026 開票: re-read every 60 s even before any source has reported (user 2026-11-27 「改」: a page opened before the
+      // count used to stay empty until a manual reload). The first source to appear starts from zero (restart), so its
+      // votes fly in like every later delta (「跟動畫」)
+      nextLive = now + LIVE_EVERY;
+      loadLive(function () {
+        var had = !!FEEDS[SRC];
+        FEEDS = LIVE; renderTabs();
+        if (!FEEDS[SRC]) return;
+        if (had) tick(FEEDS[SRC], null, true); else restart();
+      }, true);
     }
     // lines: each one a comet along its arc — bright head, tail fading to nothing — that slides into the seat and is gone.
     // Redrawn from scratch every frame: no accumulating trail canvas, so nothing is left behind (user 2026-11-05: the old
@@ -1825,9 +1944,11 @@
       // the row names only, dim — no seat totals: the dots count themselves and the bar names each party's seats (user
       // 2026-11-09: 「縣市長 22 議員 910 這些還要保留嗎？還是很亂」→「好」)
       var S = STRIP, fsS = 10; gTop.font = '600 ' + fsS + 'px system-ui, sans-serif'; gTop.textAlign = 'left'; gTop.fillStyle = '#7d8496';
+      if (!S.refOnly) {
       gTop.globalAlpha = mayorDim(); gTop.fillText(T('縣市長', 'Mayors'), S.x0, S.yM + fsS * 0.35); gTop.globalAlpha = 1;
       gTop.globalAlpha = mayorDim(); gTop.fillText(T('議員', 'Council'), S.x0, S.yC0 + fsS * 0.35); gTop.globalAlpha = 1;
       drawCouncilBar();
+      }
       if (S.rfY) drawRefRow();
       gTop.textAlign = 'center';
     }
@@ -1917,15 +2038,14 @@
     gTop.fillText(T(RF0.short[0], RF0.short[1]), S.x0, S.rfY + 3 + 10 * 0.35);
     gTop.fillStyle = '#2e3340'; gTop.fillRect(S.xs, S.rfY, S.wC, 6);
     gTop.font = '500 9.5px system-ui, sans-serif'; gTop.textAlign = 'center';
-    if (!R) { gTop.fillStyle = '#6b7280'; gTop.fillText(RF0.votable ? T('尚無開票數字', 'No numbers yet') : T('投票權人總額公告後顯示', 'Shown once the electorate is announced'), S.xs + S.wC / 2, S.rfY + 17); return; }
+    if (!R) return;   // (the 「尚無開票數字」 / share line under the bar: gone 2026-11-23, the bottom totals carry the numbers)
     var o = REFNOW, wa = Math.min(1, o.a / R.votable) * S.wC, wd = Math.min(1, o.d / R.votable) * S.wC;
     gTop.fillStyle = '#3fae6a'; gTop.fillRect(S.xs, S.rfY, wa, 6);
     gTop.fillStyle = '#e05a5a'; gTop.fillRect(S.xs + S.wC - Math.min(wd, S.wC - wa), S.rfY, Math.min(wd, S.wC - wa), 6);   // disagree from the right end (user 2026-11-09: 「支持反對要不要也一個放一側？」)
     var tx = S.xs + S.wC * (R.rule === 'half' ? 0.5 : 0.25);
     gTop.fillStyle = '#f5c518'; gTop.fillRect(tx - 0.75, S.rfY - 3, 1.5, 12);
-    gTop.fillStyle = '#b8bfcc'; var txt = refText(o, true);
-    gTop.fillText(txt, S.xs + S.wC / 2, S.rfY + 17);
-    if (o.met) { var tw = gTop.measureText(txt).width; gTop.fillStyle = '#f5c518'; gTop.font = '700 9.5px system-ui, sans-serif'; gTop.textAlign = 'left'; gTop.fillText(T(' 達門檻', ' passes'), S.xs + S.wC / 2 + tw / 2, S.rfY + 17); }
+    // (the 「同意 53.0%・不同意 47.0%　同意 564.7 萬／門檻 962.0 萬」 line under the bar: removed, user 2026-11-23: 「大票數直接都改到
+    // 左右兩邊公投長條下的比例小字就移除」 — agree / disagree, their shares and the threshold are the bottom totals in 公投 mode)
   }
 
   // the referendum in the 3D view (user 2026-11-09: 「3d 我反而覺得不必刻意跟著改，公投反而可以加在半圓形圖最外匡圓弧狀」):
@@ -2024,8 +2144,26 @@
       var a = 0, b = 0; Object.keys(LF_TOWNS).forEach(function (tc) { if (LF_TOWNS[tc][0] === cc && f.prog[tc]) { a += f.prog[tc][0]; b += f.prog[tc][1]; } });
       if (b) nRep = [a, b];
     }
-    var yr = String(f.year) === '2022' ? '2022' : '2026';
-    var r = LiveTurnout.call(CALL_MODEL, yr, TURNOUT_PRIOR[yr], TO_CACHE.ctowns, cc, ccOfTc, nRep);
+    var yr = String(f.year) === '2022' ? '2022' : '2026', ctowns = TO_CACHE.ctowns;
+    // 2026 開票夜沒有任何來源給鄉鎮數字，只有縣市總數＋已開投票所比例（中選會、CTWANT；2026-11-28 使用者「預測誰當選也沒有喊」）：
+    // 把縣市各候選人的票按各鄉鎮的預估有效票比例攤到鄉鎮、每個鄉鎮的已開比例都用縣市的，模型照常算（已開比例準，
+    // 早開偏差那一項照樣加上）。沒有已開比例的來源（電視台）不做，維持不喊
+    var hasTown = ctowns.some(function (t) { return LF_TOWNS[t.tc] && LF_TOWNS[t.tc][0] === cc; });
+    var cp = f.prog && f.prog[cc];
+    if (!hasTown && !f.sim && cp && cp[1] && snap.M[cc] && snap.M[cc].length) {
+      var pr = TURNOUT_PRIOR[yr] || {}, kmc0 = keyMap(cc), cby = {}, prC = 0, sh = Math.min(1, cp[0] / cp[1]);
+      snap.M[cc].forEach(function (c) { var k = kmc0[c.n] || ckey(cc, c, f.year); cby[k] = (cby[k] || 0) + c.v; });
+      var tcs = Object.keys(pr).filter(function (tc) { return ccOfTc(tc) === cc; });
+      tcs.forEach(function (tc) { prC += pr[tc]; });
+      if (prC) {
+        ctowns = ctowns.concat(tcs.map(function (tc) {
+          var by = {}, w = pr[tc] / prC; for (var k in cby) by[k] = cby[k] * w;
+          return { tc: tc, s: sh, by: by };
+        }));
+        nRep = [cp[0], cp[1]];
+      }
+    }
+    var r = LiveTurnout.call(CALL_MODEL, yr, TURNOUT_PRIOR[yr], ctowns, cc, ccOfTc, nRep);
     if (r) {   // the candidates behind the keys, from the county numbers
       var kmc = keyMap(cc); (snap.M[cc] || []).forEach(function (c) { var k = kmc[c.n]; if (k === r.lead) r.leadName = c.n; if (k === r.second) r.secondName = c.n; });
       r.party = CALL_PARTY[r.lead] ? r.lead : 'ind';
@@ -2363,7 +2501,12 @@
   try { var lfRace = localStorage.getItem('lf_race'); if (lfRace === 'R') RACE = lfRace; } catch (e) {}
   function refOf(f) { return typeof REFERENDUM !== 'undefined' && f ? REFERENDUM[String(f.year) === '2022' ? '2022' : '2026'] : null; }
   function refTownsOk(f) { var R = refOf(f); return !!(f && ((f.sim && R && R.T) || f.RT)); }
-  function raceOf(f) { return RACE === 'R' && !refTownsOk(f) ? 'M' : RACE; }
+  // 縣市長 / 公投 are both always there (user 2026-11-23: 「2026 也有公投，所以縣市長跟公投兩個模式是『常駐』的」): 公投 needs only a
+  // referendum for the year on screen (2022 修憲複決, 2026 公投第22案), not its township numbers — before any number the
+  // 公投 mode shows its empty bar / no lights. (Before: 公投 fell back to 縣市長 until township numbers existed, and the
+  // button was hidden.) The year with no feed yet: the mode's
+  function refAvail(f) { return typeof REFERENDUM !== 'undefined' && !!(f ? refOf(f) : REFERENDUM[MODE === 'r2022' ? '2022' : '2026']); }
+  function raceOf(f) { return RACE === 'R' && !refAvail(f) ? 'M' : RACE; }
   function raceT(f, snap) {   // → { T: {tc: [{n, v, p}]}, prog: {tc: share counted} | null } for the race on screen
     var r = raceOf(f);
     if (r === 'M' || !snap) return { T: snap ? snap.T || {} : {}, prog: null };
@@ -2383,9 +2526,10 @@
     else if (f.RT) Object.keys(f.RT).forEach(function (tc) { if (LF_TOWNS[tc]) acc[tc] = { a: f.RT[tc][0], d: f.RT[tc][1] }; });
     else {
       var R = refOf(f), all = 0, fin = 0;   // townships without a mayoral count of their own (2022 嘉義市) follow the national share
-      Object.keys(f.M).forEach(function (cc) { fin += sumC(f.M[cc].cands); all += sumC(snap.M[cc]); });
+      if (!R || !R.T || !f.sim) R = null;   // (no township numbers — a live night before the referendum's are wired: nothing yet)
+      if (R) Object.keys(f.M).forEach(function (cc) { fin += sumC(f.M[cc].cands); all += sumC(snap.M[cc]); });
       var nat = fin ? all / fin : 0;
-      Object.keys(R.T).forEach(function (tc) {
+      if (R) Object.keys(R.T).forEach(function (tc) {
         if (!LF_TOWNS[tc]) return;
         var k = f.T && f.T[tc] ? tcProg(f, snap, tc) : nat; if (k <= 0) return;
         acc[tc] = { a: R.T[tc][0] * k, d: R.T[tc][1] * k }; pr[tc] = k; pw[tc] = 1;
@@ -2617,10 +2761,29 @@
     el.innerHTML = '<div class="hd"><span class="nm"></span><span class="ct"></span><span class="pin"></span><span class="tg">▸ ' + T('選區', 'Dist.') + '</span></div>' +
       '<div class="cn c0"><span></span><span></span></div><div class="bt"><div class="bar b0"></div></div>' +
       '<div class="cn c1"><span></span><span></span></div><div class="bt"><div class="bar b1"></div></div>' +
-      '<div class="cx"></div><div class="mx"></div><div class="det"><select>' + dks.map(function (dk) {
+      '<div class="cx"></div><div class="mx"></div><div class="det"><div class="fl"></div><div class="dsr"><select>' + dks.map(function (dk) {
         return '<option value="' + dk + '">' + T('第' + (+dk.split('_')[1]) + '選區（應選' + LF_SEATS.council[dk][1] + '席）', 'District ' + (+dk.split('_')[1]) + ' (' + LF_SEATS.council[dk][1] + ' seats)') + '</option>'; }).join('') +
-      '</select><div class="list"></div></div>';
-    el.querySelector('select').onchange = function () { CDIST[cc] = this.value; lastHud = 0; };
+      '</select><span class="dp"></span></div><div class="list"></div></div>';
+    el.querySelector('select').onchange = function () { CDIST[cc] = this.value; lastHud = 0; dpShow(el, cc); var fq = FEEDS[SRC]; if (fq && PREV && !(raceOf(fq) === 'R' && cc === FILTER)) distBlocks(el, cc, fq, PREV); };   // redraw this card now, also on a paused clock
+    // ☆ follows the shown district; in the followed list ★ unfollows and a click on the line opens / closes its full list
+    var det0 = el.querySelector('.det');
+    det0.addEventListener('pointerdown', function () { el._down = true; });
+    var up = function () { if (!el._down) return; el._down = false; if (el._stale) { var st = el._stale; el._stale = null; setTimeout(function () { distBlocks(el, cc, st[0], st[1]); }, 0); } };
+    det0.addEventListener('pointerup', up); det0.addEventListener('pointercancel', up); det0.addEventListener('pointerleave', up);
+    el.querySelector('.det').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-dpin], .dsr .dp, [data-dopen], [data-dfold]'); if (!t) return;
+      e.stopPropagation();
+      if (t.matches('.dsr .dp') || t.hasAttribute('data-dpin')) {
+        var dk = t.getAttribute('data-dpin') || CDIST[cc], i = DPINS.indexOf(dk);
+        if (i >= 0) DPINS.splice(i, 1); else DPINS.push(dk);
+        try { localStorage.setItem('lf_dpins', JSON.stringify(DPINS)); } catch (er) {}
+      } else if (t.hasAttribute('data-dfold')) {
+        DFOLD[cc] = !DFOLD[cc];
+        try { localStorage.setItem('lf_dfold', JSON.stringify(DFOLD)); } catch (er) {}
+      } else { var k = t.getAttribute('data-dopen'); DOPEN[k] = !DOPEN[k]; }
+      // redraw just this card's lists now (a paused clock does not redraw by itself)
+      dpShow(el, cc); var fq = FEEDS[SRC]; if (fq && PREV && !(raceOf(fq) === 'R' && cc === FILTER)) distBlocks(el, cc, fq, PREV);
+    });
     el.querySelector('.tg').onclick = function () {   // 選區 opens / closes (user: 「選區的filter可以開跟關」)
       el.classList.toggle('open'); this.textContent = (el.classList.contains('open') ? '▾ ' : '▸ ') + T('選區', 'Dist.'); };
     el.querySelector('.nm').textContent = ccName(cc);
@@ -2632,8 +2795,41 @@
       try { localStorage.setItem('lf_pins', JSON.stringify(PINS)); } catch (er) {}
       showPin(); LT_DIRTY = true; if (LIE) drawPillars();   // the map's outline follows
     };
-    el.__showPin = showPin; showPin();
+    el.__showPin = showPin; showPin(); dpShow(el, cc);
     return (CROWS[cc] = el);
+  }
+  // the card's browse list + followed lines — redrawn alone on a click (a whole hud() redraw made opening / closing lag)
+  function distBlocks(el, cc, f, snap) {
+    // while a button is held on the card, leave its lists alone — rewriting them between press and release ate the click
+    // (user 2026-11-27: 「點開跟關掉再次折疊非常卡」, with the clock running); redrawn on release
+    if (el._down) { el._stale = [f, snap]; return; }
+    var list = el.querySelector('.list'), dres = distRes(f, snap, CDIST[cc]);
+    // a followed district closes here (user 2026-11-27: 「點了星星後要關」) — it is listed above, a click there opens it
+    if (DPINS.indexOf(CDIST[cc]) >= 0) setH(list, '<div style="color:#9aa1b2">' + T('已關注，列在上方', 'Followed — listed above') + '</div>');
+    else if (dres) {
+      setH(list, dres.html);
+    } else setH(list, '<div>' + T('這個選區尚無資料', 'No data for this district') + '</div>');
+    // followed districts of this county: one line each (the edge), a click opens the full list
+    var flEl = el.querySelector('.fl'), mine = DPINS.filter(function (k) { return LF_SEATS.council[k] && LF_SEATS.council[k][0] === cc; }).sort();
+    setH(flEl, !mine.length ? '' : '<div class="fhd" data-dfold="1">' + (DFOLD[cc] ? '▸ ' : '▾ ') + T('關注選區（' + mine.length + '）', 'Followed districts (' + mine.length + ')') + '</div>' + (DFOLD[cc] ? '' : mine.map(function (k) {
+      var r = distRes(f, snap, k), no = +k.split('_')[1], st = LF_SEATS.council[k][1];
+      var edge = !r ? T('尚無資料', 'no data yet') : r.called === 'final' ? T('確定', 'final') :
+        // the gap first, so a narrow card cuts the names, not the number
+        r.last && r.loser ? '<span class="gap">' + T('差 ', 'gap ') + fmt(r.gap) + '</span>' + (r.called === 'est' ? T('・推定', ' · projected') : '') + '　' + escH(r.last.n) + ' ' + fmt(r.last.v) + ' vs ' + escH(r.loser.n) + ' ' + fmt(r.loser.v) : '';
+      return '<div class="fr" data-dopen="' + k + '"><div class="fh"><span class="dp" data-dpin="' + k + '" title="' + T('取消關注', 'Unfollow') + '">★</span><span class="fn">' +
+        T('第' + no + '選區（應選' + st + '）', 'Dist. ' + no + ' (' + st + ')') + '</span><span class="fe">' + edge + '</span></div>' +
+        (DOPEN[k] && r ? '<div class="fb">' + r.html + '</div>' : '') + '</div>';
+    }).join('')));
+    dpShow(el, cc);
+  }
+  function setH(node, h) { if (node._h !== h) { node._h = h; node.innerHTML = h; } }   // rewrite only on a change
+  var DPINS = [], DOPEN = {}, DFOLD = {};
+  try { DFOLD = JSON.parse(localStorage.getItem('lf_dfold') || '{}') || {}; } catch (e) { DFOLD = {}; }
+  try { DPINS = JSON.parse(localStorage.getItem('lf_dpins') || '[]') || []; } catch (e) { DPINS = []; }
+  function dpShow(el, cc) {
+    var b = el.querySelector('.dsr .dp'), on = DPINS.indexOf(CDIST[cc]) >= 0;
+    b.textContent = on ? '★' : '☆'; b.classList.toggle('on', on);
+    b.title = on ? T('取消關注這個選區', 'Unfollow this district') : T('關注這個選區（常駐列在上方）', 'Follow this district (kept listed above)');
   }
   var CSIDE = {};   // cc -> 'l' | 'r' | null (no numbers yet: not shown)
   // the phone list (#ph-list): one group per state — the picked county, Toss-up, counting, complete — geographic order
@@ -2706,6 +2902,42 @@
   // governs this election, so both years: women, floor(seats / 4) from 4 seats; 2026 straight from the announcement's
   // column. 原住民 2026: the announcement counts the whole 平地 / 山地 group (one merged cell) — a group of several districts
   // has no per-district quota (grp). Returns who would come in / go out on the current numbers — annotated, never re-ranked
+  // one council district's list down to the first loser + its notes (the card's menu and the followed lines share it);
+  // null when the district has no numbers yet
+  function distRes(f, snap, dk) {
+    var seats = LF_SEATS.council[dk] ? LF_SEATS.council[dk][1] : 0, cd = snap.C[dk];
+    if (!(cd && sumC(cd) > 0)) return null;
+        var all = cd.slice().sort(function (a, b) { return b.v - a.v; }), srt = all.slice(0, seats + 1);
+        var qt = quota(f.year, dk, all, seats), qlab = T('婦女保障', 'women\'s quota');
+        // shown down to the first loser; a quota candidate further down is added below with her / his note
+        qt.ins.forEach(function (n) { if (!srt.some(function (c) { return c.n === n; })) srt.push(all.filter(function (c) { return c.n === n; })[0]); });
+        // 推定當選 (approved 2026-11-07): the edge gap is larger than the votes still to come — those estimated from the share
+        // of polling stations counted (the source's 已開／應開; rehearsal: the simulated share); 確定 = the source's own marks
+        var counted = sumC(cd), pr = f.sim ? snap.prog[dk] : (f.prog && f.prog[dk] ? f.prog[dk][0] / f.prog[dk][1] : null);
+        var remain = pr && pr > 0 ? (pr >= 0.999 ? 0 : counted * (1 / pr - 1)) : null;
+        var gap = all.length > seats && seats ? all[seats - 1].v - all[seats].v : null;
+        var fin = f.finalAt('C', dk, snap), marked = cd.filter(function (c) { return c.e; }).length === seats;
+        var byv = !!(f.byv && f.byv[dk]);
+        var calledBy = fin && (marked || byv) ? 'final' : (remain != null && gap != null && gap > remain && !qt.ins.length ? 'est' : null);
+        var html = srt.map(function (c) {
+          var i = all.indexOf(c), notes = [];
+          if (i === seats - 1) notes.push(T('最後一席', 'last seat'));
+          if (i === seats) notes.push(T('落選頭', 'first loser'));
+          if (qt.ins.indexOf(c.n) >= 0) notes.push(qlab + T('可能當選', ' — would win'));
+          if (qt.outs.indexOf(c.n) >= 0) notes.push(T('可能被', 'may lose to the ') + qlab + T('擠下', ''));
+          if (i < seats && calledBy === 'final' && (c.e || byv)) notes.push(T('確定', 'final'));
+          else if (i < seats && calledBy === 'est') notes.push(T('推定當選', 'projected'));
+          // the name in its party colour (user 2026-11-07: 「市議員還是要按照黨籍給文字顏色」); no party known: the default text colour
+          var cp = pc('C', dk, c, f.year), nmc = ' style="font-weight:400' + (cp ? ';color:' + colorOf(cp) : '') + '"';
+          return '<div class="k"><span>' + (i + 1) + '</span><span><b' + nmc + '>' + c.n + '</b>' + (notes.length ? ' <i>' + notes.join('・') + '</i>' : '') + '</span><span style="text-align:right">' + fmt(c.v) + '</span></div>';
+        }).join('') +
+        (gap != null ? '<div class="gap">' + T('最後一席與落選頭差 ' + fmt(gap) + ' 票', 'Edge gap ' + fmt(gap)) + '</div>' : '') +
+        (remain != null && remain > 0 ? '<div>' + T('尚未開出約 ' + fmt(Math.round(remain)) + ' 票（依開票所比例估）', '~' + fmt(Math.round(remain)) + ' votes to come (from the share of stations counted)') + '</div>' : '') +
+        (qt.na ? '<div>' + T('2026 尚無候選人性別資料，無法判斷婦女保障', 'No 2026 candidate gender data yet: women\'s quota not checked') + '</div>' : '') +
+        (f.byv && f.byv[dk] ? '<div class="gap">' + T('來源當選標記有誤（標 ' + f.byv[dk][0] + ' 位、應選 ' + f.byv[dk][1] + ' 席），已開完，依票數排名判定確定', 'The source marks ' + f.byv[dk][0] + ' winners for ' + f.byv[dk][1] + ' seats; fully counted, called by the vote order') + '</div>' : '') +
+        (qt.grp ? '<div>' + T('原住民婦女保障以全縣市平地／山地合計計算，不在單一選區判斷', 'Indigenous women\'s quota counts the county\'s whole plains / mountain group, not one district') + '</div>' : '');
+    return { html: html, gap: gap, called: calledBy, last: seats ? all[seats - 1] : null, loser: all.length > seats ? all[seats] : null };
+  }
   function quota(year, dk, srt, seats) {
     var w = seats >= 4 ? Math.floor(seats / 4) : 0;
     if (year === '2026' && typeof COUNCIL_SEATS_2026 !== 'undefined' && COUNCIL_SEATS_2026[dk]) {
@@ -2779,7 +3011,10 @@
     colL.style.left = (TOUCHUI ? 34 : 12) + 'px'; colL.style.top = top0 + 'px';   // tablets: clear of the edge tabs
     colR.style.left = (SW - 312 - (TOUCHUI ? 22 : 0)) + 'px'; var hm = document.getElementById('hud-m'), hmB = SW > 640 && hm.classList.contains('tr') ? hm.getBoundingClientRect().bottom - root.getBoundingClientRect().top + 8 : 0;
     colR.style.top = Math.max(top0, hmB) + 'px';   // (below the top-right box when there is one)
-    var RQ = FILTER && raceOf(f) === 'R' ? refCounty(f, snap) : null;
+    // 公投 mode: every county's box shows its agree / disagree (user 2026-11-23: 「v2 公投 section 沒改成公投 22 縣市支持反對嗎？」
+    // 「我是說縣市小卡」→ 提案 → 建議改): before, only the picked county's box did. The boxes go left where agree leads,
+    // right where disagree leads (the mayors' 綠 left / 藍 right only in 縣市長 mode)
+    var RQ = raceOf(f) === 'R' ? refCounty(f, snap) : null;
     GEO.forEach(function (cc) {
       var cs = snap.M[cc], el = crRow(cc);
       var top = cs && sumC(cs) > 0 ? cs.slice().sort(function (a, b) { return b.v - a.v; }) : null;
@@ -2827,7 +3062,7 @@
           var wd = (expTot ? (c.v / expTot * 100).toFixed(1) : 0) + '%'; if (barsEl[i] && barsEl[i].style.width !== wd) barsEl[i].style.width = wd;
         });
       }
-      if (RQ && cc === FILTER) {   // 公投 mode, the picked county: its agree (green) / disagree (red) in the two rows instead of the mayors
+      if (RQ) {   // 公投 mode: the county's agree (green) / disagree (red) in the two rows instead of the mayors
         var q = RQ[cc] || { a: 0, d: 0, full: 0 }, qs = q.a + q.d, qd = q.full || qs;   // bars ∝ the county's final valid votes, so they grow with the count
         [['a', '同意', 'Yes'], ['d', '不同意', 'No']].forEach(function (z, k) {
           var ln = el.querySelector('.c' + k), bar = el.querySelector('.b' + k), cp = REF_CLR[z[0]], v = q[z[0]];
@@ -2842,44 +3077,15 @@
         el.querySelector('.cx').innerHTML = ''; el._cxk = '';
       }
       // council: the chosen district down to the first loser (8 running for 3 seats → the top 4), with the edge gap
-      var dk = CDIST[cc], seats = LF_SEATS.council[dk] ? LF_SEATS.council[dk][1] : 0, cd = snap.C[dk];
       var list = el.querySelector('.list');
-      if (cd && sumC(cd) > 0) {
-        var all = cd.slice().sort(function (a, b) { return b.v - a.v; }), srt = all.slice(0, seats + 1);
-        var qt = quota(f.year, dk, all, seats), qlab = T('婦女保障', 'women\'s quota');
-        // shown down to the first loser; a quota candidate further down is added below with her / his note
-        qt.ins.forEach(function (n) { if (!srt.some(function (c) { return c.n === n; })) srt.push(all.filter(function (c) { return c.n === n; })[0]); });
-        // 推定當選 (approved 2026-11-07): the edge gap is larger than the votes still to come — those estimated from the share
-        // of polling stations counted (the source's 已開／應開; rehearsal: the simulated share); 確定 = the source's own marks
-        var counted = sumC(cd), pr = f.sim ? snap.prog[dk] : (f.prog && f.prog[dk] ? f.prog[dk][0] / f.prog[dk][1] : null);
-        var remain = pr && pr > 0 ? (pr >= 0.999 ? 0 : counted * (1 / pr - 1)) : null;
-        var gap = all.length > seats && seats ? all[seats - 1].v - all[seats].v : null;
-        var fin = f.finalAt('C', dk, snap), marked = cd.filter(function (c) { return c.e; }).length === seats;
-        var byv = !!(f.byv && f.byv[dk]);
-        var calledBy = fin && (marked || byv) ? 'final' : (remain != null && gap != null && gap > remain && !qt.ins.length ? 'est' : null);
-        list.innerHTML = srt.map(function (c) {
-          var i = all.indexOf(c), notes = [];
-          if (i === seats - 1) notes.push(T('最後一席', 'last seat'));
-          if (i === seats) notes.push(T('落選頭', 'first loser'));
-          if (qt.ins.indexOf(c.n) >= 0) notes.push(qlab + T('可能當選', ' — would win'));
-          if (qt.outs.indexOf(c.n) >= 0) notes.push(T('可能被', 'may lose to the ') + qlab + T('擠下', ''));
-          if (i < seats && calledBy === 'final' && (c.e || byv)) notes.push(T('確定', 'final'));
-          else if (i < seats && calledBy === 'est') notes.push(T('推定當選', 'projected'));
-          // the name in its party colour (user 2026-11-07: 「市議員還是要按照黨籍給文字顏色」); no party known: the default text colour
-          var cp = pc('C', dk, c, f.year), nmc = ' style="font-weight:400' + (cp ? ';color:' + colorOf(cp) : '') + '"';
-          return '<div class="k"><span>' + (i + 1) + '</span><span><b' + nmc + '>' + c.n + '</b>' + (notes.length ? ' <i>' + notes.join('・') + '</i>' : '') + '</span><span style="text-align:right">' + fmt(c.v) + '</span></div>';
-        }).join('') +
-        (gap != null ? '<div class="gap">' + T('最後一席與落選頭差 ' + fmt(gap) + ' 票', 'Edge gap ' + fmt(gap)) + '</div>' : '') +
-        (remain != null && remain > 0 ? '<div>' + T('尚未開出約 ' + fmt(Math.round(remain)) + ' 票（依開票所比例估）', '~' + fmt(Math.round(remain)) + ' votes to come (from the share of stations counted)') + '</div>' : '') +
-        (qt.na ? '<div>' + T('2026 尚無候選人性別資料，無法判斷婦女保障', 'No 2026 candidate gender data yet: women\'s quota not checked') + '</div>' : '') +
-        (f.byv && f.byv[dk] ? '<div class="gap">' + T('來源當選標記有誤（標 ' + f.byv[dk][0] + ' 位、應選 ' + f.byv[dk][1] + ' 席），已開完，依票數排名判定確定', 'The source marks ' + f.byv[dk][0] + ' winners for ' + f.byv[dk][1] + ' seats; fully counted, called by the vote order') + '</div>' : '') +
-        (qt.grp ? '<div>' + T('原住民婦女保障以全縣市平地／山地合計計算，不在單一選區判斷', 'Indigenous women\'s quota counts the county\'s whole plains / mountain group, not one district') + '</div>' : '');
-      } else list.innerHTML = '<div>' + T('這個選區尚無資料', 'No data for this district') + '</div>';
+      distBlocks(el, cc, f, snap);
       // 公投 mode, the picked county: the district list under the card shows the mayoral count instead (user 2026-11-12:
       // 「縣市卡應該改成是縣市長的開票進度跟票數而不是市議員」→ 縣市卡下方的議員選區清單): every candidate (under 1% merged),
       // votes, share, and the share counted; the district menu is hidden
       var rq = !!(RQ && cc === FILTER), dsel = el.querySelector('.det select');
-      if (dsel.style.display !== (rq ? 'none' : '')) dsel.style.display = rq ? 'none' : '';
+      if (dsel.style.display !== (rq ? 'none' : '')) { dsel.style.display = rq ? 'none' : ''; el.querySelector('.dsr .dp').style.display = rq ? 'none' : ''; }
+      // the 公投 lists below are written directly: forget setH's memory so the council lists come back afterwards
+      if (rq) { var fl0 = el.querySelector('.fl'); fl0.innerHTML = ''; fl0._h = null; list._h = null; }
       if (rq) {
         if (top) {
           var mfin = f.finalAt('M', cc, snap), mcr = CALLS[cc], mpr = mfin ? 1 : mcr && mcr.f != null ? mcr.f : snap.prog && snap.prog[cc] != null ? snap.prog[cc] : null;
@@ -2891,6 +3097,7 @@
         } else list.innerHTML = '<div>' + T('縣市長尚無資料', 'No mayoral numbers yet') + '</div>';
       }
       var side = top ? (p === 'dpp' ? 'l' : 'r') : null;   // ruling DPP left; an opposition party or an independent right
+      if (RQ) { var rq0 = RQ[cc], rqs = rq0 ? rq0.a + rq0.d : 0; side = rqs > 0 ? (rq0.a >= rq0.d ? 'l' : 'r') : null; }   // 公投: agree left, disagree right
       if (side !== CSIDE[cc]) { CSIDE[cc] = side; moved = true; }
     });
     if (FILTER !== LASTF) moved = true;
@@ -3266,7 +3473,9 @@
     var R = typeof REFERENDUM !== 'undefined' && f ? REFERENDUM[String(f.year) === '2022' ? '2022' : '2026'] : null;
     if (!R || !R.votable) return null;
     var a = 0, d = 0, nat = fin ? all / fin : 0;
-    if (f.sim && R.T) Object.keys(R.T).forEach(function (tc) {
+    // 2026 重播：這一格的公投數字（重播資料的 R）
+    if (snap && snap.R) { a = snap.R[0] || 0; d = snap.R[1] || 0; }
+    else if (f.sim && R.T) Object.keys(R.T).forEach(function (tc) {
       var k = f.T && f.T[tc] ? tcProg(f, snap, tc) : nat; a += R.T[tc][0] * k; d += R.T[tc][1] * k;
     });
     else if (f.R) { a = f.R.agree || 0; d = f.R.disagree || 0; }
@@ -3416,8 +3625,27 @@
         '<div class="recent">' + T('縣市長 ' + c[0] + '・議員 ' + c[1], c[0] + ' mayors · ' + c[1] + ' councillors') + projLines(sd) +
         (rec.length ? '<br>' + rec.map(function (r) { return T((NAMES[r[0]] || r[0]).replace('臺', '台') + '長', ccName(r[0]) + ' mayor') + ' ' + hhmm(r[1]); }).join('<br>') : '') + '</div>';
     }
+    if (raceOf(f) === 'R') {   // 公投 mode: the bottom totals are agree (left, green) / disagree (right, red) — the share and the
+      // threshold under them (user 2026-11-23: 「大票數直接都改到左右兩邊」); the line under the strip's bar is gone
+      var ro = refCalc(f, snap, all, fin), rs = ro ? ro.a + ro.d : 0, wanR = function (v) { return (v / 1e4).toFixed(1); };
+      var rAhead = rs > 0 && Math.abs(ro.a - ro.d) / rs >= 0.01 ? (ro.a > ro.d ? 'a' : 'd') : null;
+      var refSide = function (id, k, label) {
+        var v = ro ? ro[k] : 0, cl = REF_CLR[k];
+        var sub = !ro ? T('尚無開票數字', 'No numbers yet') : k === 'a'
+          ? T('門檻 ' + wanR(ro.thr) + ' 萬（' + (ro.R.rule === 'half' ? '選舉人總數過半' : '投票權人四分之一') + '）', 'Needed ' + fmt(Math.round(ro.thr)) + ' (' + (ro.R.rule === 'half' ? 'half the electorate' : 'a quarter of voters') + ')') +
+            (ro.met ? ' <b style="color:#f5c518">' + T('達門檻', 'passes') + '</b>' : '<br>' + T('距門檻 ' + wanR(Math.max(0, ro.thr - ro.a)) + ' 萬', fmt(Math.round(Math.max(0, ro.thr - ro.a))) + ' short'))
+          : '';
+        document.getElementById(id).innerHTML = '<div class="pt" style="color:' + cl + '">' + label + '</div>' +
+          '<div class="vn' + (rAhead === k ? ' lead' : rAhead ? ' trail' : '') + '" style="color:' + cl + '">' + fmt(Math.round(v)) + '</div>' +
+          '<div class="called" style="color:' + cl + '">' + (rs > 0 ? (v / rs * 100).toFixed(1) + '%' : '') + '</div>' +
+          '<div class="recent">' + sub + '</div>';
+      };
+      refSide('hud-g', 'a', T('同意', 'YES'));
+      refSide('hud-b', 'd', T('不同意', 'NO'));
+    } else {
     side('hud-g', 'g', 'dpp', T('執政（民進黨）', 'RULING (DPP)'));
     side('hud-b', 'b', 'kmt', T('在野（國民黨＋民眾黨）', 'OPPOSITION (KMT + TPP)'));
+    }
     var m = document.getElementById('hud-m');
     var pct = f.sim && fin ? Math.round(all / fin * 100) : null, wide = SW > 640;
     m.innerHTML = '<div class="clk">' + (f.sim ? hhmm(CLOCK) + (f.replay ? T('（重播）', ' (replay)') : T('（模擬）', ' (simulated)')) : (f.ts ? T('最後更新 ', 'Updated ') + f.ts : T('尚無資料', 'No data yet'))) +
@@ -3428,13 +3656,16 @@
 
   // ---------- tabs ----------
   // English labels; for 2026 the TVBS tab is its website's own count (key tvbs), the rehearsal's TVBS is a YouTube snapshot
-  var SRC_EN = { ltn_cec: 'Liberty Times (CEC final)', auto_poll: 'Liberty Times', cna: 'CNA (CEC numbers)', ettoday: 'ETtoday (CEC numbers)', setn: 'SETN (YouTube)' };
-  var srcLabel = function (f) { var en = f.key === 'tvbs' ? (f.sim ? 'TVBS (YouTube)' : 'TVBS (own count)') : SRC_EN[f.key]; return lang === 'en' && en ? en : f.label; };
+  var SRC_EN = { cec: 'Central Election Commission', ltn_cec: 'Liberty Times (CEC final)', auto_poll: 'Liberty Times', cna: 'CNA (CEC numbers)', ettoday: 'ETtoday (CEC numbers)', ctwant: 'CTWANT (CEC numbers)', ctwant_live: 'CTWANT (own count)', setn: 'SETN (website)', sim_a: 'Simulated TV A (synthetic data)', sim_b: 'Simulated TV B (synthetic data)', sim_c: 'Simulated TV C (synthetic data)' };
+  // tv_<台>: tv_ocr.py's local livestream screen reads (local only, user 2026-11-27) — 「三立（直播畫面）」 / 「SETN (livestream)」
+  var TV_EN = { tvbs: 'TVBS', tvbs2: 'TVBS 2', setn: 'SETN', ftv: 'FTV', cti: 'CTi', ebc: 'EBC', era: 'ERA', nexttv: 'Next TV', pts: 'PTS', cts: 'CTS', ttv: 'TTV', ctv: 'CTV', ctime: 'China Times', mnews: 'Mirror News', knews: 'Knews', gnews: 'Global News' };
+  var tvOf = function (f) { var m = /^tv_(\w+)$/.exec(f.key); return m ? (TV_EN[m[1]] || m[1]) : null; };
+  var srcLabel = function (f) { if (tvOf(f) && lang === 'en') return tvOf(f) + ' (livestream)'; var en = f.key === 'tvbs' ? (f.sim ? 'TVBS (YouTube)' : 'TVBS (own count)') : SRC_EN[f.key]; return lang === 'en' && en ? en : f.label; };
   // the tab buttons carry a short name only; the full label and its note sit in the hover title (user 2026-11-07: 精簡上方按鈕)
-  var SRC_SHORT = { ltn_cec: ['自由時報', 'LTN'], auto_poll: ['自由時報', 'LTN'], cna: ['中央社', 'CNA'], ettoday: ['ETtoday', 'ETtoday'], tvbs: ['TVBS', 'TVBS'], setn: ['三立', 'SETN'] };
-  var srcShort = function (f) { var m = SRC_SHORT[f.key]; return m ? T(m[0], m[1]) : srcLabel(f).split(/[（(]/)[0]; };
+  var SRC_SHORT = { cec: ['中選會', 'CEC'], ltn_cec: ['自由時報', 'LTN'], auto_poll: ['自由時報', 'LTN'], cna: ['中央社', 'CNA'], ettoday: ['ETtoday', 'ETtoday'], ctwant: ['CTWANT', 'CTWANT'], tvbs: ['TVBS', 'TVBS'], ctwant_live: ['CTWANT 實況', 'CTWANT live'], setn: ['三立', 'SETN'], sim_a: ['模擬台 A', 'Sim TV A'], sim_b: ['模擬台 B', 'Sim TV B'], sim_c: ['模擬台 C', 'Sim TV C'] };
+  var srcShort = function (f) { if (tvOf(f)) return T(f.label.split(/[（(]/)[0] + ' 直播', tvOf(f) + ' live'); var m = SRC_SHORT[f.key]; return m ? T(m[0], m[1]) : srcLabel(f).split(/[（(]/)[0]; };
   function feedKeys() {
-    var order = ['ltn_cec', 'auto_poll', 'cna', 'ettoday', 'tvbs', 'setn'];   // CEC-number sources first, then the TV stations' own counts
+    var order = ['cec', 'ltn_cec', 'auto_poll', 'cna', 'ettoday', 'ctwant', 'tvbs', 'ctwant_live', 'setn', 'sim_a', 'sim_b', 'sim_c'];   // CEC-number sources first, then the TV stations' own counts
     return Object.keys(FEEDS).sort(function (a, b) { return ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99); });
   }
   // pick a county (the menu, or a click on one of its seats): filter, camera, focus box
@@ -3570,8 +3801,8 @@
     html += '<button type="button" class="lf-warn" aria-expanded="' + !document.getElementById('lf-warn').hidden + '" title="' + T('聲明與各家開票網站', 'Disclaimer and outlets\' results pages') + '">⚠</button>';
     if (!keys.length) html += '<span class="lf-banner">' + T('目前還沒有任何來源的開票資料', 'No source has reported yet') + '</span>';
     var f = FEEDS[SRC], ctl = '';
-    if (f) ctl += '<span class="seg lf-race" role="group" aria-label="' + T('開票種類', 'Race') + '">' +
-      [['M', '縣市長', 'Mayors']].concat(refTownsOk(f) ? [['R', '公投', 'Referendum']] : []).map(function (z) {
+    ctl += '<span class="seg lf-race" role="group" aria-label="' + T('開票種類', 'Race') + '">' +   // (always: 2026 before any feed too — see refAvail)
+      [['M', '縣市長', 'Mayors']].concat(refAvail(f) ? [['R', '公投', 'Referendum']] : []).map(function (z) {
         return '<button type="button" data-race="' + z[0] + '" aria-pressed="' + (raceOf(f) === z[0]) + '">' + T(z[1], z[2]) + '</button>';
       }).join('') + '</span>';
     if (!PHONE) ctl += '<button type="button" data-view="1" title="' + T('切換視角：平面／平躺', 'Switch view: flat / 3D') + '">' + (LIE ? T('平躺', '3D') : T('平面', 'Flat'))   /* EN 「Lying」 → 「3D」 (user 2026-11-08: 「平躺模式應該英文不叫lying吧」) */ + '</button>' +
@@ -3586,7 +3817,7 @@
     if (ctl) html += '<span class="lf-ctl">' + ctl + '</span>';
     el.innerHTML = html;
     barRow();
-    if (L && SW >= 640) { var cyNow = hemiCy(L.R, L.cx); if (Math.abs(cyNow - L.cy) > 1 || (STRIP && (STRIP.lang !== lang || STRIP.top !== tabsH() + 16))) requestAnimationFrame(layout); }   // labels changed width (language) / the tab row its height
+    if (L && SW >= 640) { var cyNow = hemiCy(L.R, L.cx); if (Math.abs(cyNow - L.cy) > 1 || (STRIP && (STRIP.lang !== lang || STRIP.top !== tabsH() + 16 || STRIP.race !== raceOf(FEEDS[SRC])))) requestAnimationFrame(layout); }   // labels changed width (language) / the tab row its height
     var ss = el.querySelector('.lf-srcsel');
     if (ss) ss.onchange = function () {
       if (this.value === '__cmp') { cmpOpen(true); return; }
@@ -3636,10 +3867,11 @@
   // 2026 election hub for now — swap in the dedicated 開票 page where one goes up ~11/27–28; url null = 「網址待公布」).
   var OUTLETS = [
     { zh: '中選會（官方）', en: 'Central Election Commission (official)', url: 'https://info.cec.gov.tw/vote2026/' },
-    { zh: '中央社', en: 'CNA', url: 'https://www.cna.com.tw/topic/newstopic/5056.aspx' },
+    { zh: '中央社', en: 'CNA', url: 'https://www.cna.com.tw/topic/newstopic/5144.aspx' },
     { zh: '中天', en: 'CTi News', url: 'https://ctinews.com/tags/2026%E7%B8%A3%E5%B8%82%E9%95%B7%E9%81%B8%E8%88%89' },
     { zh: 'CTWANT', en: 'CTWANT', url: 'https://www.ctwant.com/election2026/' },
-    { zh: 'ETtoday', en: 'ETtoday', url: 'https://www.ettoday.net/events/election2026/index.php7' },
+    { zh: '東森', en: 'EBC', url: 'https://2026vote.ebc.net.tw/' },
+    { zh: 'ETtoday', en: 'ETtoday', url: 'https://www.ettoday.net/events/election2026/ballotReport.php7' },
     { zh: '民視', en: 'FTV', url: 'https://topic.ftvnews.com.tw/2026election/index2' },
     { zh: '知新聞', en: 'Knews', url: 'https://event.knews.com.tw/2026election' },
     { zh: '自由時報', en: 'Liberty Times', url: 'https://election.ltn.com.tw/2026/' },
@@ -3647,7 +3879,7 @@
     { zh: '三立', en: 'SET', url: 'https://elect.setn.com/2026' },
     { zh: '風傳媒', en: 'Storm Media', url: 'https://www.storm.mg/2026Election/live.html' },
     { zh: 'TVBS', en: 'TVBS', url: 'https://news.tvbs.com.tw/events/2026election/analysis' },
-    { zh: '聯合報', en: 'United Daily News', url: 'https://udn.com/vote2026/index' },
+    { zh: '聯合報', en: 'United Daily News', url: 'https://udn.com/vote2026/open' },
     { zh: 'Yahoo新聞', en: 'Yahoo News', url: 'https://tw.news.yahoo.com/topic/2026election/' }
   ];
   function warnHtml() {
@@ -3659,6 +3891,9 @@
         'pages and may differ between outlets; the Central Election Commission\'s announcement is final. 「Projected」 is this ' +
         'page\'s own estimate from the votes counted, not a call by any outlet or the CEC. This page is not updated live on ' +
         'election night; the full count goes up as a replay once counting is over.') + '</div>' +
+      // the replay's 「模擬電視台」 (build_live2026_replay.py add_sim_tv, user 2026-11-26): say plainly they are synthetic
+      ((R26 && R26.sim_a) || (REH && REH.sim_a) ? '<div>' + T('「2022 排練」與「2026 重播」裡的「模擬電視台 A／B／C」是程式產生的合成資料，不是任何真實電視台的數字，只用來示範電視台報票「先衝高、再校正回歸」的現象；最後都收回中選會的最終票數。',
+        'In the 2022 rehearsal and the 2026 replay, 「Simulated TV A / B / C」 are synthetic data made by a program, not any real station\'s numbers. They only illustrate how TV counts run ahead and are later corrected; each ends at the CEC final count.') + '</div>' : '') +
       '<h4>' + T('2026 各家開票網站', '2026 results pages') + '</h4><ul>' + OUTLETS.map(function (o) {
         var nm = esc(lang === 'en' ? o.en : o.zh);
         return '<li><span>' + (o.url ? '<a href="' + esc(o.url) + '" target="_blank" rel="noopener noreferrer">' + nm + '</a>' : nm) + '</span>' +
@@ -3799,10 +4034,10 @@
   }
   function setMode(m) {
     MODE = m; simFor(m);
-    useSeats(m === 'r2022' || (m === 'r2026' && String(LF_R2026.year) === '2022') ? '2022' : '2026');
+    useSeats(m === 'r2022' || (m === 'r2026' && typeof LF_R2026 !== 'undefined' && String(LF_R2026.year) === '2022') ? '2022' : '2026');
     if (m === 'r2022') { FEEDS = REH; SRC = 'ltn_cec'; restart(); }
-    else if (m === 'r2026') { FEEDS = R26 || {}; SRC = FEEDS.auto_poll ? 'auto_poll' : null; restart(); }
-    else { FEEDS = LIVE || {}; SRC = null; renderTabs(); loadLive(function () { FEEDS = LIVE; SRC = null; renderTabs(); restart(); nextLive = performance.now() + 60000; }); }
+    else if (m === 'r2026') { FEEDS = R26 || {}; SRC = FEEDS.cec ? 'cec' : FEEDS.auto_poll ? 'auto_poll' : null; restart(); }
+    else { FEEDS = LIVE || {}; SRC = null; renderTabs(); loadLive(function () { FEEDS = LIVE; SRC = null; renderTabs(); restart(); nextLive = performance.now() + LIVE_EVERY; }); }
   }
 
   // ---------- language ----------
@@ -3841,12 +4076,13 @@
   // opens on 2026 (user 2026-11-07: 「新版應該要改成2026開票夜」, picked 「2026 開票夜＋預設 2026」); before any source has
   // reported it says so, the 2022 rehearsal one tab away (it used to open on the rehearsal until a source reported)
   loadLive(function () {
-    MODE = 'live'; FEEDS = LIVE; useSeats('2026'); nextLive = performance.now() + 60000;
+    MODE = 'live'; FEEDS = LIVE; useSeats('2026'); nextLive = performance.now() + LIVE_EVERY;
     restart(); applyLang(); layout(); restart();
     requestAnimationFrame(frame);
     // the 2026 replay, once it is up: its tab appears; with no live numbers on the page (after the night the public file is
     // reset) it opens on the replay (user 2026-11-09: 開完票再把真實的過程上線)
-    loadReplay26(function () { if (!R26) return; if (MODE === 'live' && !feedKeys().length && !QS.mode) setMode('r2026'); else renderTabs(); });
+    // ?mode=r2026 (checks): the replay file arrives after applyQS ran, so switch to it and re-apply the parameters once it is in
+    loadReplay26(function () { if (!R26) return; if (QS.mode === 'r2026') { setMode('r2026'); applyQS(); return; } if (MODE === 'live' && !feedKeys().length && !QS.mode) setMode('r2026'); else renderTabs(); });
     applyQS();
     // the guide opens by itself on a first visit (user 2026-11-09: 「我想要的指引就是 2026 的打開時…然後常駐在 i」); after that only ⓘ
     if (QS.tour === '0') return;   // ?tour=0: no guide (checks)
