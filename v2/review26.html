@@ -69,7 +69,7 @@
 </div>
 <div id="rv"></div>
 
-<script src="data_review26.js?v=20261128c"></script>
+<script src="data_review26.js?v=20261128d"></script>
 <script src="m/data_names_m.js?v=20261101p96"></script>
 <script>
 (function () {
@@ -167,6 +167,45 @@
         }).join('') + '</table></div>';
       h += '<div class="meta">' + T('誤差單位都是百分點。模型的得票率誤差大約是只用民調的三分之二、照 2022 的三分之一；民調平均多猜錯新北，2022 結果多猜錯宜蘭、新竹縣、彰化、澎湖。',
         'Errors in points. The model’s share error is about two-thirds of polls-only and a third of the 2022 carry-over; the poll average also missed New Taipei, the 2022 carry-over also missed Yilan, Hsinchu County, Changhua and Penghu.') + '</div>';
+    }
+
+    // 2c. ablation (user 2026-11-28 「好」): one part of the model switched off at a time, the same polls, point estimates
+    var AB = R.ablation;
+    if (AB) {
+      var LAB = {
+        full: [T('（完整模型）', '(full model)'), ''],
+        undecided_prop: [T('未表態改成按比例分', 'Undecided split pro rata'), T('原本平分給主要候選人', 'instead of equally to the main candidates')],
+        decay60: [T('時間衰減改 60 天', '60-day recency decay'), T('原本 120 天；更看重新民調', 'instead of 120 days')],
+        no_sponsor: [T('不降權陣營委託／偏斜樣本', 'No discount for partisan sponsors'), T('原本 ×0.4', 'normally ×0.4')],
+        no_basemodel: [T('不用政黨基本盤備援', 'No party-base fallback'), T('民調稀少時的備援', 'used when polls are sparse')],
+        no_lean: [T('不打民調機構傾向折扣', 'No pollster-lean discount'), T('原本 ×0.7', 'normally ×0.7')],
+        no_method: [T('不做調查方式（年齡）修正', 'No survey-mode (age) adjustment'), ''],
+        no_decay: [T('完全不做時間衰減', 'No recency decay at all'), ''],
+        no_anchor: [T('不混 2022 歷史錨點', 'No 2022 history anchor'), T('全信民調', 'polls only')],
+        no_submatchup: [T('不排除缺主要候選人的民調', 'Keep polls missing a main candidate'), '']
+      };
+      var full = AB.filter(function (a) { return a.key === 'full'; })[0];
+      var verdict = function (a) {
+        if (a.key === 'full') return '';
+        var d = a.mae - full.mae, dm = a.margin_mae - full.margin_mae;
+        if (Math.abs(d) < 0.08 && Math.abs(dm) < 0.15) return '<span style="color:#9aa1b2">' + T('沒影響', 'no effect') + '</span>';
+        if (d > 0 && dm > 0) return '<span class="ok">' + T('有用（拿掉變差）', 'helps (worse without it)') + '</span>';
+        if (d < 0 && dm < 0) return '<span class="no">' + T('今年拿掉反而較好', 'better without it this year') + '</span>';
+        return '<span style="color:#f5c518">' + T('好壞參半', 'mixed') + '</span>';
+      };
+      var f1 = function (v, ref) { var d = v - ref; return v.toFixed(2) + (Math.abs(d) >= 0.005 && ref != null ? ' <span style="color:' + (d > 0 ? '#ff7b7b' : '#7fd99a') + ';font-size:10.5px">' + (d > 0 ? '+' : '') + d.toFixed(2) + '</span>' : ''); };
+      h += '<h2 class="sec">' + T('模型哪些部分有用', 'Which parts of the model helped') + '</h2>';
+      h += '<div class="meta" style="margin-bottom:8px">' + T('一次關掉模型的一個部分，用同一份民調重算，跟最終結果比（消融測試）。這裡用模型的點估計，所以完整模型是 ' + full.hits + '/22（新竹縣兩人五五波，點估計跟模擬中位數的順序相反）。只是量測：模型凍結，沒有因此改動。',
+        'One part of the model switched off at a time, recomputed on the same polls and scored against the results (an ablation). Point estimates are used here, so the full model scores ' + full.hits + '/22 (Hsinchu County was a coin-flip whose order differs from the simulation median). Measurement only: the model stays frozen.') + '</div>';
+      h += '<div class="tw"><table class="rt"><tr><th>' + T('拿掉', 'Switched off') + '</th><th>' + T('勝者', 'Winners') + '</th><th>MAE</th><th>' + T('差距誤差', 'Margin error') + '</th><th>' + T('判讀', 'Reading') + '</th></tr>' +
+        AB.map(function (a) {
+          var L = LAB[a.key] || [a.key, ''], me = a.key === 'full';
+          return '<tr' + (me ? ' style="background:rgba(255,255,255,.04)"' : '') + '><td><b>' + L[0] + '</b>' + (L[1] ? '<div style="font-size:10.5px;color:#8b93a6">' + L[1] + '</div>' : '') + '</td>' +
+            '<td class="num">' + a.hits + '/22</td><td class="num">' + (me ? a.mae.toFixed(2) : f1(a.mae, full.mae)) + '</td><td class="num">' + (me ? a.margin_mae.toFixed(2) : f1(a.margin_mae, full.margin_mae)) + '</td><td>' + verdict(a) + '</td></tr>';
+        }).join('') + '</table></div>';
+      h += '<div class="meta">' + T(
+        '最有用的是「未表態平分給主要候選人」（拿掉後金門、彰化誤差暴增，跟 2018、2022 回測一致）；調查方式修正、機構傾向折扣幾乎沒有作用。今年拿掉反而較好的是 2022 歷史錨點與時間衰減：台北的錨點是蔣萬安 2022 年三強選舉的 42%，拿來當 2026 年兩人對決的基準，把他拉低了——選舉結構改變時錨點會失準，這是設計上的盲點。只有一次選舉、17 個有民調的縣市，差 0.1–0.2 點多半是雜訊；要改模型，應該先在 2018、2022 也回測，三屆都變好才採用，不能拿今年的答案回頭調。',
+        'The most useful part was splitting undecided voters equally between the main candidates (without it, Kinmen and Changhua errors balloon — as in the 2018 and 2022 backtests); the survey-mode adjustment and the pollster-lean discount did almost nothing. Two parts did better switched off this year: the 2022 history anchor and the recency decay. Taipei’s anchor was Chiang Wan-an’s 42 % in a three-way 2022 race, used as the base for a two-way 2026 race, and it pulled him down — an anchor breaks when the race structure changes, a design blind spot. One election and 17 polled counties: differences of 0.1–0.2 points are mostly noise. Any change should first be backtested on 2018 and 2022 and kept only if all three improve — not tuned to this year’s answer.') + '</div>';
     }
 
     // 3. the misses
